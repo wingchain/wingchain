@@ -1,0 +1,9 @@
+[workspace]
+members = [
+	"bin/main",
+	"bin/main/init",
+]
+
+[profile.release]
+# Substrate runtime requires unwinding.
+panic = "unwind"

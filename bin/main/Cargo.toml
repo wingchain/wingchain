@@ -1,0 +1,15 @@
+[package]
+name = "wingchain"
+version = "0.1.0"
+authors = ["developer <developer@wingchain.cn>"]
+edition = "2018"
+description = "An open source, easy to start and easy to scale block chain"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+structopt = "0.3.11"
+error-chain = "0.12.2"
+
+init = { package = "main-init", path = "init" }
+base = { package = "main-base", path = "base" }
