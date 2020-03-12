@@ -21,12 +21,28 @@ pub struct Blake2b256;
 
 impl Hash for Blake2b256 {
 	fn name(&self) -> &'static str {
-		"blake2b256"
+		"blake2b_256"
 	}
 	fn key_length(&self) -> KeyLength {
 		KeyLength::KeyLength32
 	}
 	fn hash(&self, out: &mut [u8], data: &[u8]) {
+		assert_eq!(out.len(), self.key_length().into());
+		blake2b::Blake2b::blake2b(out, data, &[]);
+	}
+}
+
+pub struct Blake2b160;
+
+impl Hash for Blake2b160 {
+	fn name(&self) -> &'static str {
+		"blake2b_160"
+	}
+	fn key_length(&self) -> KeyLength {
+		KeyLength::KeyLength20
+	}
+	fn hash(&self, out: &mut [u8], data: &[u8]) {
+		assert_eq!(out.len(), self.key_length().into());
 		blake2b::Blake2b::blake2b(out, data, &[]);
 	}
 }
@@ -36,7 +52,7 @@ mod tests {
 	use super::*;
 
 	#[test]
-	fn test() {
+	fn test_blake2b_256() {
 		let data = [1u8, 2u8, 3u8];
 		let mut out = [0u8; 32];
 		Blake2b256.hash(&mut out, &data);
@@ -46,6 +62,21 @@ mod tests {
 			[
 				17, 192, 231, 155, 113, 195, 151, 108, 205, 12, 2, 209, 49, 14, 37, 22, 192, 142,
 				220, 157, 139, 111, 87, 204, 214, 128, 214, 58, 77, 142, 114, 218
+			]
+		);
+	}
+
+	#[test]
+	fn test_blake2b_160() {
+		let data = [1u8, 2u8, 3u8];
+		let mut out = [0u8; 20];
+		Blake2b160.hash(&mut out, &data);
+
+		assert_eq!(
+			out,
+			[
+				197, 117, 145, 134, 122, 108, 242, 5, 233, 74, 212, 142, 167, 139, 236, 142, 103,
+				194, 14, 98
 			]
 		);
 	}

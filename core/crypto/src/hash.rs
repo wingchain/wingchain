@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use crate::errors;
+use crate::hash::blake2b::Blake2b160;
 use crate::KeyLength;
 use blake2b::Blake2b256;
 use sm3::SM3;
@@ -29,6 +30,7 @@ pub trait Hash {
 
 pub enum HashImpl {
 	Blake2b256,
+	Blake2b160,
 	SM3,
 }
 
@@ -37,6 +39,7 @@ impl Hash for HashImpl {
 	fn name(&self) -> &'static str {
 		match self {
 			Self::Blake2b256 => Blake2b256.name(),
+			Self::Blake2b160 => Blake2b160.name(),
 			Self::SM3 => SM3.name(),
 		}
 	}
@@ -44,6 +47,7 @@ impl Hash for HashImpl {
 	fn key_length(&self) -> KeyLength {
 		match self {
 			Self::Blake2b256 => Blake2b256.key_length(),
+			Self::Blake2b160 => Blake2b160.key_length(),
 			Self::SM3 => SM3.key_length(),
 		}
 	}
@@ -51,6 +55,7 @@ impl Hash for HashImpl {
 	fn hash(&self, out: &mut [u8], data: &[u8]) {
 		match self {
 			Self::Blake2b256 => Blake2b256.hash(out, data),
+			Self::Blake2b160 => Blake2b160.hash(out, data),
 			Self::SM3 => SM3.hash(out, data),
 		}
 	}
@@ -61,7 +66,8 @@ impl FromStr for HashImpl {
 	#[inline]
 	fn from_str(s: &str) -> Result<HashImpl, Self::Err> {
 		match s {
-			"blake2b256" => Ok(HashImpl::Blake2b256),
+			"blake2b_256" => Ok(HashImpl::Blake2b256),
+			"blake2b_160" => Ok(HashImpl::Blake2b160),
 			"sm3" => Ok(HashImpl::SM3),
 			_ => Err(errors::ErrorKind::HashNameNotFound.into()),
 		}
@@ -88,7 +94,37 @@ mod tests {
 	}
 
 	#[test]
-	fn test_from_str() {
+	fn test_from_str_blake2b_256() {
+		let hash = HashImpl::from_str("blake2b_256").unwrap();
+		let data = [1u8, 2u8, 3u8];
+		let mut out = [0u8; 32];
+		hash.hash(&mut out, &data);
+		assert_eq!(
+			out,
+			[
+				17, 192, 231, 155, 113, 195, 151, 108, 205, 12, 2, 209, 49, 14, 37, 22, 192, 142,
+				220, 157, 139, 111, 87, 204, 214, 128, 214, 58, 77, 142, 114, 218
+			]
+		);
+	}
+
+	#[test]
+	fn test_from_str_blake2b_160() {
+		let hash = HashImpl::from_str("blake2b_160").unwrap();
+		let data = [1u8, 2u8, 3u8];
+		let mut out = [0u8; 20];
+		hash.hash(&mut out, &data);
+		assert_eq!(
+			out,
+			[
+				197, 117, 145, 134, 122, 108, 242, 5, 233, 74, 212, 142, 167, 139, 236, 142, 103,
+				194, 14, 98
+			]
+		);
+	}
+
+	#[test]
+	fn test_from_str_sm3() {
 		let hash = HashImpl::from_str("sm3").unwrap();
 		let data = [1u8, 2u8, 3u8];
 		let mut out = [0u8; 32];
