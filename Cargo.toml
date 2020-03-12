@@ -2,6 +2,7 @@
 members = [
 	"bin/main",
 	"bin/main/init",
+	"core/crypto",
 ]
 
 [profile.release]
