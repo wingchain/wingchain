@@ -35,9 +35,7 @@ fn bench_hash_native(b: &mut Bencher) {
 /// to run with dylib, should `cargo +nightly build --release` first.
 #[bench]
 fn bench_hash_dylib(b: &mut Bencher) {
-	let ext = get_dylib_ext();
-
-	let path = cargo_bin(format!("libcrypto_dylib_samples_hash.{}", ext));
+	let path = cargo_bin(get_dylib("crypto_dylib_samples_hash"));
 
 	// in case no build first
 	if !path.exists() {
@@ -54,16 +52,16 @@ fn bench_hash_dylib(b: &mut Bencher) {
 }
 
 #[cfg(target_os = "macos")]
-fn get_dylib_ext() -> &'static str {
-	"dylib"
+fn get_dylib(package_name: &str) -> String {
+	format!("lib{}.dylib", package_name)
 }
 
 #[cfg(target_os = "linux")]
-fn get_dylib_ext() -> &'static str {
-	"so"
+fn get_dylib(package_name: &str) -> String {
+	format!("lib{}.so", package_name)
 }
 
 #[cfg(target_os = "windows")]
-fn get_dylib_ext() -> &'static str {
-	"dll"
+fn get_dylib(package_name: &str) -> String {
+	format!("{}.dll", package_name)
 }

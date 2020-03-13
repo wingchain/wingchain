@@ -21,9 +21,7 @@ use crypto::hash::{Hash, HashImpl};
 
 #[test]
 fn test_load_dylib() {
-	let ext = get_dylib_ext();
-
-	let path = cargo_bin(format!("libcrypto_dylib_samples_hash.{}", ext));
+	let path = cargo_bin(get_dylib("crypto_dylib_samples_hash"));
 
 	// in case no build first
 	if !path.exists() {
@@ -54,9 +52,7 @@ fn test_load_dylib() {
 
 #[test]
 fn test_custom_lib() {
-	let ext = get_dylib_ext();
-
-	let path = cargo_bin(format!("libcrypto_dylib_samples_hash.{}", ext));
+	let path = cargo_bin(get_dylib("crypto_dylib_samples_hash"));
 
 	// in case no build first
 	if !path.exists() {
@@ -79,16 +75,16 @@ fn test_custom_lib() {
 }
 
 #[cfg(target_os = "macos")]
-fn get_dylib_ext() -> &'static str {
-	"dylib"
+fn get_dylib(package_name: &str) -> String {
+	format!("lib{}.dylib", package_name)
 }
 
 #[cfg(target_os = "linux")]
-fn get_dylib_ext() -> &'static str {
-	"so"
+fn get_dylib(package_name: &str) -> String {
+	format!("lib{}.so", package_name)
 }
 
 #[cfg(target_os = "windows")]
-fn get_dylib_ext() -> &'static str {
-	"dll"
+fn get_dylib(package_name: &str) -> String {
+	format!("{}.dll", package_name)
 }
