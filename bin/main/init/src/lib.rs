@@ -33,7 +33,7 @@ pub fn run(opt: InitOpt) -> errors::Result<()> {
 	};
 
 	if home.exists() {
-		bail!("{}: {:?}", errors::ErrorKind::HomeDirExists, home);
+		bail!(errors::ErrorKind::HomeDirExists(format!("{:?}", home)));
 	}
 
 	init_config(&home)?;
