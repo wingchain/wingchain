@@ -15,30 +15,28 @@
 #[macro_use]
 extern crate crypto;
 
-use rust_crypto::digest::Digest;
-use rust_crypto::sha1;
+use rust_crypto::blake2b;
 
 use crypto::hash::Hash;
 use crypto::KeyLength;
 
-pub struct SampleHash;
+pub struct Blake2b256;
 
-/// An SHA-1 implementation for sample
-impl Hash for SampleHash {
+/// A Blake2b256 implementation for sample
+impl Hash for Blake2b256 {
 	fn name(&self) -> &'static str {
-		"sample"
+		"blake2b_256"
 	}
 	fn key_length(&self) -> KeyLength {
-		KeyLength::KeyLength20
+		KeyLength::KeyLength32
 	}
 	fn hash(&self, out: &mut [u8], data: &[u8]) {
-		let mut hasher = sha1::Sha1::new();
-		hasher.input(data);
-		hasher.result(out);
+		assert_eq!(out.len(), self.key_length().into());
+		blake2b::Blake2b::blake2b(out, data, &[]);
 	}
 }
 
-declare_custom_lib!(SampleHash);
+declare_custom_lib!(Blake2b256);
 
 #[cfg(test)]
 mod tests {
@@ -47,14 +45,14 @@ mod tests {
 	#[test]
 	fn test() {
 		let data = [1u8, 2u8, 3u8];
-		let mut out = [0u8; 20];
-		SampleHash.hash(&mut out, &data);
+		let mut out = [0u8; 32];
+		Blake2b256.hash(&mut out, &data);
 
 		assert_eq!(
 			out,
 			[
-				112, 55, 128, 113, 152, 194, 42, 125, 43, 8, 7, 55, 29, 118, 55, 121, 168, 79, 223,
-				207
+				17, 192, 231, 155, 113, 195, 151, 108, 205, 12, 2, 209, 49, 14, 37, 22, 192, 142,
+				220, 157, 139, 111, 87, 204, 214, 128, 214, 58, 77, 142, 114, 218
 			]
 		);
 	}
