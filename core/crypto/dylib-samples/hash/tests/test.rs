@@ -51,7 +51,7 @@ fn test_load_dylib() {
 	);
 }
 
-#[test]
+[test]
 fn test_custom_lib() {
 	let path = get_dylib("crypto_dylib_samples_hash");
 
