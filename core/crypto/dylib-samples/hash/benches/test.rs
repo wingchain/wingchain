@@ -21,6 +21,7 @@ use test::{black_box, Bencher};
 use assert_cmd::cargo::cargo_bin;
 
 use crypto::hash::{Hash, HashImpl};
+use std::path::PathBuf;
 
 #[bench]
 fn bench_hash_native(b: &mut Bencher) {
@@ -35,7 +36,7 @@ fn bench_hash_native(b: &mut Bencher) {
 /// to run with dylib, should `cargo +nightly build --release` first.
 #[bench]
 fn bench_hash_dylib(b: &mut Bencher) {
-	let path = cargo_bin(get_dylib("crypto_dylib_samples_hash"));
+	let path = get_dylib("crypto_dylib_samples_hash");
 
 	println!("path: {:?}", path);
 
@@ -51,8 +52,8 @@ fn bench_hash_dylib(b: &mut Bencher) {
 }
 
 #[cfg(target_os = "macos")]
-fn get_dylib(package_name: &str) -> String {
-	format!("lib{}.dylib", package_name)
+fn get_dylib(package_name: &str) -> PathBuf {
+	cargo_bin(format!("lib{}.dylib", package_name))
 }
 
 #[cfg(target_os = "linux")]
@@ -62,5 +63,8 @@ fn get_dylib(package_name: &str) -> String {
 
 #[cfg(target_os = "windows")]
 fn get_dylib(package_name: &str) -> String {
-	format!("{}.dll", package_name)
+	let path = cargo_bin(format!("{}.dll", package_name));
+	let path = path.to_string_lossy();
+	let path = path.trim_end_matches(".exe");
+	PathBuf::from(path)
 }
