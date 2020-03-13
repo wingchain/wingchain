@@ -58,7 +58,7 @@ fn get_dylib(package_name: &str) -> PathBuf {
 
 #[cfg(target_os = "linux")]
 fn get_dylib(package_name: &str) -> PathBuf {
-	format!("lib{}.so", package_name)
+	cargo_bin(format!("lib{}.so", package_name))
 }
 
 #[cfg(target_os = "windows")]
