@@ -37,6 +37,8 @@ fn bench_hash_native(b: &mut Bencher) {
 fn bench_hash_dylib(b: &mut Bencher) {
 	let path = cargo_bin(get_dylib("crypto_dylib_samples_hash"));
 
+	println!("path: {:?}", path);
+
 	assert!(path.exists());
 
 	let path = path.to_string_lossy();
