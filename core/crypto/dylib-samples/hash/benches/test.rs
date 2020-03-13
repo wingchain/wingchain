@@ -32,6 +32,7 @@ fn bench_hash_native(b: &mut Bencher) {
 	b.iter(|| black_box(hash.hash(&mut out, &data)));
 }
 
+/// to run with dylib, should `cargo +nightly build --release` first.
 #[bench]
 fn bench_hash_dylib(b: &mut Bencher) {
 	let ext = get_dylib_ext();
