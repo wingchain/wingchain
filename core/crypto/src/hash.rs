@@ -12,15 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::path::PathBuf;
+use std::str::FromStr;
+
+use error_chain::bail;
+use libloading::{Library, Symbol};
+
+use blake2b::Blake2b256;
+use sm3::SM3;
+
 use crate::errors;
 use crate::hash::blake2b::Blake2b160;
 use crate::KeyLength;
-use blake2b::Blake2b256;
-use error_chain::bail;
-use libloading::{Library, Symbol};
-use sm3::SM3;
-use std::path::PathBuf;
-use std::str::FromStr;
 
 pub mod blake2b;
 pub mod sm3;

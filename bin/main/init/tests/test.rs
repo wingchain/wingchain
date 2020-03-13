@@ -17,8 +17,8 @@ use std::fs;
 use assert_cmd::Command;
 use tempfile::tempdir;
 
-use base::spec::Spec;
 use base::SharedParams;
+use base::spec::Spec;
 use main_init::cli::InitOpt;
 use main_init::run;
 

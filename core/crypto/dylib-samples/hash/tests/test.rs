@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::str::FromStr;
+
 use assert_cmd::cargo::cargo_bin;
 use libloading::{Library, Symbol};
 
 use crypto::hash::{Hash, HashImpl};
-use std::str::FromStr;
 
 #[test]
 fn test_load_dylib() {
