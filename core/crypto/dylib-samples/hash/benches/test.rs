@@ -57,12 +57,12 @@ fn get_dylib(package_name: &str) -> PathBuf {
 }
 
 #[cfg(target_os = "linux")]
-fn get_dylib(package_name: &str) -> String {
+fn get_dylib(package_name: &str) -> PathBuf {
 	format!("lib{}.so", package_name)
 }
 
 #[cfg(target_os = "windows")]
-fn get_dylib(package_name: &str) -> String {
+fn get_dylib(package_name: &str) -> PathBuf {
 	let path = cargo_bin(format!("{}.dll", package_name));
 	let path = path.to_string_lossy();
 	let path = path.trim_end_matches(".exe");
