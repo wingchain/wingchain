@@ -14,8 +14,8 @@
 
 use std::path::PathBuf;
 
-use app_dirs::{AppDataType, AppInfo};
 use app_dirs::get_app_root;
+use app_dirs::{AppDataType, AppInfo};
 use structopt::StructOpt;
 
 pub mod errors;

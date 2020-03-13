@@ -17,7 +17,7 @@ use std::path::PathBuf;
 
 use chrono::TimeZone;
 use error_chain::bail;
-use rand::{Rng, thread_rng};
+use rand::{thread_rng, Rng};
 
 use base::{get_default_home, spec::Spec, SPEC_FILE};
 
