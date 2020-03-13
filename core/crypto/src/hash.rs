@@ -110,7 +110,7 @@ fn load_custom_lib(path: &PathBuf) -> errors::Result<Box<dyn Hash>> {
 
 	let lib = Library::new(path)
 		.map_err(|_| errors::ErrorKind::CustomLibLoadFailed(format!("{:?}", path)))?;
-	type Constructor = unsafe fn() -> *mut dyn Hash;
+	type Constructor = unsafe extern fn() -> *mut dyn Hash;
 
 	let hasher: Box<dyn Hash> = unsafe {
 		let constructor: Symbol<Constructor> = lib

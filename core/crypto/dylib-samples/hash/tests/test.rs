@@ -30,7 +30,7 @@ fn test_load_dylib() {
 	}
 
 	let lib = Library::new(path).unwrap();
-	type Constructor = unsafe fn() -> *mut dyn Hash;
+	type Constructor = unsafe extern fn() -> *mut dyn Hash;
 
 	let hasher: Box<dyn Hash> = unsafe {
 		let constructor: Symbol<Constructor> = lib.get(b"_crypto_hash_create").unwrap();
