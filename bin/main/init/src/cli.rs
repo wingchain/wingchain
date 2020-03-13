@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use base::SharedParams;
 use structopt::StructOpt;
+
+use base::SharedParams;
 
 #[derive(Clone, Debug, StructOpt)]
 pub struct InitOpt {

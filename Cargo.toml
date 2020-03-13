@@ -3,6 +3,7 @@ members = [
 	"bin/main",
 	"bin/main/init",
 	"core/crypto",
+	"core/crypto/dylib-samples/hash",
 ]
 
 [profile.release]

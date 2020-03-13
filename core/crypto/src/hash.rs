@@ -12,11 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors;
-use crate::KeyLength;
+use std::path::PathBuf;
+use std::str::FromStr;
+
+use error_chain::bail;
+use libloading::{Library, Symbol};
+
 use blake2b::Blake2b256;
 use sm3::SM3;
-use std::str::FromStr;
+
+use crate::errors;
+use crate::hash::blake2b::Blake2b160;
+use crate::KeyLength;
 
 pub mod blake2b;
 pub mod sm3;
@@ -29,29 +36,40 @@ pub trait Hash {
 
 pub enum HashImpl {
 	Blake2b256,
+	Blake2b160,
 	SM3,
+	/// custom hash impl provided by dylib
+	Custom(CustomLib),
 }
+
+pub struct CustomLib(Box<dyn Hash>);
 
 impl Hash for HashImpl {
 	#[inline]
 	fn name(&self) -> &'static str {
 		match self {
 			Self::Blake2b256 => Blake2b256.name(),
+			Self::Blake2b160 => Blake2b160.name(),
 			Self::SM3 => SM3.name(),
+			Self::Custom(custom) => custom.0.name(),
 		}
 	}
 	#[inline]
 	fn key_length(&self) -> KeyLength {
 		match self {
 			Self::Blake2b256 => Blake2b256.key_length(),
+			Self::Blake2b160 => Blake2b160.key_length(),
 			Self::SM3 => SM3.key_length(),
+			Self::Custom(custom) => custom.0.key_length(),
 		}
 	}
 	#[inline]
 	fn hash(&self, out: &mut [u8], data: &[u8]) {
 		match self {
 			Self::Blake2b256 => Blake2b256.hash(out, data),
+			Self::Blake2b160 => Blake2b160.hash(out, data),
 			Self::SM3 => SM3.hash(out, data),
+			Self::Custom(custom) => custom.0.hash(out, data),
 		}
 	}
 }
@@ -61,11 +79,49 @@ impl FromStr for HashImpl {
 	#[inline]
 	fn from_str(s: &str) -> Result<HashImpl, Self::Err> {
 		match s {
-			"blake2b256" => Ok(HashImpl::Blake2b256),
+			"blake2b_256" => Ok(HashImpl::Blake2b256),
+			"blake2b_160" => Ok(HashImpl::Blake2b160),
 			"sm3" => Ok(HashImpl::SM3),
-			_ => Err(errors::ErrorKind::HashNameNotFound.into()),
+			other => {
+				let path = PathBuf::from(&other);
+				let hasher = load_custom_lib(&path)?;
+				let custom_lib = CustomLib(hasher);
+				Ok(HashImpl::Custom(custom_lib))
+			}
 		}
 	}
+}
+
+#[macro_export]
+macro_rules! declare_custom_lib {
+	($impl:path) => {
+		#[no_mangle]
+		pub extern "C" fn _crypto_hash_create() -> *mut dyn Hash {
+			let boxed: Box<dyn Hash> = Box::new($impl);
+			Box::into_raw(boxed)
+		}
+	};
+}
+
+fn load_custom_lib(path: &PathBuf) -> errors::Result<Box<dyn Hash>> {
+	if !path.exists() {
+		bail!(errors::ErrorKind::CustomLibNotFound(format!("{:?}", path)));
+	}
+
+	let lib = Library::new(path)
+		.map_err(|_| errors::ErrorKind::CustomLibLoadFailed(format!("{:?}", path)))?;
+	type Constructor = unsafe fn() -> *mut dyn Hash;
+
+	let hasher: Box<dyn Hash> = unsafe {
+		let constructor: Symbol<Constructor> = lib
+			.get(b"_crypto_hash_create")
+			.map_err(|_| errors::ErrorKind::CustomLibLoadFailed(format!("{:?}", path)))?;
+		let boxed_raw = constructor();
+		let hash = Box::from_raw(boxed_raw);
+		hash
+	};
+
+	Ok(hasher)
 }
 
 #[cfg(test)]
@@ -88,7 +144,37 @@ mod tests {
 	}
 
 	#[test]
-	fn test_from_str() {
+	fn test_from_str_blake2b_256() {
+		let hash = HashImpl::from_str("blake2b_256").unwrap();
+		let data = [1u8, 2u8, 3u8];
+		let mut out = [0u8; 32];
+		hash.hash(&mut out, &data);
+		assert_eq!(
+			out,
+			[
+				17, 192, 231, 155, 113, 195, 151, 108, 205, 12, 2, 209, 49, 14, 37, 22, 192, 142,
+				220, 157, 139, 111, 87, 204, 214, 128, 214, 58, 77, 142, 114, 218
+			]
+		);
+	}
+
+	#[test]
+	fn test_from_str_blake2b_160() {
+		let hash = HashImpl::from_str("blake2b_160").unwrap();
+		let data = [1u8, 2u8, 3u8];
+		let mut out = [0u8; 20];
+		hash.hash(&mut out, &data);
+		assert_eq!(
+			out,
+			[
+				197, 117, 145, 134, 122, 108, 242, 5, 233, 74, 212, 142, 167, 139, 236, 142, 103,
+				194, 14, 98
+			]
+		);
+	}
+
+	#[test]
+	fn test_from_str_sm3() {
 		let hash = HashImpl::from_str("sm3").unwrap();
 		let data = [1u8, 2u8, 3u8];
 		let mut out = [0u8; 32];

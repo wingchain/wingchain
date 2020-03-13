@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use init::cli::InitOpt;
 use structopt::StructOpt;
+
+use init::cli::InitOpt;
 
 #[derive(Clone, Debug, StructOpt)]
 pub struct Opt {

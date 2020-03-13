@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::cli::{Opt, Subcommand};
 use structopt::clap::{App, AppSettings};
 use structopt::StructOpt;
+
+use crate::cli::{Opt, Subcommand};
 
 mod cli;
 mod errors;

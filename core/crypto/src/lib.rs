@@ -16,12 +16,22 @@ pub mod errors;
 pub mod hash;
 
 pub enum KeyLength {
-	/// 128 bits
-	KeyLength16,
+	/// 160 bits
+	KeyLength20,
 
 	/// 256 bits
 	KeyLength32,
 
 	/// 512 bits
 	KeyLength64,
+}
+
+impl Into<usize> for KeyLength {
+	fn into(self) -> usize {
+		match self {
+			KeyLength::KeyLength20 => 20,
+			KeyLength::KeyLength32 => 32,
+			KeyLength::KeyLength64 => 64,
+		}
+	}
 }

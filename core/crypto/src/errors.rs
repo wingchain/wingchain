@@ -20,9 +20,17 @@ error_chain! {
 	links {
 	}
 	errors {
-		HashNameNotFound {
+		HashNameNotFound(name: String) {
 			description(""),
-			display("Home dir already exists"),
+			display("Hash name not found: {}", name),
+		}
+		CustomLibNotFound(path: String) {
+			description(""),
+			display("Custom lib not found: {}", path),
+		}
+		CustomLibLoadFailed(path: String) {
+			description(""),
+			display("Custom lib load failed: {}", path),
 		}
 	}
 }

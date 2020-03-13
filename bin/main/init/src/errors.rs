@@ -23,9 +23,9 @@ error_chain! {
 		Base(base::errors::Error, base::errors::ErrorKind) #[doc="Base error"];
 	}
 	errors {
-		HomeDirExists {
+		HomeDirExists(path: String) {
 			description(""),
-			display("Home dir already exists"),
+			display("Home dir already exists: {}", path),
 		}
 	}
 }
