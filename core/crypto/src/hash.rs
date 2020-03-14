@@ -15,21 +15,17 @@
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use error_chain::bail;
-use libloading::{Library, Symbol};
-
 use blake2b::Blake2b256;
 use sm3::SM3;
 
 use crate::errors;
 use crate::hash::blake2b::Blake2b160;
+use crate::hash::custom_lib::CustomLib;
 use crate::KeyLength;
-use std::os::raw::{c_char, c_uchar, c_uint};
-use std::ffi::CStr;
-use std::convert::TryInto;
 
 pub mod blake2b;
 pub mod sm3;
+mod custom_lib;
 
 pub trait Hash {
 	fn name(&self) -> String;
@@ -45,8 +41,6 @@ pub enum HashImpl {
 	Custom(CustomLib),
 }
 
-pub struct CustomLib(Library);
-
 impl Hash for HashImpl {
 	#[inline]
 	fn name(&self) -> String {
@@ -54,7 +48,7 @@ impl Hash for HashImpl {
 			Self::Blake2b256 => Blake2b256.name(),
 			Self::Blake2b160 => Blake2b160.name(),
 			Self::SM3 => SM3.name(),
-			Self::Custom(custom) => get_name_from_lib(&custom.0)
+			Self::Custom(custom) => custom.name(),
 		}
 	}
 	#[inline]
@@ -63,7 +57,7 @@ impl Hash for HashImpl {
 			Self::Blake2b256 => Blake2b256.key_length(),
 			Self::Blake2b160 => Blake2b160.key_length(),
 			Self::SM3 => SM3.key_length(),
-			Self::Custom(custom) => get_key_length_from_lib(&custom.0),
+			Self::Custom(custom) => custom.key_length(),
 		}
 	}
 	#[inline]
@@ -72,7 +66,7 @@ impl Hash for HashImpl {
 			Self::Blake2b256 => Blake2b256.hash(out, data),
 			Self::Blake2b160 => Blake2b160.hash(out, data),
 			Self::SM3 => SM3.hash(out, data),
-			Self::Custom(custom) => hash_from_lib(&custom.0, out, data),
+			Self::Custom(custom) => custom.hash(out, data),
 		}
 	}
 }
@@ -87,8 +81,7 @@ impl FromStr for HashImpl {
 			"sm3" => Ok(HashImpl::SM3),
 			other => {
 				let path = PathBuf::from(&other);
-				let lib = load_custom_lib(&path)?;
-				let custom_lib = CustomLib(lib);
+				let custom_lib = CustomLib::new(&path)?;
 				Ok(HashImpl::Custom(custom_lib))
 			}
 		}
@@ -103,53 +96,6 @@ macro_rules! declare_custom_lib {
 			let boxed: Box<dyn Hash> = Box::new($impl);
 			Box::into_raw(boxed)
 		}
-	};
-}
-
-fn load_custom_lib(path: &PathBuf) -> errors::Result<Library> {
-	if !path.exists() {
-		bail!(errors::ErrorKind::CustomLibNotFound(format!("{:?}", path)));
-	}
-
-	let lib = Library::new(path)
-		.map_err(|_| errors::ErrorKind::CustomLibLoadFailed(format!("{:?}", path)))?;
-
-	Ok(lib)
-}
-
-fn get_name_from_lib(lib: &Library) -> String {
-	type CallName = unsafe extern "C" fn() -> *mut c_char;
-	type CallNameFree = unsafe extern "C" fn(*mut c_char);
-
-	let name: String = unsafe {
-		let call_name: Symbol<CallName> = lib.get(b"_crypto_hash_custom_name").unwrap();
-		let call_name_free: Symbol<CallNameFree> = lib.get(b"_crypto_hash_custom_name_free").unwrap();
-		let raw = call_name();
-		let name = CStr::from_ptr(raw).to_str().expect("").to_owned();
-		call_name_free(raw);
-		name
-	};
-	name
-}
-
-fn get_key_length_from_lib(lib: &Library) -> KeyLength {
-	type CallKeyLength = unsafe extern "C" fn() -> usize;
-
-	let key_length: usize = unsafe {
-		let call_key_length: Symbol<CallKeyLength> = lib.get(b"_crypto_hash_custom_key_length").unwrap();
-		let key_length = call_key_length();
-		key_length as usize
-	};
-
-	key_length.try_into().expect("qed")
-}
-
-fn hash_from_lib(lib: &Library, out: &mut [u8], data: &[u8]) {
-	type CallHash = unsafe extern "C" fn(*mut c_uchar, c_uint, *const c_uchar, c_uint);
-
-	unsafe {
-		let call_hash: Symbol<CallHash> = lib.get(b"_crypto_hash_custom_hash").unwrap();
-		call_hash(out.as_mut_ptr(), out.len() as c_uint, data.as_ptr(), data.len() as c_uint);
 	};
 }
 
