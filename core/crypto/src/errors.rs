@@ -32,5 +32,9 @@ error_chain! {
 			description(""),
 			display("Custom lib load failed: {}", path),
 		}
+		InvalidKeyLength(length: usize) {
+			description(""),
+			display("Invalid key length: {}", length),
+		}
 	}
 }

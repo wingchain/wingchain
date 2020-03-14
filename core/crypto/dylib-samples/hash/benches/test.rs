@@ -15,6 +15,7 @@
 
 extern crate test;
 
+use std::path::PathBuf;
 use std::str::FromStr;
 use test::{black_box, Bencher};
 
@@ -32,16 +33,14 @@ fn bench_hash_native(b: &mut Bencher) {
 	b.iter(|| black_box(hash.hash(&mut out, &data)));
 }
 
+/// to run with dylib, should `cargo +nightly build --release` first.
 #[bench]
 fn bench_hash_dylib(b: &mut Bencher) {
-	let ext = get_dylib_ext();
+	let path = get_dylib("crypto_dylib_samples_hash");
 
-	let path = cargo_bin(format!("libcrypto_dylib_samples_hash.{}", ext));
+	println!("path: {:?}", path);
 
-	// in case no build first
-	if !path.exists() {
-		return;
-	}
+	assert!(path.exists());
 
 	let path = path.to_string_lossy();
 	let hasher = HashImpl::from_str(&path).unwrap();
@@ -52,17 +51,65 @@ fn bench_hash_dylib(b: &mut Bencher) {
 	b.iter(|| black_box(hasher.hash(&mut out, &data)));
 }
 
+#[bench]
+fn bench_name_native(b: &mut Bencher) {
+	let hash = HashImpl::Blake2b256;
+
+	b.iter(|| black_box(hash.name()));
+}
+
+/// to run with dylib, should `cargo +nightly build --release` first.
+#[bench]
+fn bench_name_dylib(b: &mut Bencher) {
+	let path = get_dylib("crypto_dylib_samples_hash");
+
+	println!("path: {:?}", path);
+
+	assert!(path.exists());
+
+	let path = path.to_string_lossy();
+	let hasher = HashImpl::from_str(&path).unwrap();
+
+	b.iter(|| black_box(hasher.name()));
+}
+
+#[bench]
+fn bench_key_length_native(b: &mut Bencher) {
+	let hash = HashImpl::Blake2b256;
+
+	b.iter(|| black_box(hash.key_length()));
+}
+
+/// to run with dylib, should `cargo +nightly build --release` first.
+#[bench]
+fn bench_key_length_dylib(b: &mut Bencher) {
+	let path = get_dylib("crypto_dylib_samples_hash");
+
+	println!("path: {:?}", path);
+
+	assert!(path.exists());
+
+	let path = path.to_string_lossy();
+	let hasher = HashImpl::from_str(&path).unwrap();
+
+	b.iter(|| black_box(hasher.key_length()));
+}
+
+
 #[cfg(target_os = "macos")]
-fn get_dylib_ext() -> &'static str {
-	"dylib"
+fn get_dylib(package_name: &str) -> PathBuf {
+	cargo_bin(format!("lib{}.dylib", package_name))
 }
 
 #[cfg(target_os = "linux")]
-fn get_dylib_ext() -> &'static str {
-	"so"
+fn get_dylib(package_name: &str) -> PathBuf {
+	cargo_bin(format!("lib{}.so", package_name))
 }
 
 #[cfg(target_os = "windows")]
-fn get_dylib_ext() -> &'static str {
-	"dll"
+fn get_dylib(package_name: &str) -> PathBuf {
+	let path = cargo_bin(format!("{}.dll", package_name));
+	let path = path.to_string_lossy();
+	let path = path.trim_end_matches(".exe");
+	PathBuf::from(path)
 }

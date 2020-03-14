@@ -15,21 +15,20 @@
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use error_chain::bail;
-use libloading::{Library, Symbol};
-
 use blake2b::Blake2b256;
 use sm3::SM3;
 
 use crate::errors;
 use crate::hash::blake2b::Blake2b160;
+use crate::hash::custom_lib::CustomLib;
 use crate::KeyLength;
 
 pub mod blake2b;
+mod custom_lib;
 pub mod sm3;
 
 pub trait Hash {
-	fn name(&self) -> &'static str;
+	fn name(&self) -> String;
 	fn key_length(&self) -> KeyLength;
 	fn hash(&self, out: &mut [u8], data: &[u8]);
 }
@@ -42,16 +41,14 @@ pub enum HashImpl {
 	Custom(CustomLib),
 }
 
-pub struct CustomLib(Box<dyn Hash>);
-
 impl Hash for HashImpl {
 	#[inline]
-	fn name(&self) -> &'static str {
+	fn name(&self) -> String {
 		match self {
 			Self::Blake2b256 => Blake2b256.name(),
 			Self::Blake2b160 => Blake2b160.name(),
 			Self::SM3 => SM3.name(),
-			Self::Custom(custom) => custom.0.name(),
+			Self::Custom(custom) => custom.name(),
 		}
 	}
 	#[inline]
@@ -60,7 +57,7 @@ impl Hash for HashImpl {
 			Self::Blake2b256 => Blake2b256.key_length(),
 			Self::Blake2b160 => Blake2b160.key_length(),
 			Self::SM3 => SM3.key_length(),
-			Self::Custom(custom) => custom.0.key_length(),
+			Self::Custom(custom) => custom.key_length(),
 		}
 	}
 	#[inline]
@@ -69,7 +66,7 @@ impl Hash for HashImpl {
 			Self::Blake2b256 => Blake2b256.hash(out, data),
 			Self::Blake2b160 => Blake2b160.hash(out, data),
 			Self::SM3 => SM3.hash(out, data),
-			Self::Custom(custom) => custom.0.hash(out, data),
+			Self::Custom(custom) => custom.hash(out, data),
 		}
 	}
 }
@@ -84,44 +81,11 @@ impl FromStr for HashImpl {
 			"sm3" => Ok(HashImpl::SM3),
 			other => {
 				let path = PathBuf::from(&other);
-				let hasher = load_custom_lib(&path)?;
-				let custom_lib = CustomLib(hasher);
+				let custom_lib = CustomLib::new(&path)?;
 				Ok(HashImpl::Custom(custom_lib))
 			}
 		}
 	}
-}
-
-#[macro_export]
-macro_rules! declare_custom_lib {
-	($impl:path) => {
-		#[no_mangle]
-		pub extern "C" fn _crypto_hash_create() -> *mut dyn Hash {
-			let boxed: Box<dyn Hash> = Box::new($impl);
-			Box::into_raw(boxed)
-		}
-	};
-}
-
-fn load_custom_lib(path: &PathBuf) -> errors::Result<Box<dyn Hash>> {
-	if !path.exists() {
-		bail!(errors::ErrorKind::CustomLibNotFound(format!("{:?}", path)));
-	}
-
-	let lib = Library::new(path)
-		.map_err(|_| errors::ErrorKind::CustomLibLoadFailed(format!("{:?}", path)))?;
-	type Constructor = unsafe fn() -> *mut dyn Hash;
-
-	let hasher: Box<dyn Hash> = unsafe {
-		let constructor: Symbol<Constructor> = lib
-			.get(b"_crypto_hash_create")
-			.map_err(|_| errors::ErrorKind::CustomLibLoadFailed(format!("{:?}", path)))?;
-		let boxed_raw = constructor();
-		let hash = Box::from_raw(boxed_raw);
-		hash
-	};
-
-	Ok(hasher)
 }
 
 #[cfg(test)]

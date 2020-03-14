@@ -20,8 +20,8 @@ use crate::KeyLength;
 pub struct SM3;
 
 impl Hash for SM3 {
-	fn name(&self) -> &'static str {
-		"sm3"
+	fn name(&self) -> String {
+		"sm3".to_string()
 	}
 	fn key_length(&self) -> KeyLength {
 		KeyLength::KeyLength32

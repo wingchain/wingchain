@@ -12,9 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::convert::TryFrom;
+
 pub mod errors;
 pub mod hash;
 
+#[derive(PartialEq, Debug)]
 pub enum KeyLength {
 	/// 160 bits
 	KeyLength20,
@@ -32,6 +35,20 @@ impl Into<usize> for KeyLength {
 			KeyLength::KeyLength20 => 20,
 			KeyLength::KeyLength32 => 32,
 			KeyLength::KeyLength64 => 64,
+		}
+	}
+}
+
+impl TryFrom<usize> for KeyLength {
+	type Error = errors::Error;
+
+	#[inline]
+	fn try_from(i: usize) -> Result<Self, Self::Error> {
+		match i {
+			20 => Ok(KeyLength::KeyLength20),
+			32 => Ok(KeyLength::KeyLength32),
+			64 => Ok(KeyLength::KeyLength64),
+			other => Err(errors::ErrorKind::InvalidKeyLength(other).into()),
 		}
 	}
 }
