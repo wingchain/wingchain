@@ -88,17 +88,6 @@ impl FromStr for HashImpl {
 	}
 }
 
-#[macro_export]
-macro_rules! declare_custom_lib {
-	($impl:path) => {
-		#[no_mangle]
-		pub extern "C" fn _crypto_hash_create() -> *mut dyn Hash {
-			let boxed: Box<dyn Hash> = Box::new($impl);
-			Box::into_raw(boxed)
-		}
-	};
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;

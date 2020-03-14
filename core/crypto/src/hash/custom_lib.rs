@@ -97,3 +97,51 @@ impl Hash for CustomLib {
 		};
 	}
 }
+
+#[macro_export]
+macro_rules! declare_custom_lib {
+	($impl:path) => {
+
+		use std::ffi::CString;
+		use std::os::raw::{c_char, c_uint, c_uchar};
+
+		#[no_mangle]
+		pub extern "C" fn _crypto_hash_custom_name() -> *mut c_char {
+			let name = $impl.name();
+			CString::new(name).expect("qed").into_raw()
+		}
+
+		#[no_mangle]
+		pub extern "C" fn _crypto_hash_custom_name_free(name: *mut c_char) {
+			unsafe {
+				assert!(!name.is_null());
+				CString::from_raw(name)
+			};
+		}
+
+		#[no_mangle]
+		pub extern "C" fn _crypto_hash_custom_key_length() -> c_uint {
+			let length: usize = $impl.key_length().into();
+			length as c_uint
+		}
+
+		#[no_mangle]
+		pub extern "C" fn _crypto_hash_custom_hash(out: *mut c_uchar, out_len: c_uint, data: *const c_uchar, data_len: c_uint) {
+
+			use std::slice;
+
+			let data = unsafe {
+				assert!(!data.is_null());
+				slice::from_raw_parts(data, data_len as usize)
+			};
+
+			let out = unsafe {
+				assert!(!out.is_null());
+				slice::from_raw_parts_mut(out, out_len as usize)
+			};
+
+			$impl.hash(out, data);
+
+		}
+	};
+}
