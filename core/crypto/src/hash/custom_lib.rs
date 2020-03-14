@@ -12,20 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::convert::TryInto;
+use std::ffi::CStr;
 use std::os::raw::{c_char, c_uchar, c_uint};
 use std::path::PathBuf;
 
 use libloading::{Library, Symbol};
 #[cfg(unix)]
 use libloading::os::unix as imp;
+#[cfg(windows)]
+use libloading::os::windows as imp;
 
 use crate::{errors, KeyLength};
-
-#[cfg(windows)]
-use self::os::windows as imp;
 use crate::hash::Hash;
-use std::ffi::CStr;
-use std::convert::TryInto;
 
 type CallName = unsafe extern "C" fn() -> *mut c_char;
 type CallNameFree = unsafe extern "C" fn(*mut c_char);
