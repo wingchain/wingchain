@@ -15,13 +15,13 @@
 
 extern crate test;
 
+use std::path::PathBuf;
 use std::str::FromStr;
-use test::{black_box, Bencher};
+use test::{Bencher, black_box};
 
 use assert_cmd::cargo::cargo_bin;
 
 use crypto::hash::{Hash, HashImpl};
-use std::path::PathBuf;
 
 #[bench]
 fn bench_hash_native(b: &mut Bencher) {
