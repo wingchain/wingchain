@@ -18,3 +18,6 @@ crypto = { path = "../../"}
 assert_cmd = "0.12.0"
 libloading = "0.5.2"
 rust_crypto = { version = "0.2.36", package = "rust-crypto" }
+
+[features]
+build-dep-test = []

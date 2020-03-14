@@ -63,9 +63,11 @@ fn bench_name_native(b: &mut Bencher) {
 fn bench_name_dylib(b: &mut Bencher) {
 	let path = get_dylib("crypto_dylib_samples_hash");
 
-	println!("path: {:?}", path);
-
-	assert!(path.exists());
+	assert!(
+		path.exists(),
+		"should build --release first to make exist: {:?}",
+		path
+	);
 
 	let path = path.to_string_lossy();
 	let hasher = HashImpl::from_str(&path).unwrap();
@@ -85,16 +87,17 @@ fn bench_key_length_native(b: &mut Bencher) {
 fn bench_key_length_dylib(b: &mut Bencher) {
 	let path = get_dylib("crypto_dylib_samples_hash");
 
-	println!("path: {:?}", path);
-
-	assert!(path.exists());
+	assert!(
+		path.exists(),
+		"should build --release first to make exist: {:?}",
+		path
+	);
 
 	let path = path.to_string_lossy();
 	let hasher = HashImpl::from_str(&path).unwrap();
 
 	b.iter(|| black_box(hasher.key_length()));
 }
-
 
 #[cfg(target_os = "macos")]
 fn get_dylib(package_name: &str) -> PathBuf {
