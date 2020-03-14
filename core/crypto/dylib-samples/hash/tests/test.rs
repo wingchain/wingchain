@@ -21,39 +21,9 @@ use assert_cmd::cargo::cargo_bin;
 use libloading::{Library, Symbol};
 
 use crypto::hash::{Hash, HashImpl};
+use crypto::KeyLength;
 
 #[test]
-fn test_load_dylib() {
-	let path = get_dylib("crypto_dylib_samples_hash");
-
-	// in case no build first
-	if !path.exists() {
-		return;
-	}
-
-	let lib = Library::new(path).unwrap();
-	type Constructor = unsafe extern "C" fn() -> *mut dyn Hash;
-
-	let hasher: Box<dyn Hash> = unsafe {
-		let constructor: Symbol<Constructor> = lib.get(b"_crypto_hash_create").unwrap();
-		let boxed_raw = constructor();
-		let hash = Box::from_raw(boxed_raw);
-		hash
-	};
-
-	let data = [1u8, 2u8, 3u8];
-	let mut out = [0u8; 32];
-	hasher.hash(&mut out, &data);
-	assert_eq!(
-		out,
-		[
-			17, 192, 231, 155, 113, 195, 151, 108, 205, 12, 2, 209, 49, 14, 37, 22, 192, 142, 220,
-			157, 139, 111, 87, 204, 214, 128, 214, 58, 77, 142, 114, 218
-		]
-	);
-}
-
-// #[test]
 fn test_custom_lib() {
 	let path = get_dylib("crypto_dylib_samples_hash");
 
@@ -65,6 +35,12 @@ fn test_custom_lib() {
 	let path = path.to_string_lossy();
 	let hasher = HashImpl::from_str(&path).unwrap();
 
+	let name = hasher.name();
+	assert_eq!(name, "blake2b_256".to_string());
+
+	let key_length = hasher.key_length();
+	assert_eq!(key_length, KeyLength::KeyLength32);
+
 	let data = [1u8, 2u8, 3u8];
 	let mut out = [0u8; 32];
 	hasher.hash(&mut out, &data);
@@ -78,7 +54,7 @@ fn test_custom_lib() {
 }
 
 #[test]
-fn test_load_dylib2() {
+fn test_load_dylib() {
 	let path = get_dylib("crypto_dylib_samples_hash");
 
 	// in case no build first

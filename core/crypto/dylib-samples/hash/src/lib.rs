@@ -27,8 +27,8 @@ pub struct Blake2b256;
 
 /// A Blake2b256 implementation for sample
 impl Hash for Blake2b256 {
-	fn name(&self) -> &'static str {
-		"blake2b_256"
+	fn name(&self) -> String {
+		"blake2b_256".to_string()
 	}
 	fn key_length(&self) -> KeyLength {
 		KeyLength::KeyLength32
