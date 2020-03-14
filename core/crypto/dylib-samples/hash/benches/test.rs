@@ -51,6 +51,51 @@ fn bench_hash_dylib(b: &mut Bencher) {
 	b.iter(|| black_box(hasher.hash(&mut out, &data)));
 }
 
+#[bench]
+fn bench_name_native(b: &mut Bencher) {
+	let hash = HashImpl::Blake2b256;
+
+	b.iter(|| black_box(hash.name()));
+}
+
+/// to run with dylib, should `cargo +nightly build --release` first.
+#[bench]
+fn bench_name_dylib(b: &mut Bencher) {
+	let path = get_dylib("crypto_dylib_samples_hash");
+
+	println!("path: {:?}", path);
+
+	assert!(path.exists());
+
+	let path = path.to_string_lossy();
+	let hasher = HashImpl::from_str(&path).unwrap();
+
+	b.iter(|| black_box(hasher.name()));
+}
+
+#[bench]
+fn bench_key_length_native(b: &mut Bencher) {
+	let hash = HashImpl::Blake2b256;
+
+	b.iter(|| black_box(hash.key_length()));
+}
+
+/// to run with dylib, should `cargo +nightly build --release` first.
+#[bench]
+fn bench_key_length_dylib(b: &mut Bencher) {
+	let path = get_dylib("crypto_dylib_samples_hash");
+
+	println!("path: {:?}", path);
+
+	assert!(path.exists());
+
+	let path = path.to_string_lossy();
+	let hasher = HashImpl::from_str(&path).unwrap();
+
+	b.iter(|| black_box(hasher.key_length()));
+}
+
+
 #[cfg(target_os = "macos")]
 fn get_dylib(package_name: &str) -> PathBuf {
 	cargo_bin(format!("lib{}.dylib", package_name))
