@@ -13,8 +13,6 @@
 // limitations under the License.
 
 use std::fs;
-
-use assert_cmd::Command;
 use tempfile::tempdir;
 
 use base::spec::Spec;
@@ -54,8 +52,11 @@ fn test_init() {
 	assert!(spec.genesis.txs[1].params[0].as_datetime().is_some());
 }
 
+#[cfg(feature = "build-dep-test")]
 #[test]
 fn test_init_command() {
+	use assert_cmd::Command;
+
 	let home = tempdir().expect("could not create a temp dir");
 	let home = home.into_path();
 
@@ -64,7 +65,7 @@ fn test_init_command() {
 
 	let mut cmd = match Command::cargo_bin("wingchain") {
 		Ok(cmd) => cmd,
-		Err(_) => return,
+		Err(e) => panic!(format!("should build first: {}", e)),
 	};
 
 	let output = cmd.arg("init").arg("--home").arg(&home).output().unwrap();

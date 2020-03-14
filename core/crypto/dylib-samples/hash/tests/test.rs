@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![cfg(feature = "build-dep-test")]
+
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_uchar, c_uint};
 use std::path::PathBuf;
@@ -27,10 +29,11 @@ use crypto::KeyLength;
 fn test_custom_lib() {
 	let path = get_dylib("crypto_dylib_samples_hash");
 
-	// in case no build first
-	if !path.exists() {
-		return;
-	}
+	assert!(
+		path.exists(),
+		"should build first to make exist: {:?}",
+		path
+	);
 
 	let path = path.to_string_lossy();
 	let hasher = HashImpl::from_str(&path).unwrap();
@@ -57,10 +60,11 @@ fn test_custom_lib() {
 fn test_load_dylib() {
 	let path = get_dylib("crypto_dylib_samples_hash");
 
-	// in case no build first
-	if !path.exists() {
-		return;
-	}
+	assert!(
+		path.exists(),
+		"should build first to make exist: {:?}",
+		path
+	);
 
 	let lib = Library::new(path).unwrap();
 	type CallName = unsafe extern "C" fn() -> *mut c_char;
