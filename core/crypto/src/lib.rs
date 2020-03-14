@@ -40,7 +40,6 @@ impl Into<usize> for KeyLength {
 }
 
 impl TryFrom<usize> for KeyLength {
-
 	type Error = errors::Error;
 
 	#[inline]
@@ -49,7 +48,7 @@ impl TryFrom<usize> for KeyLength {
 			20 => Ok(KeyLength::KeyLength20),
 			32 => Ok(KeyLength::KeyLength32),
 			64 => Ok(KeyLength::KeyLength64),
-			other => Err(errors::ErrorKind::InvalidKeyLength(other).into())
+			other => Err(errors::ErrorKind::InvalidKeyLength(other).into()),
 		}
 	}
 }

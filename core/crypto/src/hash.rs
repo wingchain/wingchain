@@ -24,8 +24,8 @@ use crate::hash::custom_lib::CustomLib;
 use crate::KeyLength;
 
 pub mod blake2b;
-pub mod sm3;
 mod custom_lib;
+pub mod sm3;
 
 pub trait Hash {
 	fn name(&self) -> String;

@@ -69,7 +69,8 @@ fn test_load_dylib() {
 	// name
 	let name: String = unsafe {
 		let call_name: Symbol<CallName> = lib.get(b"_crypto_hash_custom_name").unwrap();
-		let call_name_free: Symbol<CallNameFree> = lib.get(b"_crypto_hash_custom_name_free").unwrap();
+		let call_name_free: Symbol<CallNameFree> =
+			lib.get(b"_crypto_hash_custom_name_free").unwrap();
 		let raw = call_name();
 		let name = CStr::from_ptr(raw).to_str().expect("").to_owned();
 		call_name_free(raw);
@@ -82,7 +83,8 @@ fn test_load_dylib() {
 	type CallKeyLength = unsafe extern "C" fn() -> usize;
 
 	let key_length: usize = unsafe {
-		let call_key_length: Symbol<CallKeyLength> = lib.get(b"_crypto_hash_custom_key_length").unwrap();
+		let call_key_length: Symbol<CallKeyLength> =
+			lib.get(b"_crypto_hash_custom_key_length").unwrap();
 		let key_length = call_key_length();
 		key_length as usize
 	};
@@ -97,7 +99,12 @@ fn test_load_dylib() {
 
 	unsafe {
 		let call_hash: Symbol<CallHash> = lib.get(b"_crypto_hash_custom_hash").unwrap();
-		call_hash( out.as_mut_ptr(), out.len() as c_uint, data.as_ptr(), data.len() as c_uint);
+		call_hash(
+			out.as_mut_ptr(),
+			out.len() as c_uint,
+			data.as_ptr(),
+			data.len() as c_uint,
+		);
 	};
 
 	assert_eq!(
@@ -136,7 +143,9 @@ fn get_str() -> *mut c_char {
 
 fn free_str(s: *mut c_char) {
 	unsafe {
-		if s.is_null() { return; }
+		if s.is_null() {
+			return;
+		}
 		CString::from_raw(s)
 	};
 }

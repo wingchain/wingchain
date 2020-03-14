@@ -17,7 +17,7 @@ extern crate test;
 
 use std::path::PathBuf;
 use std::str::FromStr;
-use test::{Bencher, black_box};
+use test::{black_box, Bencher};
 
 use assert_cmd::cargo::cargo_bin;
 

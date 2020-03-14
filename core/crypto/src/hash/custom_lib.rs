@@ -17,14 +17,14 @@ use std::ffi::CStr;
 use std::os::raw::{c_char, c_uchar, c_uint};
 use std::path::PathBuf;
 
-use libloading::{Library, Symbol};
 #[cfg(unix)]
 use libloading::os::unix as imp;
 #[cfg(windows)]
 use libloading::os::windows as imp;
+use libloading::{Library, Symbol};
 
-use crate::{errors, KeyLength};
 use crate::hash::Hash;
+use crate::{errors, KeyLength};
 
 type CallName = unsafe extern "C" fn() -> *mut c_char;
 type CallNameFree = unsafe extern "C" fn(*mut c_char);
@@ -43,19 +43,20 @@ pub struct CustomLib {
 
 impl CustomLib {
 	pub fn new(path: &PathBuf) -> errors::Result<Self> {
-		let err = |_| { errors::ErrorKind::CustomLibLoadFailed(format!("{:?}", path)) };
+		let err = |_| errors::ErrorKind::CustomLibLoadFailed(format!("{:?}", path));
 
-		let lib = Library::new(path)
-			.map_err(err)?;
+		let lib = Library::new(path).map_err(err)?;
 
 		let (name, name_free, key_length, hash) = unsafe {
 			let call_name: Symbol<CallName> = lib.get(b"_crypto_hash_custom_name").map_err(err)?;
 			let call_name = call_name.into_raw();
 
-			let call_name_free: Symbol<CallNameFree> = lib.get(b"_crypto_hash_custom_name_free").map_err(err)?;
+			let call_name_free: Symbol<CallNameFree> =
+				lib.get(b"_crypto_hash_custom_name_free").map_err(err)?;
 			let call_name_free = call_name_free.into_raw();
 
-			let call_key_length: Symbol<CallKeyLength> = lib.get(b"_crypto_hash_custom_key_length").map_err(err)?;
+			let call_key_length: Symbol<CallKeyLength> =
+				lib.get(b"_crypto_hash_custom_key_length").map_err(err)?;
 			let call_key_length = call_key_length.into_raw();
 
 			let call_hash: Symbol<CallHash> = lib.get(b"_crypto_hash_custom_hash").map_err(err)?;
@@ -93,7 +94,12 @@ impl Hash for CustomLib {
 	}
 	fn hash(&self, out: &mut [u8], data: &[u8]) {
 		unsafe {
-			(self.hash)(out.as_mut_ptr(), out.len() as c_uint, data.as_ptr(), data.len() as c_uint);
+			(self.hash)(
+				out.as_mut_ptr(),
+				out.len() as c_uint,
+				data.as_ptr(),
+				data.len() as c_uint,
+			);
 		};
 	}
 }
@@ -101,9 +107,8 @@ impl Hash for CustomLib {
 #[macro_export]
 macro_rules! declare_custom_lib {
 	($impl:path) => {
-
 		use std::ffi::CString;
-		use std::os::raw::{c_char, c_uint, c_uchar};
+		use std::os::raw::{c_char, c_uchar, c_uint};
 
 		#[no_mangle]
 		pub extern "C" fn _crypto_hash_custom_name() -> *mut c_char {
@@ -126,8 +131,12 @@ macro_rules! declare_custom_lib {
 		}
 
 		#[no_mangle]
-		pub extern "C" fn _crypto_hash_custom_hash(out: *mut c_uchar, out_len: c_uint, data: *const c_uchar, data_len: c_uint) {
-
+		pub extern "C" fn _crypto_hash_custom_hash(
+			out: *mut c_uchar,
+			out_len: c_uint,
+			data: *const c_uchar,
+			data_len: c_uint,
+		) {
 			use std::slice;
 
 			let data = unsafe {
@@ -141,7 +150,6 @@ macro_rules! declare_custom_lib {
 			};
 
 			$impl.hash(out, data);
-
 		}
 	};
 }
