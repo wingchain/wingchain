@@ -42,7 +42,7 @@ pub enum HashImpl {
 	Custom(CustomLib),
 }
 
-pub struct CustomLib(Box<dyn Hash>);
+pub struct CustomLib(Library, Box<dyn Hash>);
 
 impl Hash for HashImpl {
 	#[inline]
@@ -51,7 +51,7 @@ impl Hash for HashImpl {
 			Self::Blake2b256 => Blake2b256.name(),
 			Self::Blake2b160 => Blake2b160.name(),
 			Self::SM3 => SM3.name(),
-			Self::Custom(custom) => custom.0.name(),
+			Self::Custom(custom) => custom.1.name(),
 		}
 	}
 	#[inline]
@@ -60,7 +60,7 @@ impl Hash for HashImpl {
 			Self::Blake2b256 => Blake2b256.key_length(),
 			Self::Blake2b160 => Blake2b160.key_length(),
 			Self::SM3 => SM3.key_length(),
-			Self::Custom(custom) => custom.0.key_length(),
+			Self::Custom(custom) => custom.1.key_length(),
 		}
 	}
 	#[inline]
@@ -69,7 +69,7 @@ impl Hash for HashImpl {
 			Self::Blake2b256 => Blake2b256.hash(out, data),
 			Self::Blake2b160 => Blake2b160.hash(out, data),
 			Self::SM3 => SM3.hash(out, data),
-			Self::Custom(custom) => custom.0.hash(out, data),
+			Self::Custom(custom) => custom.1.hash(out, data),
 		}
 	}
 }
@@ -84,8 +84,8 @@ impl FromStr for HashImpl {
 			"sm3" => Ok(HashImpl::SM3),
 			other => {
 				let path = PathBuf::from(&other);
-				let hasher = load_custom_lib(&path)?;
-				let custom_lib = CustomLib(hasher);
+				let (lib, hasher) = load_custom_lib(&path)?;
+				let custom_lib = CustomLib(lib, hasher);
 				Ok(HashImpl::Custom(custom_lib))
 			}
 		}
@@ -103,7 +103,7 @@ macro_rules! declare_custom_lib {
 	};
 }
 
-fn load_custom_lib(path: &PathBuf) -> errors::Result<Box<dyn Hash>> {
+fn load_custom_lib(path: &PathBuf) -> errors::Result<(Library, Box<dyn Hash>)> {
 	if !path.exists() {
 		bail!(errors::ErrorKind::CustomLibNotFound(format!("{:?}", path)));
 	}
@@ -121,7 +121,7 @@ fn load_custom_lib(path: &PathBuf) -> errors::Result<Box<dyn Hash>> {
 		hash
 	};
 
-	Ok(hasher)
+	Ok((lib, hasher))
 }
 
 #[cfg(test)]
