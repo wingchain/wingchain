@@ -22,6 +22,7 @@ use test::{black_box, Bencher};
 use assert_cmd::cargo::cargo_bin;
 
 use crypto::hash::{Hash, HashImpl};
+use std::ffi::CString;
 
 #[bench]
 fn bench_hash_native(b: &mut Bencher) {
@@ -97,6 +98,24 @@ fn bench_key_length_dylib(b: &mut Bencher) {
 	let hasher = HashImpl::from_str(&path).unwrap();
 
 	b.iter(|| black_box(hasher.key_length()));
+}
+
+#[bench]
+fn bench_string(b: &mut Bencher) {
+	let get_name = || "test".to_string();
+
+	b.iter(|| black_box(get_name()));
+}
+
+/// to run with dylib, should `cargo +nightly build --release` first.
+#[bench]
+fn bench_string_ffi(b: &mut Bencher) {
+	let get_name = || {
+		let s = CString::new("test").unwrap().into_raw();
+		unsafe { CString::from_raw(s).into_string().unwrap() }
+	};
+
+	b.iter(|| black_box(get_name()));
 }
 
 #[cfg(target_os = "macos")]

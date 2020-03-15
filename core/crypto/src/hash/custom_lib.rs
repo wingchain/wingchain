@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use std::convert::TryInto;
-use std::ffi::CStr;
+use std::ffi::CString;
 use std::os::raw::{c_char, c_uchar, c_uint};
 use std::path::PathBuf;
 
@@ -28,14 +28,15 @@ use crate::{errors, KeyLength};
 
 type CallName = unsafe extern "C" fn() -> *mut c_char;
 type CallNameFree = unsafe extern "C" fn(*mut c_char);
-type CallKeyLength = unsafe extern "C" fn() -> usize;
+type CallKeyLength = unsafe extern "C" fn() -> c_uint;
 type CallHash = unsafe extern "C" fn(*mut c_uchar, c_uint, *const c_uchar, c_uint);
 
 pub struct CustomLib {
 	#[allow(dead_code)]
-	/// symbols refer lib, should keep lib
+	/// lib is referred by symbols, should be kept
 	lib: Library,
 	name: imp::Symbol<CallName>,
+	#[allow(dead_code)]
 	name_free: imp::Symbol<CallNameFree>,
 	key_length: imp::Symbol<CallKeyLength>,
 	hash: imp::Symbol<CallHash>,
@@ -78,19 +79,34 @@ impl Hash for CustomLib {
 	fn name(&self) -> String {
 		let name: String = unsafe {
 			let raw = (self.name)();
-			let name = CStr::from_ptr(raw).to_str().expect("").to_owned();
-			(self.name_free)(raw);
+			let name = CString::from_raw(raw)
+				.into_string()
+				.expect("name should be utf-8");
+			// the ownership of raw is moved to name
+			// never use raw again
+			// the deallocation of name (and raw) will be guranteed by rust
 			name
 		};
 		name
 	}
+
+	// fn name(&self) -> String {
+	// 	let name: String = unsafe {
+	// 		let raw = (self.name)();
+	// 		let name = CStr::from_ptr(raw).to_str().expect("qed").to_owned();
+	// 		(self.name_free)(raw);
+	// 		name
+	// 	};
+	// 	name
+	// }
+
 	fn key_length(&self) -> KeyLength {
 		let key_length: usize = unsafe {
 			let key_length = (self.key_length)();
 			key_length as usize
 		};
 
-		key_length.try_into().expect("qed")
+		key_length.try_into().expect("key length should be valid")
 	}
 	fn hash(&self, out: &mut [u8], data: &[u8]) {
 		unsafe {
