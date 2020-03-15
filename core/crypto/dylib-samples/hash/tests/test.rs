@@ -139,6 +139,30 @@ fn test_c_string_raw_pointer() {
 	assert_ne!(str2, "test");
 }
 
+#[test]
+fn test_c_string_raw_pointer2() {
+	let raw = get_str();
+
+	let string = get_string(raw);
+
+	assert_eq!(string, "test".to_string());
+
+	move_string(string);
+
+	// should not use raw again:
+	// let string = get_string(raw);
+}
+
+fn move_string(_str: String) {
+	//will free str
+}
+
+fn get_string(raw: *mut i8) -> String {
+	let c_string = unsafe { CString::from_raw(raw) };
+
+	c_string.into_string().unwrap()
+}
+
 fn get_str() -> *mut c_char {
 	let s = CString::new("test").unwrap();
 	let s = s.into_raw();
