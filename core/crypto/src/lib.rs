@@ -17,7 +17,7 @@ use std::convert::TryFrom;
 pub mod errors;
 pub mod hash;
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum KeyLength {
 	/// 160 bits
 	KeyLength20,

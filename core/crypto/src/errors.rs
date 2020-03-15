@@ -36,5 +36,9 @@ error_chain! {
 			description(""),
 			display("Invalid key length: {}", length),
 		}
+		InvalidName(path: String) {
+			description(""),
+			display("Invalid name: {}", path),
+		}
 	}
 }

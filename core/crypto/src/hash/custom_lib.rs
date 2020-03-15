@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use std::convert::TryInto;
-use std::ffi::CString;
+use std::ffi::CStr;
 use std::os::raw::{c_char, c_uchar, c_uint};
 use std::path::PathBuf;
 
@@ -35,11 +35,9 @@ pub struct CustomLib {
 	#[allow(dead_code)]
 	/// lib is referred by symbols, should be kept
 	lib: Library,
-	name: imp::Symbol<CallName>,
-	#[allow(dead_code)]
-	name_free: imp::Symbol<CallNameFree>,
-	key_length: imp::Symbol<CallKeyLength>,
-	hash: imp::Symbol<CallHash>,
+	name: String,
+	key_length: KeyLength,
+	call_hash: imp::Symbol<CallHash>,
 }
 
 impl CustomLib {
@@ -48,7 +46,7 @@ impl CustomLib {
 
 		let lib = Library::new(path).map_err(err)?;
 
-		let (name, name_free, key_length, hash) = unsafe {
+		let (call_name, call_name_free, call_key_length, call_hash) = unsafe {
 			let call_name: Symbol<CallName> = lib.get(b"_crypto_hash_custom_name").map_err(err)?;
 			let call_name = call_name.into_raw();
 
@@ -65,52 +63,56 @@ impl CustomLib {
 
 			(call_name, call_name_free, call_key_length, call_hash)
 		};
+
+		let name = Self::name(&call_name, &call_name_free, &path)?;
+		let key_length = Self::key_length(&call_key_length)?;
+
 		Ok(CustomLib {
 			lib,
 			name,
-			name_free,
 			key_length,
-			hash,
+			call_hash,
 		})
+	}
+
+	fn name(
+		call_name: &imp::Symbol<CallName>,
+		call_name_free: &imp::Symbol<CallNameFree>,
+		path: &PathBuf,
+	) -> errors::Result<String> {
+		let err = |_| errors::ErrorKind::InvalidName(format!("{:?}", path));
+
+		let name: String = unsafe {
+			let raw = call_name();
+			let name = CStr::from_ptr(raw).to_str().map_err(err)?;
+			let name = name.to_owned();
+			call_name_free(raw);
+			name
+		};
+		Ok(name)
+	}
+
+	fn key_length(call_key_length: &imp::Symbol<CallKeyLength>) -> errors::Result<KeyLength> {
+		let key_length: usize = unsafe {
+			let key_length = call_key_length();
+			key_length as usize
+		};
+
+		key_length.try_into()
 	}
 }
 
 impl Hash for CustomLib {
 	fn name(&self) -> String {
-		let name: String = unsafe {
-			let raw = (self.name)();
-			let name = CString::from_raw(raw)
-				.into_string()
-				.expect("name should be utf-8");
-			// the ownership of raw is moved to name
-			// never use raw again
-			// the deallocation of name (and raw) will be guranteed by rust
-			name
-		};
-		name
+		self.name.clone()
 	}
 
-	// fn name(&self) -> String {
-	// 	let name: String = unsafe {
-	// 		let raw = (self.name)();
-	// 		let name = CStr::from_ptr(raw).to_str().expect("qed").to_owned();
-	// 		(self.name_free)(raw);
-	// 		name
-	// 	};
-	// 	name
-	// }
-
 	fn key_length(&self) -> KeyLength {
-		let key_length: usize = unsafe {
-			let key_length = (self.key_length)();
-			key_length as usize
-		};
-
-		key_length.try_into().expect("key length should be valid")
+		self.key_length.clone()
 	}
 	fn hash(&self, out: &mut [u8], data: &[u8]) {
 		unsafe {
-			(self.hash)(
+			(self.call_hash)(
 				out.as_mut_ptr(),
 				out.len() as c_uint,
 				data.as_ptr(),
