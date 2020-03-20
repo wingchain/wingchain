@@ -12,23 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use structopt::StructOpt;
+use crate::{MethodId, ModuleId, Params};
 
-use init::cli::InitOpt;
-use node::cli::NodeOpt;
-
-#[derive(Clone, Debug, StructOpt)]
-pub struct Opt {
-	/// Possible subcommand with parameters.
-	#[structopt(subcommand)]
-	pub subcommand: Option<Subcommand>,
+pub trait Method {
+	fn execute(params: &Params);
 }
 
-#[derive(Clone, Debug, StructOpt)]
-pub enum Subcommand {
-	#[structopt(name = "init", about = "Initialize wingchain")]
-	Init(InitOpt),
+pub trait Module {
+	fn execute(method_id: &MethodId, params: &Params);
+}
 
-	#[structopt(name = "node", about = "Run the wingchain node")]
-	Node(NodeOpt),
+pub trait Executor {
+	fn execute(module_id: &ModuleId, method_id: &MethodId, params: &Params);
 }

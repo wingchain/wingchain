@@ -15,6 +15,7 @@
 
 extern crate test;
 
+use std::ffi::CString;
 use std::path::PathBuf;
 use std::str::FromStr;
 use test::{black_box, Bencher};
@@ -22,7 +23,6 @@ use test::{black_box, Bencher};
 use assert_cmd::cargo::cargo_bin;
 
 use crypto::hash::{Hash, HashImpl};
-use std::ffi::CString;
 
 #[bench]
 fn bench_hash_native(b: &mut Bencher) {

@@ -12,23 +12,40 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use structopt::StructOpt;
+pub mod traits;
 
-use init::cli::InitOpt;
-use node::cli::NodeOpt;
+pub struct Address(pub Vec<u8>);
 
-#[derive(Clone, Debug, StructOpt)]
-pub struct Opt {
-	/// Possible subcommand with parameters.
-	#[structopt(subcommand)]
-	pub subcommand: Option<Subcommand>,
+/// signature for (nonce, call)
+pub struct Signature(pub Vec<u8>);
+
+pub type Nonce = u32;
+
+pub struct Witness {
+	address: Address,
+	signature: Signature,
+	nonce: Nonce,
 }
 
-#[derive(Clone, Debug, StructOpt)]
-pub enum Subcommand {
-	#[structopt(name = "init", about = "Initialize wingchain")]
-	Init(InitOpt),
+/// sliced digest of module name
+pub type ModuleId = [u8; 4];
 
-	#[structopt(name = "node", about = "Run the wingchain node")]
-	Node(NodeOpt),
+/// sliced digest of method name
+pub type MethodId = [u8; 4];
+
+pub struct Params(pub Vec<u8>);
+
+pub struct Call {
+	module_id: ModuleId,
+	method_id: MethodId,
+	params: Params,
 }
+
+pub struct Transaction {
+	witness: Option<Witness>,
+	call: Call,
+}
+
+pub struct Hash(pub Vec<u8>);
+
+pub type BlockNumber = u32;
