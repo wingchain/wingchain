@@ -44,6 +44,9 @@ fn run(subcommand: Subcommand) -> errors::Result<()> {
 		Subcommand::Init(init_opt) => {
 			init::run(init_opt)?;
 		}
+		Subcommand::Node(node_opt) => {
+			node::run(node_opt)?;
+		}
 	}
 	Ok(())
 }

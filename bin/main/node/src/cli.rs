@@ -14,21 +14,11 @@
 
 use structopt::StructOpt;
 
-use init::cli::InitOpt;
-use node::cli::NodeOpt;
+use base::SharedParams;
 
 #[derive(Clone, Debug, StructOpt)]
-pub struct Opt {
-	/// Possible subcommand with parameters.
-	#[structopt(subcommand)]
-	pub subcommand: Option<Subcommand>,
-}
-
-#[derive(Clone, Debug, StructOpt)]
-pub enum Subcommand {
-	#[structopt(name = "init", about = "Initialize wingchain")]
-	Init(InitOpt),
-
-	#[structopt(name = "node", about = "Run the wingchain node")]
-	Node(NodeOpt),
+pub struct NodeOpt {
+	#[allow(missing_docs)]
+	#[structopt(flatten)]
+	pub shared_params: SharedParams,
 }

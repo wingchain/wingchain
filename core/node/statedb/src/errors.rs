@@ -12,23 +12,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use structopt::StructOpt;
+use std::fmt::Debug;
 
-use init::cli::InitOpt;
-use node::cli::NodeOpt;
+use error_chain::*;
+use trie_db::TrieError;
 
-#[derive(Clone, Debug, StructOpt)]
-pub struct Opt {
-	/// Possible subcommand with parameters.
-	#[structopt(subcommand)]
-	pub subcommand: Option<Subcommand>,
+error_chain! {
+	foreign_links {
+		MutStatic(mut_static::error::Error) #[doc="Mut static error"];
+	}
+	links {
+		DB(node_db::errors::Error, node_db::errors::ErrorKind) #[doc="DB error"];
+	}
+	errors {
+		LoadHasherConflict(old: String, new: String) {
+			description(""),
+			display("Load hasher conflict: {}, {}", old, new),
+		}
+	}
 }
 
-#[derive(Clone, Debug, StructOpt)]
-pub enum Subcommand {
-	#[structopt(name = "init", about = "Initialize wingchain")]
-	Init(InitOpt),
-
-	#[structopt(name = "node", about = "Run the wingchain node")]
-	Node(NodeOpt),
+pub fn parse_trie_error<T, E>(e: Box<TrieError<T, E>>) -> String
+where
+	T: Debug,
+	E: Debug,
+{
+	format!("{}", e)
 }
