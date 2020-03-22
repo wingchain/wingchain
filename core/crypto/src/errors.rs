@@ -16,6 +16,7 @@ use error_chain::*;
 
 error_chain! {
 	foreign_links {
+		RingKeyRejected(ring::error::KeyRejected) #[doc="ring key rejected"];
 	}
 	links {
 	}

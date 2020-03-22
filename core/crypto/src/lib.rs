@@ -14,6 +14,7 @@
 
 use std::convert::TryFrom;
 
+pub mod dsa;
 pub mod errors;
 pub mod hash;
 
