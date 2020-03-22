@@ -19,5 +19,6 @@ error_chain! {
 	}
 	links {
 		Init(init::errors::Error, init::errors::ErrorKind) #[doc="Init error"];
+		Node(node::errors::Error, node::errors::ErrorKind) #[doc="Node error"];
 	}
 }

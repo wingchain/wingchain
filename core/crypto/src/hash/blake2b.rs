@@ -17,6 +17,21 @@ use rust_crypto::blake2b;
 use crate::hash::Hash;
 use crate::KeyLength;
 
+pub struct Blake2b160;
+
+impl Hash for Blake2b160 {
+	fn name(&self) -> String {
+		"blake2b_160".to_string()
+	}
+	fn key_length(&self) -> KeyLength {
+		KeyLength::KeyLength20
+	}
+	fn hash(&self, out: &mut [u8], data: &[u8]) {
+		assert_eq!(out.len(), self.key_length().into());
+		blake2b::Blake2b::blake2b(out, data, &[]);
+	}
+}
+
 pub struct Blake2b256;
 
 impl Hash for Blake2b256 {
@@ -32,14 +47,14 @@ impl Hash for Blake2b256 {
 	}
 }
 
-pub struct Blake2b160;
+pub struct Blake2b512;
 
-impl Hash for Blake2b160 {
+impl Hash for Blake2b512 {
 	fn name(&self) -> String {
-		"blake2b_160".to_string()
+		"blake2b_512".to_string()
 	}
 	fn key_length(&self) -> KeyLength {
-		KeyLength::KeyLength20
+		KeyLength::KeyLength64
 	}
 	fn hash(&self, out: &mut [u8], data: &[u8]) {
 		assert_eq!(out.len(), self.key_length().into());
@@ -79,5 +94,21 @@ mod tests {
 				194, 14, 98
 			]
 		);
+	}
+
+	#[test]
+	fn test_blake2b_512() {
+		let data = [1u8, 2u8, 3u8];
+		let mut out = [0u8; 64];
+		Blake2b512.hash(&mut out, &data);
+
+		let expect: [u8; 64] = [
+			207, 148, 246, 214, 5, 101, 126, 144, 197, 67, 176, 201, 25, 7, 12, 218, 175, 114, 9,
+			197, 225, 234, 88, 172, 184, 243, 86, 143, 162, 17, 66, 104, 220, 154, 195, 186, 254,
+			18, 175, 39, 125, 40, 111, 206, 125, 197, 155, 124, 12, 52, 137, 115, 196, 233, 218,
+			203, 231, 148, 133, 229, 106, 194, 167, 2,
+		];
+
+		assert_eq!(out.to_vec(), expect.to_vec(),);
 	}
 }

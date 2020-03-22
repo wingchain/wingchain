@@ -12,23 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use structopt::StructOpt;
+pub mod errors;
 
-use init::cli::InitOpt;
-use node::cli::NodeOpt;
+pub struct Service;
 
-#[derive(Clone, Debug, StructOpt)]
-pub struct Opt {
-	/// Possible subcommand with parameters.
-	#[structopt(subcommand)]
-	pub subcommand: Option<Subcommand>,
-}
-
-#[derive(Clone, Debug, StructOpt)]
-pub enum Subcommand {
-	#[structopt(name = "init", about = "Initialize wingchain")]
-	Init(InitOpt),
-
-	#[structopt(name = "node", about = "Run the wingchain node")]
-	Node(NodeOpt),
+impl Service {
+	pub fn start() -> errors::Result<()> {
+		Ok(())
+	}
 }
