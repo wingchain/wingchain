@@ -9,6 +9,7 @@ members = [
 	"core/node/db",
 	"core/node/statedb",
 	"core/node/service",
+	"core/module/system",
 ]
 
 [profile.release]
