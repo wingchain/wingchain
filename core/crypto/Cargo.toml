@@ -13,3 +13,4 @@ error-chain = "0.12.2"
 libloading = "0.5.2"
 ring = { version = "0.16.11", features = ["std"] }
 rand = "0.7.3"
+untrusted = "0.7.0"

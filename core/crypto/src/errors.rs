@@ -16,7 +16,6 @@ use error_chain::*;
 
 error_chain! {
 	foreign_links {
-		RingKeyRejected(ring::error::KeyRejected) #[doc="ring key rejected"];
 	}
 	links {
 	}
@@ -40,6 +39,18 @@ error_chain! {
 		InvalidName(path: String) {
 			description(""),
 			display("Invalid name: {}", path),
+		}
+		InvalidSecretKey {
+			description(""),
+			display("Invalid public key"),
+		}
+		InvalidPublicKey {
+			description(""),
+			display("Invalid public key"),
+		}
+		VerificationFailed {
+			description(""),
+			display("Verification failed"),
 		}
 	}
 }

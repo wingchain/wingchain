@@ -13,13 +13,128 @@
 // limitations under the License.
 
 use crate::errors;
+use crate::dsa::ed25519::Ed25519;
+use crate::dsa::sm2::SM2;
+use std::str::FromStr;
 
-pub mod ed25519;
+mod ed25519;
+mod sm2;
 
 pub trait Dsa {
-	type KeyPair;
+	type KeyPair: KeyPair;
+	type Verifier: Verifier;
+
+	fn name(&self) -> String;
 
 	fn generate_key_pair(&self) -> errors::Result<Self::KeyPair>;
 
-	fn key_pair_from_secret(&self, secret: &[u8]) -> errors::Result<Self::KeyPair>;
+	fn key_pair_from_secret_key(&self, secret_key: &[u8]) -> errors::Result<Self::KeyPair>;
+
+	fn verifier_from_public_key(&self, public_key: &[u8]) -> errors::Result<Self::Verifier>;
+}
+
+pub trait KeyPair {
+	fn public_key(&self) -> Vec<u8>;
+	fn secret_key(&self) -> Vec<u8>;
+	fn sign(&self, message: &[u8]) -> Vec<u8>;
+}
+
+pub trait Verifier {
+	fn verify(&self, message: &[u8], signature: &[u8]) -> errors::Result<()>;
+}
+
+pub enum DsaImpl {
+	Ed25519,
+	SM2,
+}
+
+pub enum KeyPairImpl {
+	Ed25519(<Ed25519 as Dsa>::KeyPair),
+	SM2(<SM2 as Dsa>::KeyPair),
+}
+
+pub enum VerifierImpl {
+	Ed25519(<Ed25519 as Dsa>::Verifier),
+	SM2(<SM2 as Dsa>::Verifier),
+}
+
+impl Dsa for DsaImpl {
+	type KeyPair = KeyPairImpl;
+	type Verifier = VerifierImpl;
+
+	#[inline]
+	fn name(&self) -> String {
+		match self {
+			Self::Ed25519 => Ed25519.name(),
+			Self::SM2 => SM2.name(),
+		}
+	}
+
+	#[inline]
+	fn generate_key_pair(&self) -> errors::Result<Self::KeyPair> {
+		match self {
+			Self::Ed25519 => Ok(KeyPairImpl::Ed25519(Ed25519.generate_key_pair()?)),
+			Self::SM2 => Ok(KeyPairImpl::SM2(SM2.generate_key_pair()?)),
+		}
+	}
+
+	#[inline]
+	fn key_pair_from_secret_key(&self, secret_key: &[u8]) -> errors::Result<Self::KeyPair> {
+		match self {
+			Self::Ed25519 => Ok(KeyPairImpl::Ed25519(Ed25519.key_pair_from_secret_key(secret_key)?)),
+			Self::SM2 => Ok(KeyPairImpl::SM2(SM2.key_pair_from_secret_key(secret_key)?)),
+		}
+	}
+
+	#[inline]
+	fn verifier_from_public_key(&self, public_key: &[u8]) -> errors::Result<Self::Verifier> {
+		match self {
+			Self::Ed25519 => Ok(VerifierImpl::Ed25519(Ed25519.verifier_from_public_key(public_key)?)),
+			Self::SM2 => Ok(VerifierImpl::SM2(SM2.verifier_from_public_key(public_key)?)),
+		}
+	}
+}
+
+impl FromStr for DsaImpl {
+	type Err = errors::Error;
+	#[inline]
+	fn from_str(s: &str) -> Result<DsaImpl, Self::Err> {
+		match s {
+			"ed25519" => Ok(DsaImpl::Ed25519),
+			"sm2" => Ok(DsaImpl::SM2),
+			_other => {
+				unimplemented!()
+			}
+		}
+	}
+}
+
+impl KeyPair for KeyPairImpl {
+	fn public_key(&self) -> Vec<u8> {
+		match self {
+			KeyPairImpl::Ed25519(kp) => kp.public_key(),
+			KeyPairImpl::SM2(kp) => kp.public_key(),
+		}
+	}
+	fn secret_key(&self) -> Vec<u8> {
+		match self {
+			KeyPairImpl::Ed25519(kp) => kp.secret_key(),
+			KeyPairImpl::SM2(kp) => kp.secret_key(),
+		}
+	}
+	fn sign(&self, message: &[u8]) -> Vec<u8> {
+		match self {
+			KeyPairImpl::Ed25519(kp) => kp.sign(message),
+			KeyPairImpl::SM2(kp) => kp.sign(message),
+		}
+	}
+}
+
+impl Verifier for VerifierImpl {
+	fn verify(&self, message: &[u8], signature: &[u8]) -> errors::Result<()> {
+		match self {
+			VerifierImpl::Ed25519(p) => p.verify(message, signature),
+			VerifierImpl::SM2(p) => p.verify(message, signature),
+		}
+	}
 }
