@@ -16,6 +16,7 @@
 
 extern crate test;
 
+use crypto::dsa::DsaImpl::SM2;
 use crypto::dsa::{Dsa, DsaImpl, KeyPair, Verifier};
 use crypto_dylib_samples_dsa::Ed25519;
 use std::hint::black_box;
@@ -52,6 +53,22 @@ fn bench_ed25519_sign_dalek(b: &mut Bencher) {
 }
 
 #[bench]
+fn bench_sm2_sign(b: &mut Bencher) {
+	let dsa = DsaImpl::SM2;
+
+	let secret: [u8; 32] = [
+		128, 166, 19, 115, 227, 79, 114, 21, 254, 206, 184, 221, 6, 187, 55, 49, 234, 54, 47, 245,
+		53, 90, 114, 38, 212, 225, 45, 7, 106, 126, 181, 136,
+	];
+
+	let key_pair = dsa.key_pair_from_secret_key(&secret).unwrap();
+
+	let message = [1u8; 256];
+
+	b.iter(|| black_box(key_pair.sign(&message)));
+}
+
+#[bench]
 fn bench_ed25519_sign_include_init_ring(b: &mut Bencher) {
 	let dsa = DsaImpl::Ed25519;
 
@@ -81,6 +98,23 @@ fn bench_ed25519_sign_include_init_dalek(b: &mut Bencher) {
 
 	let run = || {
 		let key_pair = Ed25519.key_pair_from_secret_key(&secret).unwrap();
+		key_pair.sign(&message)
+	};
+
+	b.iter(|| black_box(run()));
+}
+
+#[bench]
+fn bench_sm2_sign_include_init(b: &mut Bencher) {
+	let secret: [u8; 32] = [
+		128, 166, 19, 115, 227, 79, 114, 21, 254, 206, 184, 221, 6, 187, 55, 49, 234, 54, 47, 245,
+		53, 90, 114, 38, 212, 225, 45, 7, 106, 126, 181, 136,
+	];
+
+	let message = [1u8; 256];
+
+	let run = || {
+		let key_pair = SM2.key_pair_from_secret_key(&secret).unwrap();
 		key_pair.sign(&message)
 	};
 
@@ -182,5 +216,15 @@ fn bench_ed25519_verify_include_init_dalek(b: &mut Bencher) {
 		verifier.verify(&message, &signature)
 	};
 
+	b.iter(|| black_box(run()));
+}
+
+#[bench]
+fn bench_vec_copy(b: &mut Bencher) {
+	let source = vec![1u8; 64];
+
+	let run = || {
+		let clone = source.clone();
+	};
 	b.iter(|| black_box(run()));
 }
