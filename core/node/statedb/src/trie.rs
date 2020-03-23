@@ -46,33 +46,48 @@ pub fn load_hasher(hash_impl: Arc<HashImpl>) -> errors::Result<()> {
 	let key_length = hash_impl.key_length();
 	match key_length {
 		KeyLength::KeyLength20 => {
-			if !HASH_IMPL_20.is_set()? {
-				HASH_IMPL_20.set(hash_impl)?;
-			} else if HASH_IMPL_20.read()?.name() != hash_impl.name() {
-				bail!(errors::ErrorKind::LoadHasherConflict(
-					HASH_IMPL_20.read()?.name(),
-					hash_impl.name()
-				))
+			let name = hash_impl.name();
+			match HASH_IMPL_20.set(hash_impl) {
+				Ok(_) => (),
+				Err(mut_static::Error(mut_static::ErrorKind::StaticIsAlreadySet, _))
+					if HASH_IMPL_20.read()?.name() == name =>
+				{
+					()
+				}
+				_ => bail!(errors::ErrorKind::LoadHasherConflict(
+					HASH_IMPL_32.read()?.name(),
+					name
+				)),
 			}
 		}
 		KeyLength::KeyLength32 => {
-			if !HASH_IMPL_32.is_set()? {
-				HASH_IMPL_32.set(hash_impl)?;
-			} else if HASH_IMPL_32.read()?.name() != hash_impl.name() {
-				bail!(errors::ErrorKind::LoadHasherConflict(
+			let name = hash_impl.name();
+			match HASH_IMPL_32.set(hash_impl) {
+				Ok(_) => (),
+				Err(mut_static::Error(mut_static::ErrorKind::StaticIsAlreadySet, _))
+					if HASH_IMPL_32.read()?.name() == name =>
+				{
+					()
+				}
+				_ => bail!(errors::ErrorKind::LoadHasherConflict(
 					HASH_IMPL_32.read()?.name(),
-					hash_impl.name()
-				))
+					name
+				)),
 			}
 		}
 		KeyLength::KeyLength64 => {
-			if !HASH_IMPL_64.is_set()? {
-				HASH_IMPL_64.set(hash_impl)?;
-			} else if HASH_IMPL_64.read()?.name() != hash_impl.name() {
-				bail!(errors::ErrorKind::LoadHasherConflict(
-					HASH_IMPL_64.read()?.name(),
-					hash_impl.name()
-				))
+			let name = hash_impl.name();
+			match HASH_IMPL_64.set(hash_impl) {
+				Ok(_) => (),
+				Err(mut_static::Error(mut_static::ErrorKind::StaticIsAlreadySet, _))
+					if HASH_IMPL_64.read()?.name() == name =>
+				{
+					()
+				}
+				_ => bail!(errors::ErrorKind::LoadHasherConflict(
+					HASH_IMPL_32.read()?.name(),
+					name
+				)),
 			}
 		}
 	}

@@ -12,25 +12,41 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::convert::TryInto;
+// Copyright 2019, 2020 Wingchain
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
-use rand::thread_rng;
-use rand::Rng;
-use ring::signature::{Ed25519KeyPair, KeyPair, VerificationAlgorithm, ED25519};
-use untrusted::Input;
+use ed25519_dalek::{Keypair as DalekKeyPair, PublicKey, SecretKey, Signature};
+use rand::rngs::OsRng;
+use sha2::Sha512;
 
-use crate::dsa::{Dsa, KeyPair as KeyPairT, Verifier as VerifierT};
-use crate::errors;
+use crypto::dsa::{Dsa, KeyPair as KeyPairT, Verifier as VerifierT};
+
 use crate::errors::ResultExt;
+
+pub mod errors;
 
 pub struct Ed25519;
 
-pub struct Verifier([u8; 32]);
+#[derive(Debug)]
+pub struct KeyPair(DalekKeyPair);
+
+pub struct Verifier(PublicKey);
 
 impl Dsa for Ed25519 {
 	type Error = errors::Error;
 
-	type KeyPair = (Ed25519KeyPair, [u8; 32]);
+	type KeyPair = KeyPair;
 
 	type Verifier = Verifier;
 
@@ -39,46 +55,41 @@ impl Dsa for Ed25519 {
 	}
 
 	fn generate_key_pair(&self) -> errors::Result<Self::KeyPair> {
-		let seed = random_32_bytes(&mut thread_rng());
-
-		let key_pair = Ed25519KeyPair::from_seed_unchecked(&seed)
-			.chain_err(|| errors::ErrorKind::InvalidSecretKey)?;
-		let key_pair = (key_pair, seed);
-
+		let mut csprng = OsRng::new().chain_err(|| errors::ErrorKind::InvalidSecretKey)?;
+		let key_pair = KeyPair(DalekKeyPair::generate::<Sha512, _>(&mut csprng));
 		Ok(key_pair)
 	}
 
 	fn key_pair_from_secret_key(&self, secret_key: &[u8]) -> errors::Result<Self::KeyPair> {
-		let key_pair = Ed25519KeyPair::from_seed_unchecked(&secret_key)
-			.chain_err(|| errors::ErrorKind::InvalidSecretKey)?;
-		let seed = secret_key.try_into().expect("qed");
-		let key_pair = (key_pair, seed);
+		let secret_key =
+			SecretKey::from_bytes(secret_key).map_err(|_| errors::ErrorKind::InvalidSecretKey)?;
+		let public_key = PublicKey::from_secret::<Sha512>(&secret_key);
+		let key_pair = KeyPair(DalekKeyPair {
+			secret: secret_key,
+			public: public_key,
+		});
 		Ok(key_pair)
 	}
 
 	fn verifier_from_public_key(&self, public_key: &[u8]) -> errors::Result<Self::Verifier> {
-		let verifier = Verifier(
-			public_key
-				.try_into()
-				.chain_err(|| errors::ErrorKind::InvalidPublicKey)?,
-		);
-		Ok(verifier)
+		let public_key =
+			PublicKey::from_bytes(public_key).map_err(|_| errors::ErrorKind::InvalidPublicKey)?;
+		Ok(Verifier(public_key))
 	}
 }
 
-impl KeyPairT for (Ed25519KeyPair, [u8; 32]) {
+impl KeyPairT for KeyPair {
 	fn public_key(&self) -> Vec<u8> {
-		self.0.public_key().as_ref().to_vec()
+		let public_key = self.0.public;
+		public_key.to_bytes().to_vec()
 	}
 	fn secret_key(&self) -> Vec<u8> {
-		self.1.to_vec()
+		let secret_key = &self.0.secret;
+		secret_key.to_bytes().to_vec()
 	}
 	fn sign(&self, message: &[u8]) -> Vec<u8> {
-		let signature = self.0.sign(&message);
-
-		let signature = signature.as_ref().to_vec();
-
-		signature
+		let signature = self.0.sign::<Sha512>(message);
+		signature.to_bytes().to_vec()
 	}
 }
 
@@ -86,22 +97,13 @@ impl VerifierT for Verifier {
 	type Error = errors::Error;
 
 	fn verify(&self, message: &[u8], signature: &[u8]) -> errors::Result<()> {
-		let result = ED25519
-			.verify(
-				Input::from(&self.0[..]),
-				Input::from(&message),
-				Input::from(&signature),
-			)
-			.chain_err(|| errors::ErrorKind::VerificationFailed)?;
-
-		Ok(result)
+		let signature =
+			Signature::from_bytes(signature).map_err(|_| errors::ErrorKind::VerificationFailed)?;
+		self.0
+			.verify::<Sha512>(message, &signature)
+			.map_err(|_| errors::ErrorKind::VerificationFailed)?;
+		Ok(())
 	}
-}
-
-fn random_32_bytes<R: Rng + ?Sized>(rng: &mut R) -> [u8; 32] {
-	let mut ret = [0u8; 32];
-	rng.fill_bytes(&mut ret);
-	ret
 }
 
 #[cfg(test)]
@@ -120,20 +122,6 @@ mod tests {
 			148, 3, 77, 47, 187, 230, 8, 5, 152, 173, 190, 21, 178, 152,
 		];
 		assert!(Ed25519.key_pair_from_secret_key(&secret).is_ok());
-	}
-
-	#[test]
-	fn test_ed25519_key_pair_from_secret_key_chain_err() {
-		use error_chain::ChainedError;
-		let secret: [u8; 31] = [
-			184, 80, 22, 77, 31, 238, 200, 105, 138, 204, 163, 41, 148, 124, 152, 133, 189, 29,
-			148, 3, 77, 47, 187, 230, 8, 5, 152, 173, 190, 21, 178,
-		];
-		let err: errors::Error = Ed25519.key_pair_from_secret_key(&secret).unwrap_err();
-		assert_eq!(
-			err.display_chain().to_string(),
-			"Error: Invalid public key\nCaused by: InvalidEncoding\n"
-		);
 	}
 
 	#[test]

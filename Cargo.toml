@@ -5,6 +5,7 @@ members = [
 	"bin/main/node",
 	"core/crypto",
 	"core/crypto/dylib-samples/hash",
+	"core/crypto/dylib-samples/dsa",
 	"core/primitives",
 	"core/node/db",
 	"core/node/statedb",
