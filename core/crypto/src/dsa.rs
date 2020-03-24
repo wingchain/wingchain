@@ -12,11 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::str::FromStr;
+
+pub use custom_lib::{CDsa, CKeyPair, CVerifier};
+
 use crate::dsa::ed25519::Ed25519;
 use crate::dsa::sm2::SM2;
 use crate::errors;
-use std::str::FromStr;
 
+mod custom_lib;
 mod ed25519;
 mod sm2;
 
