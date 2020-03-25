@@ -12,23 +12,36 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use rust_crypto::blake2b;
-
 use crate::address::Address;
 use crate::AddressLength;
 
-pub struct Blake2b160;
+pub struct Original160;
 
-impl Address for Blake2b160 {
+impl Address for Original160 {
 	fn name(&self) -> String {
-		"blake2b160".to_string()
+		"original_160".to_string()
 	}
 	fn length(&self) -> AddressLength {
 		AddressLength::AddressLength20
 	}
 	fn address(&self, out: &mut [u8], data: &[u8]) {
 		assert_eq!(out.len(), self.length().into());
-		blake2b::Blake2b::blake2b(out, data, &[]);
+		out.copy_from_slice(data);
+	}
+}
+
+pub struct Original256;
+
+impl Address for Original256 {
+	fn name(&self) -> String {
+		"original_256".to_string()
+	}
+	fn length(&self) -> AddressLength {
+		AddressLength::AddressLength32
+	}
+	fn address(&self, out: &mut [u8], data: &[u8]) {
+		assert_eq!(out.len(), self.length().into());
+		out.copy_from_slice(data);
 	}
 }
 
@@ -37,17 +50,26 @@ mod tests {
 	use super::*;
 
 	#[test]
-	fn test_address_blake2b_160() {
-		let data = (0u8..32).collect::<Vec<_>>();
+	fn test_address_original_160() {
+		let data = (0u8..20).collect::<Vec<_>>();
 		let mut out = [0u8; 20];
-		Blake2b160.address(&mut out, &data);
+		Original160.address(&mut out, &data);
 
 		assert_eq!(
-			out,
-			[
-				177, 177, 51, 185, 159, 81, 110, 108, 130, 206, 218, 137, 46, 245, 175, 80, 250,
-				75, 78, 113
-			]
+			out.to_vec(),
+			data
+		);
+	}
+
+	#[test]
+	fn test_address_original_256() {
+		let data = (0u8..32).collect::<Vec<_>>();
+		let mut out = [0u8; 32];
+		Original256.address(&mut out, &data);
+
+		assert_eq!(
+			out.to_vec(),
+			data
 		);
 	}
 }

@@ -12,16 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#[macro_use]
+extern crate crypto;
+
 use rust_crypto::blake2b;
 
-use crate::address::Address;
-use crate::AddressLength;
+use crypto::address::Address;
+use crypto::AddressLength;
 
 pub struct Blake2b160;
 
+/// A Blake2b160 implementation for sample
 impl Address for Blake2b160 {
 	fn name(&self) -> String {
-		"blake2b160".to_string()
+		"blake2b_160".to_string()
 	}
 	fn length(&self) -> AddressLength {
 		AddressLength::AddressLength20
@@ -32,12 +36,14 @@ impl Address for Blake2b160 {
 	}
 }
 
+declare_address_custom_lib!(Blake2b160);
+
 #[cfg(test)]
 mod tests {
 	use super::*;
 
 	#[test]
-	fn test_address_blake2b_160() {
+	fn test() {
 		let data = (0u8..32).collect::<Vec<_>>();
 		let mut out = [0u8; 20];
 		Blake2b160.address(&mut out, &data);

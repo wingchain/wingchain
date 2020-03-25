@@ -12,10 +12,76 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::str::FromStr;
+
+use crate::address::blake2b::Blake2b160;
+use crate::address::original::{Original160, Original256};
+use crate::AddressLength;
+use crate::errors;
+use crate::address::custom_lib::CustomLib;
+use std::path::PathBuf;
+
 mod blake2b;
+mod original;
+mod custom_lib;
 
 pub trait Address {
 	fn name(&self) -> String;
+	fn length(&self) -> AddressLength;
+	fn address(&self, out: &mut [u8], data: &[u8]);
+}
 
-	fn address(&self, out: &mut [u8], public_key: &[u8]);
+pub enum AddressImpl {
+	Blake2b160,
+	Original160,
+	Original256,
+	/// custom address impl provided by dylib
+	Custom(CustomLib),
+}
+
+impl Address for AddressImpl {
+	#[inline]
+	fn name(&self) -> String {
+		match self {
+			Self::Blake2b160 => Blake2b160.name(),
+			Self::Original160 => Original160.name(),
+			Self::Original256 => Original256.name(),
+			Self::Custom(custom) => custom.name(),
+		}
+	}
+	#[inline]
+	fn length(&self) -> AddressLength {
+		match self {
+			Self::Blake2b160 => Blake2b160.length(),
+			Self::Original160 => Original160.length(),
+			Self::Original256 => Original256.length(),
+			Self::Custom(custom) => custom.length(),
+		}
+	}
+	#[inline]
+	fn address(&self, out: &mut [u8], data: &[u8]) {
+		match self {
+			Self::Blake2b160 => Blake2b160.address(out, data),
+			Self::Original160 => Original160.address(out, data),
+			Self::Original256 => Original256.address(out, data),
+			Self::Custom(custom) => custom.address(out, data),
+		}
+	}
+}
+
+impl FromStr for AddressImpl {
+	type Err = errors::Error;
+	#[inline]
+	fn from_str(s: &str) -> Result<AddressImpl, Self::Err> {
+		match s {
+			"blake2b_160" => Ok(AddressImpl::Blake2b160),
+			"original_160" => Ok(AddressImpl::Original160),
+			"original_256" => Ok(AddressImpl::Original256),
+			other => {
+				let path = PathBuf::from(&other);
+				let custom_lib = CustomLib::new(&path)?;
+				Ok(AddressImpl::Custom(custom_lib))
+			}
+		}
+	}
 }
