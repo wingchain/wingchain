@@ -18,7 +18,7 @@ extern crate crypto;
 use rust_crypto::blake2b;
 
 use crypto::hash::Hash;
-use crypto::KeyLength;
+use crypto::HashLength;
 
 pub struct Blake2b256;
 
@@ -27,8 +27,8 @@ impl Hash for Blake2b256 {
 	fn name(&self) -> String {
 		"blake2b_256".to_string()
 	}
-	fn key_length(&self) -> KeyLength {
-		KeyLength::KeyLength32
+	fn key_length(&self) -> HashLength {
+		HashLength::HashLength32
 	}
 	fn hash(&self, out: &mut [u8], data: &[u8]) {
 		assert_eq!(out.len(), self.key_length().into());

@@ -23,8 +23,6 @@ impl Address for Blake2b160 {
 		"blake2b160".to_string()
 	}
 
-	fn
-
 	fn address(&self, out: &mut [u8], public_key: &[u8]) {
 		blake2b::Blake2b::blake2b(out, &public_key, &[]);
 	}

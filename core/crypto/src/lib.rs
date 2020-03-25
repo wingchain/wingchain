@@ -20,37 +20,37 @@ pub mod hash;
 pub mod address;
 
 #[derive(PartialEq, Debug, Clone)]
-pub enum KeyLength {
+pub enum HashLength {
 	/// 160 bits
-	KeyLength20,
+	HashLength20,
 
 	/// 256 bits
-	KeyLength32,
+	HashLength32,
 
 	/// 512 bits
-	KeyLength64,
+	HashLength64,
 }
 
-impl Into<usize> for KeyLength {
+impl Into<usize> for HashLength {
 	fn into(self) -> usize {
 		match self {
-			KeyLength::KeyLength20 => 20,
-			KeyLength::KeyLength32 => 32,
-			KeyLength::KeyLength64 => 64,
+			HashLength::HashLength20 => 20,
+			HashLength::HashLength32 => 32,
+			HashLength::HashLength64 => 64,
 		}
 	}
 }
 
-impl TryFrom<usize> for KeyLength {
+impl TryFrom<usize> for HashLength {
 	type Error = errors::Error;
 
 	#[inline]
 	fn try_from(i: usize) -> Result<Self, Self::Error> {
 		match i {
-			20 => Ok(KeyLength::KeyLength20),
-			32 => Ok(KeyLength::KeyLength32),
-			64 => Ok(KeyLength::KeyLength64),
-			other => Err(errors::ErrorKind::InvalidKeyLength(other).into()),
+			20 => Ok(HashLength::HashLength20),
+			32 => Ok(HashLength::HashLength32),
+			64 => Ok(HashLength::HashLength64),
+			other => Err(errors::ErrorKind::InvalidHashLength(other).into()),
 		}
 	}
 }

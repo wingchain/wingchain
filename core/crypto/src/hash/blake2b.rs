@@ -15,7 +15,7 @@
 use rust_crypto::blake2b;
 
 use crate::hash::Hash;
-use crate::KeyLength;
+use crate::HashLength;
 
 pub struct Blake2b160;
 
@@ -23,8 +23,8 @@ impl Hash for Blake2b160 {
 	fn name(&self) -> String {
 		"blake2b_160".to_string()
 	}
-	fn key_length(&self) -> KeyLength {
-		KeyLength::KeyLength20
+	fn key_length(&self) -> HashLength {
+		HashLength::HashLength20
 	}
 	fn hash(&self, out: &mut [u8], data: &[u8]) {
 		assert_eq!(out.len(), self.key_length().into());
@@ -38,8 +38,8 @@ impl Hash for Blake2b256 {
 	fn name(&self) -> String {
 		"blake2b_256".to_string()
 	}
-	fn key_length(&self) -> KeyLength {
-		KeyLength::KeyLength32
+	fn key_length(&self) -> HashLength {
+		HashLength::HashLength32
 	}
 	fn hash(&self, out: &mut [u8], data: &[u8]) {
 		assert_eq!(out.len(), self.key_length().into());
@@ -53,8 +53,8 @@ impl Hash for Blake2b512 {
 	fn name(&self) -> String {
 		"blake2b_512".to_string()
 	}
-	fn key_length(&self) -> KeyLength {
-		KeyLength::KeyLength64
+	fn key_length(&self) -> HashLength {
+		HashLength::HashLength64
 	}
 	fn hash(&self, out: &mut [u8], data: &[u8]) {
 		assert_eq!(out.len(), self.key_length().into());

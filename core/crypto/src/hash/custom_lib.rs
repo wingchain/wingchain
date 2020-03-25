@@ -24,11 +24,11 @@ use libloading::os::windows as imp;
 use libloading::{Library, Symbol};
 
 use crate::hash::Hash;
-use crate::{errors, KeyLength};
+use crate::{errors, HashLength};
 
 type CallName = unsafe extern "C" fn() -> *mut c_char;
 type CallNameFree = unsafe extern "C" fn(*mut c_char);
-type CallKeyLength = unsafe extern "C" fn() -> c_uint;
+type CallHashLength = unsafe extern "C" fn() -> c_uint;
 type CallHash = unsafe extern "C" fn(*mut c_uchar, c_uint, *const c_uchar, c_uint);
 
 pub struct CustomLib {
@@ -36,7 +36,7 @@ pub struct CustomLib {
 	/// lib is referred by symbols, should be kept
 	lib: Library,
 	name: String,
-	key_length: KeyLength,
+	key_length: HashLength,
 	call_hash: imp::Symbol<CallHash>,
 }
 
@@ -54,7 +54,7 @@ impl CustomLib {
 				lib.get(b"_crypto_hash_custom_name_free").map_err(err)?;
 			let call_name_free = call_name_free.into_raw();
 
-			let call_key_length: Symbol<CallKeyLength> =
+			let call_key_length: Symbol<CallHashLength> =
 				lib.get(b"_crypto_hash_custom_key_length").map_err(err)?;
 			let call_key_length = call_key_length.into_raw();
 
@@ -92,7 +92,7 @@ impl CustomLib {
 		Ok(name)
 	}
 
-	fn key_length(call_key_length: &imp::Symbol<CallKeyLength>) -> errors::Result<KeyLength> {
+	fn key_length(call_key_length: &imp::Symbol<CallHashLength>) -> errors::Result<HashLength> {
 		let key_length: usize = unsafe {
 			let key_length = call_key_length();
 			key_length as usize
@@ -107,7 +107,7 @@ impl Hash for CustomLib {
 		self.name.clone()
 	}
 
-	fn key_length(&self) -> KeyLength {
+	fn key_length(&self) -> HashLength {
 		self.key_length.clone()
 	}
 	fn hash(&self, out: &mut [u8], data: &[u8]) {
