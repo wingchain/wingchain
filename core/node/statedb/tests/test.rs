@@ -224,15 +224,11 @@ fn test_statedb_for_hasher(hasher: HashImpl) {
 
 #[cfg(feature = "build-dep-test")]
 mod build_dep_test {
-	use std::path::PathBuf;
-
-	use assert_cmd::cargo::cargo_bin;
-
 	use super::*;
 
 	#[test]
 	fn test_statedb_256_dylib() {
-		let path = get_dylib("crypto_dylib_samples_hash");
+		let path = utils::get_dylib("crypto_dylib_samples_hash");
 
 		assert!(
 			path.exists(),
@@ -247,23 +243,5 @@ mod build_dep_test {
 		assert_eq!(name, "blake2b_256".to_string());
 
 		test_statedb_for_hasher(hasher);
-	}
-
-	#[cfg(target_os = "macos")]
-	fn get_dylib(package_name: &str) -> PathBuf {
-		cargo_bin(format!("lib{}.dylib", package_name))
-	}
-
-	#[cfg(target_os = "linux")]
-	fn get_dylib(package_name: &str) -> PathBuf {
-		cargo_bin(format!("lib{}.so", package_name))
-	}
-
-	#[cfg(target_os = "windows")]
-	fn get_dylib(package_name: &str) -> PathBuf {
-		let path = cargo_bin(format!("{}.dll", package_name));
-		let path = path.to_string_lossy();
-		let path = path.trim_end_matches(".exe");
-		PathBuf::from(path)
 	}
 }

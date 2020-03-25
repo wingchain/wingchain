@@ -16,18 +16,16 @@
 
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_uchar, c_uint};
-use std::path::PathBuf;
 use std::str::FromStr;
 
-use assert_cmd::cargo::cargo_bin;
 use libloading::{Library, Symbol};
 
 use crypto::hash::{Hash, HashImpl};
 use crypto::KeyLength;
 
 #[test]
-fn test_custom_lib() {
-	let path = get_dylib("crypto_dylib_samples_hash");
+fn test_custom_lib_hash() {
+	let path = utils::get_dylib("crypto_dylib_samples_hash");
 
 	assert!(
 		path.exists(),
@@ -57,8 +55,8 @@ fn test_custom_lib() {
 }
 
 #[test]
-fn test_load_dylib() {
-	let path = get_dylib("crypto_dylib_samples_hash");
+fn test_dylib_hash() {
+	let path = utils::get_dylib("crypto_dylib_samples_hash");
 
 	assert!(
 		path.exists(),
@@ -176,22 +174,4 @@ fn free_str(s: *mut c_char) {
 		}
 		CString::from_raw(s)
 	};
-}
-
-#[cfg(target_os = "macos")]
-fn get_dylib(package_name: &str) -> PathBuf {
-	cargo_bin(format!("lib{}.dylib", package_name))
-}
-
-#[cfg(target_os = "linux")]
-fn get_dylib(package_name: &str) -> PathBuf {
-	cargo_bin(format!("lib{}.so", package_name))
-}
-
-#[cfg(target_os = "windows")]
-fn get_dylib(package_name: &str) -> PathBuf {
-	let path = cargo_bin(format!("{}.dll", package_name));
-	let path = path.to_string_lossy();
-	let path = path.trim_end_matches(".exe");
-	PathBuf::from(path)
 }

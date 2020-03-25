@@ -15,11 +15,8 @@
 
 extern crate test;
 
-use std::path::PathBuf;
 use std::str::FromStr;
 use test::{black_box, Bencher};
-
-use assert_cmd::cargo::cargo_bin;
 
 use crypto::hash::{Hash, HashImpl};
 use std::ffi::CString;
@@ -37,7 +34,7 @@ fn bench_hash_native(b: &mut Bencher) {
 /// to run with dylib, should `cargo +nightly build --release` first.
 #[bench]
 fn bench_hash_dylib(b: &mut Bencher) {
-	let path = get_dylib("crypto_dylib_samples_hash");
+	let path = utils::get_dylib("crypto_dylib_samples_hash");
 
 	println!("path: {:?}", path);
 
@@ -62,7 +59,7 @@ fn bench_name_native(b: &mut Bencher) {
 /// to run with dylib, should `cargo +nightly build --release` first.
 #[bench]
 fn bench_name_dylib(b: &mut Bencher) {
-	let path = get_dylib("crypto_dylib_samples_hash");
+	let path = utils::get_dylib("crypto_dylib_samples_hash");
 
 	assert!(
 		path.exists(),
@@ -86,7 +83,7 @@ fn bench_key_length_native(b: &mut Bencher) {
 /// to run with dylib, should `cargo +nightly build --release` first.
 #[bench]
 fn bench_key_length_dylib(b: &mut Bencher) {
-	let path = get_dylib("crypto_dylib_samples_hash");
+	let path = utils::get_dylib("crypto_dylib_samples_hash");
 
 	assert!(
 		path.exists(),
@@ -116,22 +113,4 @@ fn bench_string_ffi(b: &mut Bencher) {
 	};
 
 	b.iter(|| black_box(get_name()));
-}
-
-#[cfg(target_os = "macos")]
-fn get_dylib(package_name: &str) -> PathBuf {
-	cargo_bin(format!("lib{}.dylib", package_name))
-}
-
-#[cfg(target_os = "linux")]
-fn get_dylib(package_name: &str) -> PathBuf {
-	cargo_bin(format!("lib{}.so", package_name))
-}
-
-#[cfg(target_os = "windows")]
-fn get_dylib(package_name: &str) -> PathBuf {
-	let path = cargo_bin(format!("{}.dll", package_name));
-	let path = path.to_string_lossy();
-	let path = path.trim_end_matches(".exe");
-	PathBuf::from(path)
 }

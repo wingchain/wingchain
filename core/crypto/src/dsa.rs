@@ -14,11 +14,13 @@
 
 use std::str::FromStr;
 
-pub use custom_lib::{CDsa, CKeyPair, CVerifier};
+pub use custom_lib::{CDsa, CDsaConf, CKeyPair, CVerifier};
 
 use crate::dsa::ed25519::Ed25519;
 use crate::dsa::sm2::SM2;
 use crate::errors;
+use crate::dsa::custom_lib::CustomLib;
+use std::path::PathBuf;
 
 mod custom_lib;
 mod ed25519;
@@ -31,10 +33,13 @@ pub trait Dsa {
 
 	fn name(&self) -> String;
 
+	/// dylib impl demands that Self::KeyPair should not out live self
 	fn generate_key_pair(&self) -> Result<Self::KeyPair, Self::Error>;
 
+	/// dylib impl demands that Self::KeyPair should not out live self
 	fn key_pair_from_secret_key(&self, secret_key: &[u8]) -> Result<Self::KeyPair, Self::Error>;
 
+	/// dylib impl demands that Self::KeyPair should not out live self
 	fn verifier_from_public_key(&self, public_key: &[u8]) -> Result<Self::Verifier, Self::Error>;
 }
 
@@ -52,16 +57,20 @@ pub trait Verifier {
 pub enum DsaImpl {
 	Ed25519,
 	SM2,
+	/// custom dsa impl provided by dylib
+	Custom(CustomLib),
 }
 
 pub enum KeyPairImpl {
 	Ed25519(<Ed25519 as Dsa>::KeyPair),
 	SM2(<SM2 as Dsa>::KeyPair),
+	Custom(<CustomLib as Dsa>::KeyPair),
 }
 
 pub enum VerifierImpl {
 	Ed25519(<Ed25519 as Dsa>::Verifier),
 	SM2(<SM2 as Dsa>::Verifier),
+	Custom(<CustomLib as Dsa>::Verifier),
 }
 
 impl Dsa for DsaImpl {
@@ -74,6 +83,7 @@ impl Dsa for DsaImpl {
 		match self {
 			Self::Ed25519 => Ed25519.name(),
 			Self::SM2 => SM2.name(),
+			Self::Custom(custom) => custom.name(),
 		}
 	}
 
@@ -82,6 +92,7 @@ impl Dsa for DsaImpl {
 		match self {
 			Self::Ed25519 => Ok(KeyPairImpl::Ed25519(Ed25519.generate_key_pair()?)),
 			Self::SM2 => Ok(KeyPairImpl::SM2(SM2.generate_key_pair()?)),
+			Self::Custom(custom) => Ok(KeyPairImpl::Custom(custom.generate_key_pair()?)),
 		}
 	}
 
@@ -92,6 +103,7 @@ impl Dsa for DsaImpl {
 				Ed25519.key_pair_from_secret_key(secret_key)?,
 			)),
 			Self::SM2 => Ok(KeyPairImpl::SM2(SM2.key_pair_from_secret_key(secret_key)?)),
+			Self::Custom(custom) => Ok(KeyPairImpl::Custom(custom.key_pair_from_secret_key(secret_key)?)),
 		}
 	}
 
@@ -102,6 +114,7 @@ impl Dsa for DsaImpl {
 				Ed25519.verifier_from_public_key(public_key)?,
 			)),
 			Self::SM2 => Ok(VerifierImpl::SM2(SM2.verifier_from_public_key(public_key)?)),
+			Self::Custom(custom) => Ok(VerifierImpl::Custom(custom.verifier_from_public_key(public_key)?)),
 		}
 	}
 }
@@ -113,7 +126,11 @@ impl FromStr for DsaImpl {
 		match s {
 			"ed25519" => Ok(DsaImpl::Ed25519),
 			"sm2" => Ok(DsaImpl::SM2),
-			_other => unimplemented!(),
+			other => {
+				let path = PathBuf::from(&other);
+				let custom_lib = CustomLib::new(&path)?;
+				Ok(DsaImpl::Custom(custom_lib))
+			}
 		}
 	}
 }
@@ -123,18 +140,21 @@ impl KeyPair for KeyPairImpl {
 		match self {
 			KeyPairImpl::Ed25519(kp) => kp.public_key(),
 			KeyPairImpl::SM2(kp) => kp.public_key(),
+			KeyPairImpl::Custom(kp) => kp.public_key(),
 		}
 	}
 	fn secret_key(&self) -> Vec<u8> {
 		match self {
 			KeyPairImpl::Ed25519(kp) => kp.secret_key(),
 			KeyPairImpl::SM2(kp) => kp.secret_key(),
+			KeyPairImpl::Custom(kp) => kp.secret_key(),
 		}
 	}
 	fn sign(&self, message: &[u8]) -> Vec<u8> {
 		match self {
 			KeyPairImpl::Ed25519(kp) => kp.sign(message),
 			KeyPairImpl::SM2(kp) => kp.sign(message),
+			KeyPairImpl::Custom(kp) => kp.sign(message),
 		}
 	}
 }
@@ -145,6 +165,7 @@ impl Verifier for VerifierImpl {
 		match self {
 			VerifierImpl::Ed25519(p) => p.verify(message, signature),
 			VerifierImpl::SM2(p) => p.verify(message, signature),
+			VerifierImpl::Custom(p) => p.verify(message, signature),
 		}
 	}
 }

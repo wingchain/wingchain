@@ -36,7 +36,7 @@ impl Hash for Blake2b256 {
 	}
 }
 
-declare_custom_lib!(Blake2b256);
+declare_hash_custom_lib!(Blake2b256);
 
 #[cfg(test)]
 mod tests {

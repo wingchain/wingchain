@@ -3,6 +3,7 @@ members = [
 	"bin/main",
 	"bin/main/init",
 	"bin/main/node",
+	"utils",
 	"core/crypto",
 	"core/crypto/dylib-samples/hash",
 	"core/crypto/dylib-samples/dsa",
