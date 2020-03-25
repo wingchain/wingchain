@@ -47,7 +47,8 @@ impl CustomLib {
 		let lib = Library::new(path).map_err(err)?;
 
 		let (call_name, call_name_free, call_length, call_address) = unsafe {
-			let call_name: Symbol<CallName> = lib.get(b"_crypto_address_custom_name").map_err(err)?;
+			let call_name: Symbol<CallName> =
+				lib.get(b"_crypto_address_custom_name").map_err(err)?;
 			let call_name = call_name.into_raw();
 
 			let call_name_free: Symbol<CallNameFree> =
@@ -58,7 +59,8 @@ impl CustomLib {
 				lib.get(b"_crypto_address_custom_length").map_err(err)?;
 			let call_length = call_length.into_raw();
 
-			let call_address: Symbol<CallAddress> = lib.get(b"_crypto_address_custom_address").map_err(err)?;
+			let call_address: Symbol<CallAddress> =
+				lib.get(b"_crypto_address_custom_address").map_err(err)?;
 			let call_address = call_address.into_raw();
 
 			(call_name, call_name_free, call_length, call_address)

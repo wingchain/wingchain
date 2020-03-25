@@ -15,15 +15,15 @@
 use std::str::FromStr;
 
 use crate::address::blake2b::Blake2b160;
-use crate::address::original::{Original160, Original256};
-use crate::AddressLength;
-use crate::errors;
 use crate::address::custom_lib::CustomLib;
+use crate::address::original::{Original160, Original256};
+use crate::errors;
+use crate::AddressLength;
 use std::path::PathBuf;
 
 mod blake2b;
-mod original;
 mod custom_lib;
+mod original;
 
 pub trait Address {
 	fn name(&self) -> String;

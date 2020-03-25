@@ -55,10 +55,7 @@ mod tests {
 		let mut out = [0u8; 20];
 		Original160.address(&mut out, &data);
 
-		assert_eq!(
-			out.to_vec(),
-			data
-		);
+		assert_eq!(out.to_vec(), data);
 	}
 
 	#[test]
@@ -67,9 +64,6 @@ mod tests {
 		let mut out = [0u8; 32];
 		Original256.address(&mut out, &data);
 
-		assert_eq!(
-			out.to_vec(),
-			data
-		);
+		assert_eq!(out.to_vec(), data);
 	}
 }

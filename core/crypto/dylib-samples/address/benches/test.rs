@@ -19,7 +19,6 @@ use std::str::FromStr;
 use test::{black_box, Bencher};
 
 use crypto::address::{Address, AddressImpl};
-use std::ffi::CString;
 
 #[bench]
 fn bench_address_native(b: &mut Bencher) {
