@@ -40,6 +40,10 @@ error_chain! {
 			description(""),
 			display("Invalid name: {}", path),
 		}
+		InvalidDsaLength(length: (usize, usize, usize)) {
+			description(""),
+			display("Invalid dsa length: {:?}", length),
+		}
 		InvalidSecretKey {
 			description(""),
 			display("Invalid public key"),

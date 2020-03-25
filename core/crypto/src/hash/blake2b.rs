@@ -23,11 +23,11 @@ impl Hash for Blake2b160 {
 	fn name(&self) -> String {
 		"blake2b_160".to_string()
 	}
-	fn key_length(&self) -> HashLength {
+	fn length(&self) -> HashLength {
 		HashLength::HashLength20
 	}
 	fn hash(&self, out: &mut [u8], data: &[u8]) {
-		assert_eq!(out.len(), self.key_length().into());
+		assert_eq!(out.len(), self.length().into());
 		blake2b::Blake2b::blake2b(out, data, &[]);
 	}
 }
@@ -38,11 +38,11 @@ impl Hash for Blake2b256 {
 	fn name(&self) -> String {
 		"blake2b_256".to_string()
 	}
-	fn key_length(&self) -> HashLength {
+	fn length(&self) -> HashLength {
 		HashLength::HashLength32
 	}
 	fn hash(&self, out: &mut [u8], data: &[u8]) {
-		assert_eq!(out.len(), self.key_length().into());
+		assert_eq!(out.len(), self.length().into());
 		blake2b::Blake2b::blake2b(out, data, &[]);
 	}
 }
@@ -53,11 +53,11 @@ impl Hash for Blake2b512 {
 	fn name(&self) -> String {
 		"blake2b_512".to_string()
 	}
-	fn key_length(&self) -> HashLength {
+	fn length(&self) -> HashLength {
 		HashLength::HashLength64
 	}
 	fn hash(&self, out: &mut [u8], data: &[u8]) {
-		assert_eq!(out.len(), self.key_length().into());
+		assert_eq!(out.len(), self.length().into());
 		blake2b::Blake2b::blake2b(out, data, &[]);
 	}
 }

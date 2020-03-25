@@ -21,7 +21,7 @@ use yogcrypt::sm2::{
 };
 
 use crate::dsa::{Dsa, KeyPair, Verifier};
-use crate::errors;
+use crate::{errors, DsaLength};
 
 pub struct SM2;
 
@@ -33,6 +33,10 @@ impl Dsa for SM2 {
 
 	fn name(&self) -> String {
 		"sm2".to_string()
+	}
+
+	fn length(&self) -> DsaLength {
+		DsaLength::DsaLength32_65_64
 	}
 
 	fn generate_key_pair(&self) -> errors::Result<Self::KeyPair> {
@@ -54,18 +58,17 @@ impl Dsa for SM2 {
 }
 
 impl KeyPair for (SecKey, PubKey) {
-	fn public_key(&self) -> Vec<u8> {
-		public_key_to_vec(self.1)
+	fn public_key(&self, out: &mut [u8]) {
+		out.copy_from_slice(&public_key_to_vec(self.1));
 	}
-	fn secret_key(&self) -> Vec<u8> {
-		secret_key_to_vec(self.0)
+	fn secret_key(&self, out: &mut [u8]) {
+		out.copy_from_slice(&secret_key_to_vec(self.0));
 	}
-	fn sign(&self, message: &[u8]) -> Vec<u8> {
+	fn sign(&self, message: &[u8], out: &mut [u8]) {
 		let signature = sm2_gen_sign(&message, self.0, self.1);
 
 		let signature = signature_to_vec(signature);
-
-		signature
+		out.copy_from_slice(&signature);
 	}
 }
 
@@ -222,7 +225,10 @@ mod tests {
 		];
 		let key_pair = SM2.key_pair_from_secret_key(&secret).unwrap();
 
-		let public_key = key_pair.public_key();
+		let (_secret_len, public_len, sig_len) = SM2.length().into();
+
+		let mut public_key = vec![0u8; public_len];
+		key_pair.public_key(&mut public_key);
 
 		assert_eq!(
 			public_key,
@@ -236,7 +242,8 @@ mod tests {
 
 		let message: Vec<u8> = vec![97, 98, 99];
 
-		let signature = key_pair.sign(&message);
+		let mut signature = vec![0u8; sig_len];
+		key_pair.sign(&message, &mut signature);
 
 		assert_eq!(signature.len(), 64);
 

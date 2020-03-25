@@ -111,7 +111,7 @@ fn test_statedb_512_reopen() {
 
 	let hasher_clone = hasher.clone();
 
-	let hasher_len = hasher.key_length().into();
+	let hasher_len = hasher.length().into();
 
 	let statedb = StateDB::new(db.clone(), hasher_clone).unwrap();
 
@@ -165,7 +165,7 @@ fn test_statedb_for_hasher(hasher: HashImpl) {
 
 	let hasher = Arc::new(hasher);
 
-	let hasher_len = hasher.key_length().into();
+	let hasher_len = hasher.length().into();
 
 	let statedb = StateDB::new(db.clone(), hasher).unwrap();
 

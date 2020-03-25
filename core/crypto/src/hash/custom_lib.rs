@@ -36,7 +36,7 @@ pub struct CustomLib {
 	/// lib is referred by symbols, should be kept
 	lib: Library,
 	name: String,
-	key_length: HashLength,
+	length: HashLength,
 	call_hash: imp::Symbol<CallHash>,
 }
 
@@ -46,7 +46,7 @@ impl CustomLib {
 
 		let lib = Library::new(path).map_err(err)?;
 
-		let (call_name, call_name_free, call_key_length, call_hash) = unsafe {
+		let (call_name, call_name_free, call_length, call_hash) = unsafe {
 			let call_name: Symbol<CallName> = lib.get(b"_crypto_hash_custom_name").map_err(err)?;
 			let call_name = call_name.into_raw();
 
@@ -54,23 +54,23 @@ impl CustomLib {
 				lib.get(b"_crypto_hash_custom_name_free").map_err(err)?;
 			let call_name_free = call_name_free.into_raw();
 
-			let call_key_length: Symbol<CallHashLength> =
-				lib.get(b"_crypto_hash_custom_key_length").map_err(err)?;
-			let call_key_length = call_key_length.into_raw();
+			let call_length: Symbol<CallHashLength> =
+				lib.get(b"_crypto_hash_custom_length").map_err(err)?;
+			let call_length = call_length.into_raw();
 
 			let call_hash: Symbol<CallHash> = lib.get(b"_crypto_hash_custom_hash").map_err(err)?;
 			let call_hash = call_hash.into_raw();
 
-			(call_name, call_name_free, call_key_length, call_hash)
+			(call_name, call_name_free, call_length, call_hash)
 		};
 
 		let name = Self::name(&call_name, &call_name_free, &path)?;
-		let key_length = Self::key_length(&call_key_length)?;
+		let length = Self::length(&call_length)?;
 
 		Ok(CustomLib {
 			lib,
 			name,
-			key_length,
+			length,
 			call_hash,
 		})
 	}
@@ -92,13 +92,13 @@ impl CustomLib {
 		Ok(name)
 	}
 
-	fn key_length(call_key_length: &imp::Symbol<CallHashLength>) -> errors::Result<HashLength> {
-		let key_length: usize = unsafe {
-			let key_length = call_key_length();
-			key_length as usize
+	fn length(call_length: &imp::Symbol<CallHashLength>) -> errors::Result<HashLength> {
+		let length: usize = unsafe {
+			let length = call_length();
+			length as usize
 		};
 
-		key_length.try_into()
+		length.try_into()
 	}
 }
 
@@ -107,8 +107,8 @@ impl Hash for CustomLib {
 		self.name.clone()
 	}
 
-	fn key_length(&self) -> HashLength {
-		self.key_length.clone()
+	fn length(&self) -> HashLength {
+		self.length.clone()
 	}
 	fn hash(&self, out: &mut [u8], data: &[u8]) {
 		unsafe {
@@ -143,8 +143,8 @@ macro_rules! declare_hash_custom_lib {
 		}
 
 		#[no_mangle]
-		pub extern "C" fn _crypto_hash_custom_key_length() -> c_uint {
-			let length: usize = $impl.key_length().into();
+		pub extern "C" fn _crypto_hash_custom_length() -> c_uint {
+			let length: usize = $impl.length().into();
 			length as c_uint
 		}
 

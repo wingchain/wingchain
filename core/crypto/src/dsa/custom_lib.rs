@@ -22,46 +22,10 @@ use libloading::os::windows as imp;
 use libloading::{Library, Symbol};
 
 use crate::dsa::{Dsa, KeyPair, Verifier};
-use crate::errors;
+use crate::{errors, DsaLength};
+use std::convert::TryInto;
 use std::ffi::CStr;
 use std::rc::Rc;
-
-pub trait CDsa {
-	const ERR_LEN: usize;
-	type KeyPair: CKeyPair;
-	type Verifier: CVerifier;
-
-	fn name(&self) -> String;
-
-	fn generate_key_pair(&self) -> Result<Self::KeyPair, Vec<u8>>;
-
-	fn key_pair_from_secret_key(&self, secret_key: &[u8]) -> Result<Self::KeyPair, Vec<u8>>;
-
-	fn verifier_from_public_key(&self, public_key: &[u8]) -> Result<Self::Verifier, Vec<u8>>;
-}
-
-pub trait CKeyPair {
-	const PUBLIC_LEN: usize;
-	const SECRET_LEN: usize;
-	const SIGNATURE_LEN: usize;
-	fn public_key(&self, out: &mut [u8]);
-	fn secret_key(&self, out: &mut [u8]);
-	fn sign(&self, message: &[u8], out: &mut [u8]);
-}
-
-pub trait CVerifier {
-	const ERR_LEN: usize;
-	fn verify(&self, message: &[u8], signature: &[u8]) -> Result<(), Vec<u8>>;
-}
-
-#[repr(C)]
-pub struct CDsaConf {
-	pub err_len: c_uint,
-	pub public_len: c_uint,
-	pub secret_len: c_uint,
-	pub signature_len: c_uint,
-	pub verifier_err_len: c_uint,
-}
 
 #[repr(C)]
 pub struct TKeyPair {
@@ -75,17 +39,22 @@ pub struct TVerifier {
 	call: Rc<CallVerifier>,
 }
 
-type CallConf = unsafe extern "C" fn() -> CDsaConf;
+#[repr(C)]
+pub struct CLength {
+	pub secret_len: c_uint,
+	pub public_len: c_uint,
+	pub signature_len: c_uint,
+}
+
+type CallLength = unsafe extern "C" fn() -> CLength;
 type CallName = unsafe extern "C" fn() -> *mut c_char;
 type CallNameFree = unsafe extern "C" fn(*mut c_char);
 
-type CallGenerateKeyPair =
-	unsafe extern "C" fn(err: *mut c_uchar, err_len: *mut c_uint) -> *mut TKeyPair;
+type CallGenerateKeyPair = unsafe extern "C" fn(err: *mut c_uint) -> *mut TKeyPair;
 type CallKeyPairFromSecretKey = unsafe extern "C" fn(
 	secret_key: *const c_uchar,
 	secret_key_len: c_uint,
-	err: *mut c_uchar,
-	err_len: *mut c_uint,
+	err: *mut c_uint,
 ) -> *mut TKeyPair;
 type CallKeyPairSecretKey =
 	unsafe extern "C" fn(key_pair: *mut TKeyPair, out: *mut c_uchar, out_len: c_uint);
@@ -102,8 +71,7 @@ type CallKeyPairFree = unsafe extern "C" fn(key_pair: *mut TKeyPair);
 type CallVerifierFromPublicKey = unsafe extern "C" fn(
 	public_key: *const c_uchar,
 	public_key_len: c_uint,
-	err: *mut c_uchar,
-	err_len: *mut c_uint,
+	err: *mut c_uint,
 ) -> *mut TVerifier;
 type CallVerifierVerify = unsafe extern "C" fn(
 	verifier: *mut TVerifier,
@@ -111,8 +79,7 @@ type CallVerifierVerify = unsafe extern "C" fn(
 	message_len: c_uint,
 	signature: *const c_uchar,
 	signature_len: c_uint,
-	err: *mut c_uchar,
-	err_len: *mut c_uint,
+	err: *mut c_uint,
 );
 type CallVerifierFree = unsafe extern "C" fn(verifier: *mut TVerifier);
 
@@ -121,11 +88,9 @@ pub struct CustomLib {
 	/// lib is referred by symbols, should be kept
 	lib: Library,
 	name: String,
-	err_len: usize,
-	public_len: usize,
 	secret_len: usize,
+	public_len: usize,
 	signature_len: usize,
-	verifier_err_len: usize,
 	call_generate_key_pair: imp::Symbol<CallGenerateKeyPair>,
 	call_key_pair_from_secret_key: imp::Symbol<CallKeyPairFromSecretKey>,
 	call_verifier_from_public_key: imp::Symbol<CallVerifierFromPublicKey>,
@@ -154,7 +119,7 @@ impl CustomLib {
 		let (
 			call_name,
 			call_name_free,
-			call_conf,
+			call_length,
 			call_generate_key_pair,
 			call_key_pair_from_secret_key,
 			call_key_pair_secret_key,
@@ -168,8 +133,9 @@ impl CustomLib {
 			let call_name: Symbol<CallName> = lib.get(b"_crypto_dsa_custom_name").map_err(err)?;
 			let call_name = call_name.into_raw();
 
-			let call_conf: Symbol<CallConf> = lib.get(b"_crypto_dsa_custom_conf").map_err(err)?;
-			let call_conf = call_conf.into_raw();
+			let call_length: Symbol<CallLength> =
+				lib.get(b"_crypto_dsa_custom_length").map_err(err)?;
+			let call_length = call_length.into_raw();
 			let call_name_free: Symbol<CallNameFree> =
 				lib.get(b"_crypto_dsa_custom_name_free").map_err(err)?;
 			let call_name_free = call_name_free.into_raw();
@@ -211,7 +177,7 @@ impl CustomLib {
 			(
 				call_name,
 				call_name_free,
-				call_conf,
+				call_length,
 				call_generate_key_pair,
 				call_key_pair_from_secret_key,
 				call_key_pair_secret_key,
@@ -225,7 +191,7 @@ impl CustomLib {
 		};
 
 		let name = Self::name(&call_name, &call_name_free, &path)?;
-		let conf = Self::conf(&call_conf)?;
+		let length = Self::length(&call_length)?;
 
 		let call_key_pair = Rc::new(CallKeyPair {
 			call_key_pair_secret_key,
@@ -242,11 +208,9 @@ impl CustomLib {
 		Ok(CustomLib {
 			lib,
 			name,
-			err_len: conf.err_len as usize,
-			public_len: conf.public_len as usize,
-			secret_len: conf.secret_len as usize,
-			signature_len: conf.signature_len as usize,
-			verifier_err_len: conf.verifier_err_len as usize,
+			secret_len: length.secret_len as usize,
+			public_len: length.public_len as usize,
+			signature_len: length.signature_len as usize,
 			call_generate_key_pair,
 			call_key_pair_from_secret_key,
 			call_key_pair,
@@ -272,12 +236,12 @@ impl CustomLib {
 		Ok(name)
 	}
 
-	fn conf(call_conf: &imp::Symbol<CallConf>) -> errors::Result<CDsaConf> {
-		let conf: CDsaConf = unsafe {
-			let conf = call_conf();
-			conf
+	fn length(call_length: &imp::Symbol<CallLength>) -> errors::Result<CLength> {
+		let length: CLength = unsafe {
+			let length = call_length();
+			length
 		};
-		Ok(conf)
+		Ok(length)
 	}
 }
 
@@ -300,7 +264,6 @@ impl Drop for CustomKeyPair {
 pub struct CustomVerifier {
 	inner: *mut TVerifier,
 	call: Rc<CallVerifier>,
-	verifier_err_len: usize,
 }
 
 impl Drop for CustomVerifier {
@@ -320,11 +283,17 @@ impl Dsa for CustomLib {
 		self.name.clone()
 	}
 
+	fn length(&self) -> DsaLength {
+		(self.secret_len, self.public_len, self.signature_len)
+			.try_into()
+			.expect("qed")
+	}
+
 	fn generate_key_pair(&self) -> Result<Self::KeyPair, Self::Error> {
-		let (mut err, mut err_len) = (vec![0u8; self.err_len as usize], 0u32 as c_uint);
+		let mut err = 0u32 as c_uint;
 		unsafe {
-			let raw = (self.call_generate_key_pair)(err.as_mut_ptr(), &mut err_len as *mut c_uint);
-			match err_len {
+			let raw = (self.call_generate_key_pair)(&mut err as *mut c_uint);
+			match err {
 				0 => Ok(CustomKeyPair {
 					inner: raw,
 					call: self.call_key_pair.clone(),
@@ -332,21 +301,20 @@ impl Dsa for CustomLib {
 					secret_len: self.secret_len,
 					signature_len: self.signature_len,
 				}),
-				_ => Err(build_err(err, err_len).into()),
+				_ => Err(errors::ErrorKind::InvalidSecretKey.into()),
 			}
 		}
 	}
 
 	fn key_pair_from_secret_key(&self, secret_key: &[u8]) -> Result<Self::KeyPair, Self::Error> {
-		let (mut err, mut err_len) = (vec![0u8; self.err_len as usize], 0u32 as c_uint);
+		let mut err = 0u32 as c_uint;
 		unsafe {
 			let raw = (self.call_key_pair_from_secret_key)(
 				secret_key.as_ptr(),
 				secret_key.len() as c_uint,
-				err.as_mut_ptr(),
-				&mut err_len as *mut c_uint,
+				&mut err as *mut c_uint,
 			);
-			match err_len {
+			match err {
 				0 => Ok(CustomKeyPair {
 					inner: raw,
 					call: self.call_key_pair.clone(),
@@ -354,74 +322,61 @@ impl Dsa for CustomLib {
 					secret_len: self.secret_len,
 					signature_len: self.signature_len,
 				}),
-				_ => Err(build_err(err, err_len).into()),
+				_ => Err(errors::ErrorKind::InvalidSecretKey.into()),
 			}
 		}
 	}
 
 	fn verifier_from_public_key(&self, public_key: &[u8]) -> Result<Self::Verifier, Self::Error> {
-		let (mut err, mut err_len) = (vec![0u8; self.err_len as usize], 0u32 as c_uint);
+		let mut err = 0u32 as c_uint;
 		unsafe {
 			let raw = (self.call_verifier_from_public_key)(
 				public_key.as_ptr(),
 				public_key.len() as c_uint,
-				err.as_mut_ptr(),
-				&mut err_len as *mut c_uint,
+				&mut err as *mut c_uint,
 			);
-			match err_len {
+			match err {
 				0 => Ok(CustomVerifier {
 					inner: raw,
 					call: self.call_verifier.clone(),
-					verifier_err_len: self.verifier_err_len,
 				}),
-				_ => Err(build_err(err, err_len).into()),
+				_ => Err(errors::ErrorKind::InvalidPublicKey.into()),
 			}
 		}
 	}
 }
 
 impl KeyPair for CustomKeyPair {
-	fn public_key(&self) -> Vec<u8> {
-		let mut public_key = vec![0u8; self.public_len as usize];
+	fn public_key(&self, out: &mut [u8]) {
+		assert_eq!(out.len(), self.public_len);
 		unsafe {
-			(self.call.call_key_pair_public_key)(
-				self.inner,
-				public_key.as_mut_ptr(),
-				public_key.len() as c_uint,
-			);
+			(self.call.call_key_pair_public_key)(self.inner, out.as_mut_ptr(), out.len() as c_uint);
 		}
-		public_key.to_vec()
 	}
-	fn secret_key(&self) -> Vec<u8> {
-		let mut secret_key = vec![0u8; self.secret_len as usize];
+	fn secret_key(&self, out: &mut [u8]) {
+		assert_eq!(out.len(), self.secret_len);
 		unsafe {
-			(self.call.call_key_pair_secret_key)(
-				self.inner,
-				secret_key.as_mut_ptr(),
-				secret_key.len() as c_uint,
-			);
+			(self.call.call_key_pair_secret_key)(self.inner, out.as_mut_ptr(), out.len() as c_uint);
 		}
-		secret_key.to_vec()
 	}
-	fn sign(&self, message: &[u8]) -> Vec<u8> {
-		let mut signature = vec![0u8; self.signature_len as usize];
+	fn sign(&self, message: &[u8], out: &mut [u8]) {
+		assert_eq!(out.len(), self.signature_len);
 		unsafe {
 			(self.call.call_key_pair_sign)(
 				self.inner,
 				message.as_ptr(),
 				message.len() as c_uint,
-				signature.as_mut_ptr(),
-				signature.len() as c_uint,
+				out.as_mut_ptr(),
+				out.len() as c_uint,
 			);
 		}
-		signature
 	}
 }
 
 impl Verifier for CustomVerifier {
 	type Error = errors::Error;
 	fn verify(&self, message: &[u8], signature: &[u8]) -> Result<(), Self::Error> {
-		let (mut err, mut err_len) = (vec![0u8; self.verifier_err_len as usize], 0u32 as c_uint);
+		let mut err = 0u32 as c_uint;
 		unsafe {
 			(self.call.call_verifier_verify)(
 				self.inner,
@@ -429,20 +384,14 @@ impl Verifier for CustomVerifier {
 				message.len() as c_uint,
 				signature.as_ptr(),
 				signature.len() as c_uint,
-				err.as_mut_ptr(),
-				&mut err_len as *mut c_uint,
+				&mut err as *mut c_uint,
 			);
-			match err_len {
+			match err {
 				0 => Ok(()),
-				_ => Err(build_err(err, err_len).into()),
+				_ => Err(errors::ErrorKind::VerificationFailed.into()),
 			}
 		}
 	}
-}
-
-#[inline]
-fn build_err(err: Vec<u8>, err_len: c_uint) -> String {
-	String::from_utf8(err[..err_len as usize].to_vec()).unwrap_or("Unknown".to_string())
 }
 
 #[macro_export]
@@ -454,13 +403,12 @@ macro_rules! declare_dsa_custom_lib {
 		use std::slice;
 
 		#[no_mangle]
-		pub extern "C" fn _crypto_dsa_custom_conf() -> CDsaConf {
-			CDsaConf {
-				err_len: <$impl as CDsa>::ERR_LEN as c_uint,
-				public_len: <$impl as CDsa>::KeyPair::PUBLIC_LEN as c_uint,
-				secret_len: <$impl as CDsa>::KeyPair::SECRET_LEN as c_uint,
-				signature_len: <$impl as CDsa>::KeyPair::SIGNATURE_LEN as c_uint,
-				verifier_err_len: <$impl as CDsa>::Verifier::ERR_LEN as c_uint,
+		pub extern "C" fn _crypto_dsa_custom_length() -> CLength {
+			let (secret_len, public_len, signature_len) = $impl.length().into();
+			CLength {
+				secret_len: secret_len as c_uint,
+				public_len: public_len as c_uint,
+				signature_len: signature_len as c_uint,
 			}
 		}
 
@@ -479,14 +427,11 @@ macro_rules! declare_dsa_custom_lib {
 		}
 
 		#[no_mangle]
-		pub extern "C" fn _crypto_dsa_custom_generate_key_pair(
-			err: *mut c_uchar,
-			err_len: *mut c_uint,
-		) -> *mut KeyPair {
+		pub extern "C" fn _crypto_dsa_custom_generate_key_pair(err: *mut c_uint) -> *mut KeyPair {
 			let key_pair = match $impl.generate_key_pair() {
 				Ok(v) => v,
 				Err(e) => {
-					crypto_dsa_error_handle(e, err, err_len);
+					crypto_dsa_error_handle(e, err);
 					return null_mut() as *mut _;
 				}
 			};
@@ -497,14 +442,13 @@ macro_rules! declare_dsa_custom_lib {
 		pub extern "C" fn _crypto_dsa_custom_key_pair_from_secret_key(
 			secret_key: *const c_uchar,
 			secret_key_len: c_uint,
-			err: *mut c_uchar,
-			err_len: *mut c_uint,
+			err: *mut c_uint,
 		) -> *mut KeyPair {
 			let secret_key = unsafe { slice::from_raw_parts(secret_key, secret_key_len as usize) };
 			let key_pair = match $impl.key_pair_from_secret_key(secret_key) {
 				Ok(v) => v,
 				Err(e) => {
-					crypto_dsa_error_handle(e, err, err_len);
+					crypto_dsa_error_handle(e, err);
 					return null_mut() as *mut _;
 				}
 			};
@@ -559,14 +503,13 @@ macro_rules! declare_dsa_custom_lib {
 		pub extern "C" fn _crypto_dsa_custom_verifier_from_public_key(
 			public_key: *const c_uchar,
 			public_key_len: c_uint,
-			err: *mut c_uchar,
-			err_len: *mut c_uint,
+			err: *mut c_uint,
 		) -> *mut Verifier {
 			let public_key = unsafe { slice::from_raw_parts(public_key, public_key_len as usize) };
 			let verifier = match $impl.verifier_from_public_key(public_key) {
 				Ok(v) => v,
 				Err(e) => {
-					crypto_dsa_error_handle(e, err, err_len);
+					crypto_dsa_error_handle(e, err);
 					return null_mut() as *mut _;
 				}
 			};
@@ -580,8 +523,7 @@ macro_rules! declare_dsa_custom_lib {
 			message_len: c_uint,
 			signature: *const c_uchar,
 			signature_len: c_uint,
-			err: *mut c_uchar,
-			err_len: *mut c_uint,
+			err: *mut c_uint,
 		) {
 			let verifier = unsafe { Box::from_raw(verifier) };
 
@@ -591,7 +533,7 @@ macro_rules! declare_dsa_custom_lib {
 			match verifier.verify(message, signature) {
 				Ok(_) => (),
 				Err(e) => {
-					crypto_dsa_error_handle(e, err, err_len);
+					crypto_dsa_error_handle(e, err);
 				}
 			}
 			std::mem::forget(verifier);
@@ -602,12 +544,9 @@ macro_rules! declare_dsa_custom_lib {
 			unsafe { Box::from_raw(verifier) };
 		}
 
-		fn crypto_dsa_error_handle(e: Vec<u8>, err: *mut c_uchar, err_len: *mut c_uint) {
-			let len = e.len();
-			let err = unsafe { slice::from_raw_parts_mut(err, len) };
-			err.copy_from_slice(&e);
+		fn crypto_dsa_error_handle(e: (), err: *mut c_uint) {
 			unsafe {
-				*err_len = len as c_uint;
+				*err = 1 as c_uint;
 			}
 		}
 	};

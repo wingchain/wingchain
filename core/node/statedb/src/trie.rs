@@ -43,8 +43,8 @@ pub struct TrieHasher64;
 
 /// should call load before using TrieHasher20/TrieHasher32/TrieHasher64
 pub fn load_hasher(hash_impl: Arc<HashImpl>) -> errors::Result<()> {
-	let key_length = hash_impl.key_length();
-	match key_length {
+	let length = hash_impl.length();
+	match length {
 		HashLength::HashLength20 => {
 			let name = hash_impl.name();
 			match HASH_IMPL_20.set(hash_impl) {

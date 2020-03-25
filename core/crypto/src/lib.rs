@@ -14,10 +14,10 @@
 
 use std::convert::TryFrom;
 
+pub mod address;
 pub mod dsa;
 pub mod errors;
 pub mod hash;
-pub mod address;
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum HashLength {
@@ -51,6 +51,37 @@ impl TryFrom<usize> for HashLength {
 			32 => Ok(HashLength::HashLength32),
 			64 => Ok(HashLength::HashLength64),
 			other => Err(errors::ErrorKind::InvalidHashLength(other).into()),
+		}
+	}
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum DsaLength {
+	// secret key 32, public key 32, signature 64
+	DsaLength32_32_64,
+
+	// secret key 32, public key 65, signature 64
+	DsaLength32_65_64,
+}
+
+impl Into<(usize, usize, usize)> for DsaLength {
+	fn into(self) -> (usize, usize, usize) {
+		match self {
+			DsaLength::DsaLength32_32_64 => (32, 32, 64),
+			DsaLength::DsaLength32_65_64 => (32, 65, 64),
+		}
+	}
+}
+
+impl TryFrom<(usize, usize, usize)> for DsaLength {
+	type Error = errors::Error;
+
+	#[inline]
+	fn try_from(i: (usize, usize, usize)) -> Result<Self, Self::Error> {
+		match i {
+			(32, 32, 64) => Ok(DsaLength::DsaLength32_32_64),
+			(32, 65, 64) => Ok(DsaLength::DsaLength32_65_64),
+			other => Err(errors::ErrorKind::InvalidDsaLength(other).into()),
 		}
 	}
 }

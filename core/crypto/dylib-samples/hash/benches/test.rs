@@ -77,7 +77,7 @@ fn bench_name_dylib(b: &mut Bencher) {
 fn bench_key_length_native(b: &mut Bencher) {
 	let hash = HashImpl::Blake2b256;
 
-	b.iter(|| black_box(hash.key_length()));
+	b.iter(|| black_box(hash.length()));
 }
 
 /// to run with dylib, should `cargo +nightly build --release` first.
@@ -94,7 +94,7 @@ fn bench_key_length_dylib(b: &mut Bencher) {
 	let path = path.to_string_lossy();
 	let hasher = HashImpl::from_str(&path).unwrap();
 
-	b.iter(|| black_box(hasher.key_length()));
+	b.iter(|| black_box(hasher.length()));
 }
 
 #[bench]

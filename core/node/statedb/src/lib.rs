@@ -47,7 +47,7 @@ impl StateDB {
 	pub fn new(db: Arc<DB>, hasher: Arc<HashImpl>) -> errors::Result<Self> {
 		load_hasher(hasher.clone())?;
 
-		let key_length = hasher.key_length();
+		let key_length = hasher.length();
 		Ok(Self {
 			db,
 			hasher,

@@ -33,7 +33,8 @@ use ed25519_dalek::{Keypair as DalekKeyPair, PublicKey, SecretKey, Signature};
 use rand::rngs::OsRng;
 use sha2::Sha512;
 
-use crypto::dsa::{CDsa, CDsaConf, CKeyPair as KeyPairT, CVerifier as VerifierT};
+use crypto::dsa::{CLength, Dsa, KeyPair as KeyPairT, Verifier as VerifierT};
+use crypto::DsaLength;
 
 pub struct Ed25519;
 
@@ -42,8 +43,8 @@ pub struct KeyPair(DalekKeyPair);
 
 pub struct Verifier(PublicKey);
 
-impl CDsa for Ed25519 {
-	const ERR_LEN: usize = 18;
+impl Dsa for Ed25519 {
+	type Error = ();
 
 	type KeyPair = KeyPair;
 
@@ -53,15 +54,18 @@ impl CDsa for Ed25519 {
 		"ed25519".to_string()
 	}
 
-	fn generate_key_pair(&self) -> Result<Self::KeyPair, Vec<u8>> {
-		let mut csprng = OsRng::new().map_err(|_| b"invalid secret key".to_vec())?;
+	fn length(&self) -> DsaLength {
+		DsaLength::DsaLength32_32_64
+	}
+
+	fn generate_key_pair(&self) -> Result<Self::KeyPair, Self::Error> {
+		let mut csprng = OsRng::new().map_err(|_| ())?;
 		let key_pair = KeyPair(DalekKeyPair::generate::<Sha512, _>(&mut csprng));
 		Ok(key_pair)
 	}
 
-	fn key_pair_from_secret_key(&self, secret_key: &[u8]) -> Result<Self::KeyPair, Vec<u8>> {
-		let secret_key =
-			SecretKey::from_bytes(secret_key).map_err(|_| b"invalid secret key".to_vec())?;
+	fn key_pair_from_secret_key(&self, secret_key: &[u8]) -> Result<Self::KeyPair, Self::Error> {
+		let secret_key = SecretKey::from_bytes(secret_key).map_err(|_| ())?;
 		let public_key = PublicKey::from_secret::<Sha512>(&secret_key);
 		let key_pair = KeyPair(DalekKeyPair {
 			secret: secret_key,
@@ -70,17 +74,13 @@ impl CDsa for Ed25519 {
 		Ok(key_pair)
 	}
 
-	fn verifier_from_public_key(&self, public_key: &[u8]) -> Result<Self::Verifier, Vec<u8>> {
-		let public_key =
-			PublicKey::from_bytes(public_key).map_err(|_| b"invalid secret key".to_vec())?;
+	fn verifier_from_public_key(&self, public_key: &[u8]) -> Result<Self::Verifier, Self::Error> {
+		let public_key = PublicKey::from_bytes(public_key).map_err(|_| ())?;
 		Ok(Verifier(public_key))
 	}
 }
 
 impl KeyPairT for KeyPair {
-	const PUBLIC_LEN: usize = 32;
-	const SECRET_LEN: usize = 32;
-	const SIGNATURE_LEN: usize = 64;
 	fn public_key(&self, out: &mut [u8]) {
 		let public = self.0.public.as_bytes();
 		out.copy_from_slice(public);
@@ -96,13 +96,11 @@ impl KeyPairT for KeyPair {
 }
 
 impl VerifierT for Verifier {
-	const ERR_LEN: usize = 19;
-	fn verify(&self, message: &[u8], signature: &[u8]) -> Result<(), Vec<u8>> {
-		let signature =
-			Signature::from_bytes(signature).map_err(|_| b"verification failed".to_vec())?;
-		self.0
-			.verify::<Sha512>(message, &signature)
-			.map_err(|_| b"verification failed".to_vec())
+	type Error = ();
+
+	fn verify(&self, message: &[u8], signature: &[u8]) -> Result<(), Self::Error> {
+		let signature = Signature::from_bytes(signature).map_err(|_| ())?;
+		self.0.verify::<Sha512>(message, &signature).map_err(|_| ())
 	}
 }
 

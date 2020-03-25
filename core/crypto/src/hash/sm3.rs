@@ -23,7 +23,7 @@ impl Hash for SM3 {
 	fn name(&self) -> String {
 		"sm3".to_string()
 	}
-	fn key_length(&self) -> HashLength {
+	fn length(&self) -> HashLength {
 		HashLength::HashLength32
 	}
 	fn hash(&self, out: &mut [u8], data: &[u8]) {
