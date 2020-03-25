@@ -17,6 +17,7 @@ use std::convert::TryFrom;
 pub mod dsa;
 pub mod errors;
 pub mod hash;
+pub mod address;
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum KeyLength {
@@ -50,6 +51,37 @@ impl TryFrom<usize> for KeyLength {
 			32 => Ok(KeyLength::KeyLength32),
 			64 => Ok(KeyLength::KeyLength64),
 			other => Err(errors::ErrorKind::InvalidKeyLength(other).into()),
+		}
+	}
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum AddressLength {
+	/// 160 bits
+	AddressLength20,
+
+	/// 256 bits
+	AddressLength32,
+}
+
+impl Into<usize> for AddressLength {
+	fn into(self) -> usize {
+		match self {
+			AddressLength::AddressLength20 => 20,
+			AddressLength::AddressLength32 => 32,
+		}
+	}
+}
+
+impl TryFrom<usize> for AddressLength {
+	type Error = errors::Error;
+
+	#[inline]
+	fn try_from(i: usize) -> Result<Self, Self::Error> {
+		match i {
+			20 => Ok(AddressLength::AddressLength20),
+			32 => Ok(AddressLength::AddressLength32),
+			other => Err(errors::ErrorKind::InvalidAddressLength(other).into()),
 		}
 	}
 }

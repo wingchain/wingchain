@@ -52,5 +52,9 @@ error_chain! {
 			description(""),
 			display("Verification failed"),
 		}
+		InvalidAddressLength(length: usize) {
+			description(""),
+			display("Invalid address length: {}", length),
+		}
 	}
 }
