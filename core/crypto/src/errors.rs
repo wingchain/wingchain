@@ -40,5 +40,17 @@ error_chain! {
 			description(""),
 			display("Invalid name: {}", path),
 		}
+		InvalidSecretKey {
+			description(""),
+			display("Invalid public key"),
+		}
+		InvalidPublicKey {
+			description(""),
+			display("Invalid public key"),
+		}
+		VerificationFailed {
+			description(""),
+			display("Verification failed"),
+		}
 	}
 }

@@ -123,7 +123,7 @@ impl Hash for CustomLib {
 }
 
 #[macro_export]
-macro_rules! declare_custom_lib {
+macro_rules! declare_hash_custom_lib {
 	($impl:path) => {
 		use std::ffi::CString;
 		use std::os::raw::{c_char, c_uchar, c_uint};
