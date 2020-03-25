@@ -16,10 +16,10 @@ use std::str::FromStr;
 
 pub use custom_lib::{CDsa, CDsaConf, CKeyPair, CVerifier};
 
+use crate::dsa::custom_lib::CustomLib;
 use crate::dsa::ed25519::Ed25519;
 use crate::dsa::sm2::SM2;
 use crate::errors;
-use crate::dsa::custom_lib::CustomLib;
 use std::path::PathBuf;
 
 mod custom_lib;
@@ -103,7 +103,9 @@ impl Dsa for DsaImpl {
 				Ed25519.key_pair_from_secret_key(secret_key)?,
 			)),
 			Self::SM2 => Ok(KeyPairImpl::SM2(SM2.key_pair_from_secret_key(secret_key)?)),
-			Self::Custom(custom) => Ok(KeyPairImpl::Custom(custom.key_pair_from_secret_key(secret_key)?)),
+			Self::Custom(custom) => Ok(KeyPairImpl::Custom(
+				custom.key_pair_from_secret_key(secret_key)?,
+			)),
 		}
 	}
 
@@ -114,7 +116,9 @@ impl Dsa for DsaImpl {
 				Ed25519.verifier_from_public_key(public_key)?,
 			)),
 			Self::SM2 => Ok(VerifierImpl::SM2(SM2.verifier_from_public_key(public_key)?)),
-			Self::Custom(custom) => Ok(VerifierImpl::Custom(custom.verifier_from_public_key(public_key)?)),
+			Self::Custom(custom) => Ok(VerifierImpl::Custom(
+				custom.verifier_from_public_key(public_key)?,
+			)),
 		}
 	}
 }

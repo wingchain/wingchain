@@ -17,7 +17,7 @@
 extern crate test;
 
 use crypto::dsa::DsaImpl::SM2;
-use crypto::dsa::{Dsa, DsaImpl, KeyPair, Verifier, CDsa, CKeyPair, CVerifier};
+use crypto::dsa::{CDsa, CKeyPair, CVerifier, Dsa, DsaImpl, KeyPair, Verifier};
 use crypto_dylib_samples_dsa::Ed25519;
 use std::hint::black_box;
 use test::Bencher;
@@ -165,7 +165,6 @@ fn bench_ed25519_sign_include_init_custom(b: &mut Bencher) {
 
 	let path = path.to_string_lossy();
 
-
 	let secret: [u8; 32] = [
 		184, 80, 22, 77, 31, 238, 200, 105, 138, 204, 163, 41, 148, 124, 152, 133, 189, 29, 148, 3,
 		77, 47, 187, 230, 8, 5, 152, 173, 190, 21, 178, 152,
@@ -228,9 +227,7 @@ fn bench_ed25519_verify_dalek(b: &mut Bencher) {
 
 	key_pair.public_key(&mut public_key);
 
-	let verifier = Ed25519
-		.verifier_from_public_key(&public_key)
-		.unwrap();
+	let verifier = Ed25519.verifier_from_public_key(&public_key).unwrap();
 
 	verifier.verify(&message, &signature).unwrap();
 
@@ -241,7 +238,6 @@ fn bench_ed25519_verify_dalek(b: &mut Bencher) {
 
 #[bench]
 fn bench_ed25519_verify_custom(b: &mut Bencher) {
-
 	use std::str::FromStr;
 
 	let path = utils::get_dylib("crypto_dylib_samples_dsa");
@@ -320,9 +316,7 @@ fn bench_ed25519_verify_include_init_dalek(b: &mut Bencher) {
 	let run = || {
 		let mut public_key = vec![0; 32];
 		key_pair.public_key(&mut public_key);
-		let verifier = Ed25519
-			.verifier_from_public_key(&public_key)
-			.unwrap();
+		let verifier = Ed25519.verifier_from_public_key(&public_key).unwrap();
 		verifier.verify(&message, &signature)
 	};
 
@@ -331,7 +325,6 @@ fn bench_ed25519_verify_include_init_dalek(b: &mut Bencher) {
 
 #[bench]
 fn bench_ed25519_verify_include_init_custom(b: &mut Bencher) {
-
 	use std::str::FromStr;
 
 	let path = utils::get_dylib("crypto_dylib_samples_dsa");

@@ -21,9 +21,9 @@ use libloading::os::unix as imp;
 use libloading::os::windows as imp;
 use libloading::{Library, Symbol};
 
+use crate::dsa::{Dsa, KeyPair, Verifier};
 use crate::errors;
 use std::ffi::CStr;
-use crate::dsa::{Dsa, KeyPair, Verifier};
 use std::rc::Rc;
 
 pub trait CDsa {
@@ -80,7 +80,7 @@ type CallName = unsafe extern "C" fn() -> *mut c_char;
 type CallNameFree = unsafe extern "C" fn(*mut c_char);
 
 type CallGenerateKeyPair =
-unsafe extern "C" fn(err: *mut c_uchar, err_len: *mut c_uint) -> *mut TKeyPair;
+	unsafe extern "C" fn(err: *mut c_uchar, err_len: *mut c_uint) -> *mut TKeyPair;
 type CallKeyPairFromSecretKey = unsafe extern "C" fn(
 	secret_key: *const c_uchar,
 	secret_key_len: c_uint,
@@ -88,9 +88,9 @@ type CallKeyPairFromSecretKey = unsafe extern "C" fn(
 	err_len: *mut c_uint,
 ) -> *mut TKeyPair;
 type CallKeyPairSecretKey =
-unsafe extern "C" fn(key_pair: *mut TKeyPair, out: *mut c_uchar, out_len: c_uint);
+	unsafe extern "C" fn(key_pair: *mut TKeyPair, out: *mut c_uchar, out_len: c_uint);
 type CallKeyPairPublicKey =
-unsafe extern "C" fn(key_pair: *mut TKeyPair, out: *mut c_uchar, out_len: c_uint);
+	unsafe extern "C" fn(key_pair: *mut TKeyPair, out: *mut c_uchar, out_len: c_uint);
 type CallKeyPairSign = unsafe extern "C" fn(
 	key_pair: *mut TKeyPair,
 	message: *const c_uchar,
@@ -289,8 +289,8 @@ pub struct CustomKeyPair {
 	signature_len: usize,
 }
 
-impl Drop for CustomKeyPair{
-	fn drop(&mut self){
+impl Drop for CustomKeyPair {
+	fn drop(&mut self) {
 		unsafe {
 			(self.call.call_key_pair_free)(self.inner);
 		}
@@ -303,8 +303,8 @@ pub struct CustomVerifier {
 	verifier_err_len: usize,
 }
 
-impl Drop for CustomVerifier{
-	fn drop(&mut self){
+impl Drop for CustomVerifier {
+	fn drop(&mut self) {
 		unsafe {
 			(self.call.call_verifier_free)(self.inner);
 		}
@@ -340,7 +340,12 @@ impl Dsa for CustomLib {
 	fn key_pair_from_secret_key(&self, secret_key: &[u8]) -> Result<Self::KeyPair, Self::Error> {
 		let (mut err, mut err_len) = (vec![0u8; self.err_len as usize], 0u32 as c_uint);
 		unsafe {
-			let raw = (self.call_key_pair_from_secret_key)(secret_key.as_ptr(), secret_key.len() as c_uint, err.as_mut_ptr(), &mut err_len as *mut c_uint);
+			let raw = (self.call_key_pair_from_secret_key)(
+				secret_key.as_ptr(),
+				secret_key.len() as c_uint,
+				err.as_mut_ptr(),
+				&mut err_len as *mut c_uint,
+			);
 			match err_len {
 				0 => Ok(CustomKeyPair {
 					inner: raw,

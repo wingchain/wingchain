@@ -16,7 +16,7 @@
 
 use std::os::raw::{c_char, c_uchar, c_uint};
 
-use crypto::dsa::{CDsaConf, DsaImpl, Dsa, KeyPair, Verifier};
+use crypto::dsa::{CDsaConf, Dsa, DsaImpl, KeyPair, Verifier};
 use libloading::{Library, Symbol};
 use std::ffi::CStr;
 use std::str::FromStr;
@@ -51,27 +51,32 @@ fn test_custom_lib_dsa() {
 	// public
 	let public_key = key_pair.public_key();
 
-	assert_eq!(public_key, vec![
-		137, 44, 137, 164, 205, 99, 29, 8, 218, 49, 70, 7, 34, 56, 20, 119, 86, 4, 83, 90,
-		5, 245, 14, 149, 157, 33, 32, 157, 1, 116, 14, 186
-	]);
+	assert_eq!(
+		public_key,
+		vec![
+			137, 44, 137, 164, 205, 99, 29, 8, 218, 49, 70, 7, 34, 56, 20, 119, 86, 4, 83, 90, 5,
+			245, 14, 149, 157, 33, 32, 157, 1, 116, 14, 186
+		]
+	);
 
 	// sign
 	let message = [97u8, 98, 99];
 	let signature = key_pair.sign(&message);
 
-	assert_eq!(signature, vec![
-		82, 19, 26, 105, 235, 178, 54, 112, 61, 224, 195, 88, 150, 137, 32, 46, 235, 209, 209,
-		108, 64, 153, 12, 58, 216, 179, 88, 38, 49, 167, 162, 103, 219, 116, 93, 187, 145, 86,
-		216, 98, 97, 135, 228, 15, 66, 246, 207, 232, 132, 182, 211, 206, 12, 220, 4, 96, 58,
-		254, 237, 8, 151, 3, 172, 14
-	]);
+	assert_eq!(
+		signature,
+		vec![
+			82, 19, 26, 105, 235, 178, 54, 112, 61, 224, 195, 88, 150, 137, 32, 46, 235, 209, 209,
+			108, 64, 153, 12, 58, 216, 179, 88, 38, 49, 167, 162, 103, 219, 116, 93, 187, 145, 86,
+			216, 98, 97, 135, 228, 15, 66, 246, 207, 232, 132, 182, 211, 206, 12, 220, 4, 96, 58,
+			254, 237, 8, 151, 3, 172, 14
+		]
+	);
 
 	// verify
 	let verifier = dsa.verifier_from_public_key(&public_key).unwrap();
 
 	assert!(verifier.verify(&message, &signature).is_ok());
-
 }
 
 #[test]
