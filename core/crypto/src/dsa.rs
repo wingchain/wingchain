@@ -12,26 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::path::PathBuf;
 use std::str::FromStr;
-
-pub use custom_lib::{CDsa, CDsaConf, CKeyPair, CVerifier};
 
 use crate::dsa::custom_lib::CustomLib;
 use crate::dsa::ed25519::Ed25519;
 use crate::dsa::sm2::SM2;
-use crate::errors;
-use std::path::PathBuf;
+use crate::{errors, DsaLength};
+
+pub use crate::dsa::custom_lib::CLength;
+use std::fmt::Debug;
 
 mod custom_lib;
 mod ed25519;
 mod sm2;
 
 pub trait Dsa {
-	type Error;
+	type Error: Debug;
 	type KeyPair: KeyPair;
 	type Verifier: Verifier;
 
 	fn name(&self) -> String;
+
+	fn length(&self) -> DsaLength;
 
 	/// dylib impl demands that Self::KeyPair should not out live self
 	fn generate_key_pair(&self) -> Result<Self::KeyPair, Self::Error>;
@@ -44,13 +47,13 @@ pub trait Dsa {
 }
 
 pub trait KeyPair {
-	fn public_key(&self) -> Vec<u8>;
-	fn secret_key(&self) -> Vec<u8>;
-	fn sign(&self, message: &[u8]) -> Vec<u8>;
+	fn public_key(&self, out: &mut [u8]);
+	fn secret_key(&self, out: &mut [u8]);
+	fn sign(&self, message: &[u8], out: &mut [u8]);
 }
 
 pub trait Verifier {
-	type Error;
+	type Error: Debug;
 	fn verify(&self, message: &[u8], signature: &[u8]) -> Result<(), Self::Error>;
 }
 
@@ -84,6 +87,15 @@ impl Dsa for DsaImpl {
 			Self::Ed25519 => Ed25519.name(),
 			Self::SM2 => SM2.name(),
 			Self::Custom(custom) => custom.name(),
+		}
+	}
+
+	#[inline]
+	fn length(&self) -> DsaLength {
+		match self {
+			Self::Ed25519 => Ed25519.length(),
+			Self::SM2 => SM2.length(),
+			Self::Custom(custom) => custom.length(),
 		}
 	}
 
@@ -140,25 +152,25 @@ impl FromStr for DsaImpl {
 }
 
 impl KeyPair for KeyPairImpl {
-	fn public_key(&self) -> Vec<u8> {
+	fn public_key(&self, out: &mut [u8]) {
 		match self {
-			KeyPairImpl::Ed25519(kp) => kp.public_key(),
-			KeyPairImpl::SM2(kp) => kp.public_key(),
-			KeyPairImpl::Custom(kp) => kp.public_key(),
+			KeyPairImpl::Ed25519(kp) => kp.public_key(out),
+			KeyPairImpl::SM2(kp) => kp.public_key(out),
+			KeyPairImpl::Custom(kp) => kp.public_key(out),
 		}
 	}
-	fn secret_key(&self) -> Vec<u8> {
+	fn secret_key(&self, out: &mut [u8]) {
 		match self {
-			KeyPairImpl::Ed25519(kp) => kp.secret_key(),
-			KeyPairImpl::SM2(kp) => kp.secret_key(),
-			KeyPairImpl::Custom(kp) => kp.secret_key(),
+			KeyPairImpl::Ed25519(kp) => kp.secret_key(out),
+			KeyPairImpl::SM2(kp) => kp.secret_key(out),
+			KeyPairImpl::Custom(kp) => kp.secret_key(out),
 		}
 	}
-	fn sign(&self, message: &[u8]) -> Vec<u8> {
+	fn sign(&self, message: &[u8], out: &mut [u8]) {
 		match self {
-			KeyPairImpl::Ed25519(kp) => kp.sign(message),
-			KeyPairImpl::SM2(kp) => kp.sign(message),
-			KeyPairImpl::Custom(kp) => kp.sign(message),
+			KeyPairImpl::Ed25519(kp) => kp.sign(message, out),
+			KeyPairImpl::SM2(kp) => kp.sign(message, out),
+			KeyPairImpl::Custom(kp) => kp.sign(message, out),
 		}
 	}
 }

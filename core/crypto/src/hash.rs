@@ -20,7 +20,7 @@ use sm3::SM3;
 
 use crate::errors;
 use crate::hash::custom_lib::CustomLib;
-use crate::KeyLength;
+use crate::HashLength;
 
 mod blake2b;
 mod custom_lib;
@@ -28,7 +28,7 @@ mod sm3;
 
 pub trait Hash {
 	fn name(&self) -> String;
-	fn key_length(&self) -> KeyLength;
+	fn length(&self) -> HashLength;
 	fn hash(&self, out: &mut [u8], data: &[u8]);
 }
 
@@ -53,13 +53,13 @@ impl Hash for HashImpl {
 		}
 	}
 	#[inline]
-	fn key_length(&self) -> KeyLength {
+	fn length(&self) -> HashLength {
 		match self {
-			Self::Blake2b160 => Blake2b160.key_length(),
-			Self::Blake2b256 => Blake2b256.key_length(),
-			Self::Blake2b512 => Blake2b512.key_length(),
-			Self::SM3 => SM3.key_length(),
-			Self::Custom(custom) => custom.key_length(),
+			Self::Blake2b160 => Blake2b160.length(),
+			Self::Blake2b256 => Blake2b256.length(),
+			Self::Blake2b512 => Blake2b512.length(),
+			Self::SM3 => SM3.length(),
+			Self::Custom(custom) => custom.length(),
 		}
 	}
 	#[inline]

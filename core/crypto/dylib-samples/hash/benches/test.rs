@@ -31,14 +31,15 @@ fn bench_hash_native(b: &mut Bencher) {
 	b.iter(|| black_box(hash.hash(&mut out, &data)));
 }
 
-/// to run with dylib, should `cargo +nightly build --release` first.
 #[bench]
 fn bench_hash_dylib(b: &mut Bencher) {
 	let path = utils::get_dylib("crypto_dylib_samples_hash");
 
-	println!("path: {:?}", path);
-
-	assert!(path.exists());
+	assert!(
+		path.exists(),
+		"should build first to make exist: {:?}",
+		path
+	);
 
 	let path = path.to_string_lossy();
 	let hasher = HashImpl::from_str(&path).unwrap();
@@ -56,7 +57,6 @@ fn bench_name_native(b: &mut Bencher) {
 	b.iter(|| black_box(hash.name()));
 }
 
-/// to run with dylib, should `cargo +nightly build --release` first.
 #[bench]
 fn bench_name_dylib(b: &mut Bencher) {
 	let path = utils::get_dylib("crypto_dylib_samples_hash");
@@ -77,10 +77,9 @@ fn bench_name_dylib(b: &mut Bencher) {
 fn bench_key_length_native(b: &mut Bencher) {
 	let hash = HashImpl::Blake2b256;
 
-	b.iter(|| black_box(hash.key_length()));
+	b.iter(|| black_box(hash.length()));
 }
 
-/// to run with dylib, should `cargo +nightly build --release` first.
 #[bench]
 fn bench_key_length_dylib(b: &mut Bencher) {
 	let path = utils::get_dylib("crypto_dylib_samples_hash");
@@ -94,7 +93,7 @@ fn bench_key_length_dylib(b: &mut Bencher) {
 	let path = path.to_string_lossy();
 	let hasher = HashImpl::from_str(&path).unwrap();
 
-	b.iter(|| black_box(hasher.key_length()));
+	b.iter(|| black_box(hasher.length()));
 }
 
 #[bench]

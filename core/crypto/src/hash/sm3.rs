@@ -15,7 +15,7 @@
 use yogcrypt::sm3::sm3_enc;
 
 use crate::hash::Hash;
-use crate::KeyLength;
+use crate::HashLength;
 
 pub struct SM3;
 
@@ -23,8 +23,8 @@ impl Hash for SM3 {
 	fn name(&self) -> String {
 		"sm3".to_string()
 	}
-	fn key_length(&self) -> KeyLength {
-		KeyLength::KeyLength32
+	fn length(&self) -> HashLength {
+		HashLength::HashLength32
 	}
 	fn hash(&self, out: &mut [u8], data: &[u8]) {
 		let result = sm3_enc(data);

@@ -20,8 +20,8 @@ use ring::signature::{Ed25519KeyPair, KeyPair, VerificationAlgorithm, ED25519};
 use untrusted::Input;
 
 use crate::dsa::{Dsa, KeyPair as KeyPairT, Verifier as VerifierT};
-use crate::errors;
 use crate::errors::ResultExt;
+use crate::{errors, DsaLength};
 
 pub struct Ed25519;
 
@@ -36,6 +36,10 @@ impl Dsa for Ed25519 {
 
 	fn name(&self) -> String {
 		"ed25519".to_string()
+	}
+
+	fn length(&self) -> DsaLength {
+		DsaLength::DsaLength32_32_64
 	}
 
 	fn generate_key_pair(&self) -> errors::Result<Self::KeyPair> {
@@ -67,18 +71,15 @@ impl Dsa for Ed25519 {
 }
 
 impl KeyPairT for (Ed25519KeyPair, [u8; 32]) {
-	fn public_key(&self) -> Vec<u8> {
-		self.0.public_key().as_ref().to_vec()
+	fn public_key(&self, out: &mut [u8]) {
+		out.copy_from_slice(self.0.public_key().as_ref())
 	}
-	fn secret_key(&self) -> Vec<u8> {
-		self.1.to_vec()
+	fn secret_key(&self, out: &mut [u8]) {
+		out.copy_from_slice(&self.1)
 	}
-	fn sign(&self, message: &[u8]) -> Vec<u8> {
+	fn sign(&self, message: &[u8], out: &mut [u8]) {
 		let signature = self.0.sign(&message);
-
-		let signature = signature.as_ref().to_vec();
-
-		signature
+		out.copy_from_slice(signature.as_ref())
 	}
 }
 
@@ -144,7 +145,10 @@ mod tests {
 		];
 		let key_pair = Ed25519.key_pair_from_secret_key(&secret).unwrap();
 
-		let public_key = key_pair.public_key();
+		let (_secret_len, public_len, sig_len) = Ed25519.length().into();
+
+		let mut public_key = vec![0u8; public_len];
+		key_pair.public_key(&mut public_key);
 
 		assert_eq!(
 			public_key,
@@ -156,7 +160,8 @@ mod tests {
 
 		let message: Vec<u8> = vec![97, 98, 99];
 
-		let signature = key_pair.sign(&message);
+		let mut signature = vec![0u8; sig_len];
+		key_pair.sign(&message, &mut signature);
 
 		assert_eq!(
 			signature,

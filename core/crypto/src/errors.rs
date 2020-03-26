@@ -32,13 +32,17 @@ error_chain! {
 			description(""),
 			display("Custom lib load failed: {}", path),
 		}
-		InvalidKeyLength(length: usize) {
+		InvalidHashLength(length: usize) {
 			description(""),
-			display("Invalid key length: {}", length),
+			display("Invalid hash length: {}", length),
 		}
 		InvalidName(path: String) {
 			description(""),
 			display("Invalid name: {}", path),
+		}
+		InvalidDsaLength(length: (usize, usize, usize)) {
+			description(""),
+			display("Invalid dsa length: {:?}", length),
 		}
 		InvalidSecretKey {
 			description(""),
@@ -51,6 +55,10 @@ error_chain! {
 		VerificationFailed {
 			description(""),
 			display("Verification failed"),
+		}
+		InvalidAddressLength(length: usize) {
+			description(""),
+			display("Invalid address length: {}", length),
 		}
 	}
 }

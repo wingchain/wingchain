@@ -21,7 +21,7 @@ use std::str::FromStr;
 use libloading::{Library, Symbol};
 
 use crypto::hash::{Hash, HashImpl};
-use crypto::KeyLength;
+use crypto::HashLength;
 
 #[test]
 fn test_custom_lib_hash() {
@@ -39,8 +39,8 @@ fn test_custom_lib_hash() {
 	let name = hasher.name();
 	assert_eq!(name, "blake2b_256".to_string());
 
-	let key_length = hasher.key_length();
-	assert_eq!(key_length, KeyLength::KeyLength32);
+	let length = hasher.length();
+	assert_eq!(length, HashLength::HashLength32);
 
 	let data = [1u8, 2u8, 3u8];
 	let mut out = [0u8; 32];
@@ -82,16 +82,15 @@ fn test_dylib_hash() {
 	assert_eq!(name, "blake2b_256");
 
 	// key length
-	type CallKeyLength = unsafe extern "C" fn() -> usize;
+	type CallHashLength = unsafe extern "C" fn() -> usize;
 
-	let key_length: usize = unsafe {
-		let call_key_length: Symbol<CallKeyLength> =
-			lib.get(b"_crypto_hash_custom_key_length").unwrap();
-		let key_length = call_key_length();
-		key_length as usize
+	let length: usize = unsafe {
+		let call_length: Symbol<CallHashLength> = lib.get(b"_crypto_hash_custom_length").unwrap();
+		let length = call_length();
+		length as usize
 	};
 
-	assert_eq!(key_length, 32);
+	assert_eq!(length, 32);
 
 	// hash
 	type CallHash = unsafe extern "C" fn(*mut c_uchar, c_uint, *const c_uchar, c_uint);

@@ -27,9 +27,13 @@ fn test_from_ed25519() {
 		184, 80, 22, 77, 31, 238, 200, 105, 138, 204, 163, 41, 148, 124, 152, 133, 189, 29, 148, 3,
 		77, 47, 187, 230, 8, 5, 152, 173, 190, 21, 178, 152,
 	];
+
+	let (_secret_len, public_len, sig_len) = dsa_impl.length().into();
+
 	let key_pair = dsa_impl.key_pair_from_secret_key(&secret).unwrap();
 
-	let public_key = key_pair.public_key();
+	let mut public_key = vec![0u8; public_len];
+	key_pair.public_key(&mut public_key);
 
 	assert_eq!(
 		public_key,
@@ -41,7 +45,8 @@ fn test_from_ed25519() {
 
 	let message: Vec<u8> = vec![97, 98, 99];
 
-	let signature = key_pair.sign(&message);
+	let mut signature = vec![0u8; sig_len];
+	key_pair.sign(&message, &mut signature);
 
 	assert_eq!(
 		signature,
@@ -77,7 +82,11 @@ fn test_from_sm2() {
 	];
 	let key_pair = dsa_impl.key_pair_from_secret_key(&secret).unwrap();
 
-	let public_key = key_pair.public_key();
+	let (_secret_len, public_len, sig_len) = dsa_impl.length().into();
+
+	let mut public_key = vec![0u8; public_len];
+
+	key_pair.public_key(&mut public_key);
 
 	assert_eq!(
 		public_key,
@@ -91,7 +100,8 @@ fn test_from_sm2() {
 
 	let message: Vec<u8> = vec![97, 98, 99];
 
-	let signature = key_pair.sign(&message);
+	let mut signature = vec![0u8; sig_len];
+	key_pair.sign(&message, &mut signature);
 
 	assert_eq!(signature.len(), 64);
 

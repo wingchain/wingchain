@@ -7,6 +7,7 @@ members = [
 	"core/crypto",
 	"core/crypto/dylib-samples/hash",
 	"core/crypto/dylib-samples/dsa",
+	"core/crypto/dylib-samples/address",
 	"core/primitives",
 	"core/node/db",
 	"core/node/statedb",

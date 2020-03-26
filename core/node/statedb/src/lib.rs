@@ -23,7 +23,7 @@ use memory_db::{KeyFunction, PrefixedKey};
 use trie_db::{Trie, TrieMut};
 
 use crypto::hash::{Hash, HashImpl};
-use crypto::KeyLength;
+use crypto::HashLength;
 use node_db::{DBKey, DBTransaction, DBValue, DB};
 pub use trie::{
 	DefaultMemoryDB, DefaultTrieDB, DefaultTrieDBMut, TrieHasher20, TrieHasher32, TrieHasher64,
@@ -40,14 +40,14 @@ pub struct StateDB {
 	db: Arc<DB>,
 	#[allow(dead_code)]
 	hasher: Arc<HashImpl>,
-	key_length: KeyLength,
+	key_length: HashLength,
 }
 
 impl StateDB {
 	pub fn new(db: Arc<DB>, hasher: Arc<HashImpl>) -> errors::Result<Self> {
 		load_hasher(hasher.clone())?;
 
-		let key_length = hasher.key_length();
+		let key_length = hasher.length();
 		Ok(Self {
 			db,
 			hasher,
@@ -57,25 +57,25 @@ impl StateDB {
 
 	pub fn default_root(&self) -> Vec<u8> {
 		match self.key_length {
-			KeyLength::KeyLength20 => self.default_root_for_hash::<TrieHasher20>(),
-			KeyLength::KeyLength32 => self.default_root_for_hash::<TrieHasher32>(),
-			KeyLength::KeyLength64 => self.default_root_for_hash::<TrieHasher64>(),
+			HashLength::HashLength20 => self.default_root_for_hash::<TrieHasher20>(),
+			HashLength::HashLength32 => self.default_root_for_hash::<TrieHasher32>(),
+			HashLength::HashLength64 => self.default_root_for_hash::<TrieHasher64>(),
 		}
 	}
 
 	pub fn get(&self, root: &[u8], key: &[u8]) -> errors::Result<Option<DBValue>> {
 		let result = match self.key_length {
-			KeyLength::KeyLength20 => {
+			HashLength::HashLength20 => {
 				let mut typed_root = [0u8; 20];
 				typed_root.copy_from_slice(&root);
 				self.get_for_hasher::<TrieHasher20>(typed_root, key)
 			}
-			KeyLength::KeyLength32 => {
+			HashLength::HashLength32 => {
 				let mut typed_root = [0u8; 32];
 				typed_root.copy_from_slice(&root);
 				self.get_for_hasher::<TrieHasher32>(typed_root, key)
 			}
-			KeyLength::KeyLength64 => {
+			HashLength::HashLength64 => {
 				let mut typed_root = [0u8; 64];
 				typed_root.copy_from_slice(&root);
 				let typed_root = H512::from(typed_root);
@@ -116,21 +116,21 @@ impl StateDB {
 		I: IntoIterator<Item = (DBKey, Option<DBValue>)>,
 	{
 		let result = match self.key_length {
-			KeyLength::KeyLength20 => {
+			HashLength::HashLength20 => {
 				let mut typed_root = [0u8; 20];
 				typed_root.copy_from_slice(&root);
 
 				self.prepare_update_for_hasher::<_, TrieHasher20>(typed_root, data, new)
 					.map(|(root, transaction)| (root.to_vec(), transaction))?
 			}
-			KeyLength::KeyLength32 => {
+			HashLength::HashLength32 => {
 				let mut typed_root = [0u8; 32];
 				typed_root.copy_from_slice(&root);
 
 				self.prepare_update_for_hasher::<_, TrieHasher32>(typed_root, data, new)
 					.map(|(root, transaction)| (root.to_vec(), transaction))?
 			}
-			KeyLength::KeyLength64 => {
+			HashLength::HashLength64 => {
 				let mut typed_root = [0u8; 64];
 				typed_root.copy_from_slice(&root);
 				let typed_root = H512::from(typed_root);
@@ -236,19 +236,19 @@ pub enum StateDBStmt {
 }
 
 impl StateDBStmt {
-	pub fn new(db: Arc<DB>, root: &[u8], key_length: &KeyLength) -> Self {
+	pub fn new(db: Arc<DB>, root: &[u8], key_length: &HashLength) -> Self {
 		match key_length {
-			KeyLength::KeyLength20 => {
+			HashLength::HashLength20 => {
 				let mut typed_root = [0u8; 20];
 				typed_root.copy_from_slice(&root);
 				Self::Hasher20(StateDBStmtForHasher::<TrieHasher20>::new(db, typed_root))
 			}
-			KeyLength::KeyLength32 => {
+			HashLength::HashLength32 => {
 				let mut typed_root = [0u8; 32];
 				typed_root.copy_from_slice(&root);
 				Self::Hasher32(StateDBStmtForHasher::<TrieHasher32>::new(db, typed_root))
 			}
-			KeyLength::KeyLength64 => {
+			HashLength::HashLength64 => {
 				let mut typed_root = [0u8; 64];
 				typed_root.copy_from_slice(&root);
 				let typed_root = H512::from(typed_root);

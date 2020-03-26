@@ -12,47 +12,41 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#[macro_use]
-extern crate crypto;
-
 use rust_crypto::blake2b;
 
-use crypto::hash::Hash;
-use crypto::HashLength;
+use crate::address::Address;
+use crate::AddressLength;
 
-pub struct Blake2b256;
+pub struct Blake2b160;
 
-/// A Blake2b256 implementation for sample
-impl Hash for Blake2b256 {
+impl Address for Blake2b160 {
 	fn name(&self) -> String {
-		"blake2b_256".to_string()
+		"blake2b160".to_string()
 	}
-	fn length(&self) -> HashLength {
-		HashLength::HashLength32
+	fn length(&self) -> AddressLength {
+		AddressLength::AddressLength20
 	}
-	fn hash(&self, out: &mut [u8], data: &[u8]) {
+	fn address(&self, out: &mut [u8], data: &[u8]) {
 		assert_eq!(out.len(), self.length().into());
 		blake2b::Blake2b::blake2b(out, data, &[]);
 	}
 }
-
-declare_hash_custom_lib!(Blake2b256);
 
 #[cfg(test)]
 mod tests {
 	use super::*;
 
 	#[test]
-	fn test() {
-		let data = [1u8, 2u8, 3u8];
-		let mut out = [0u8; 32];
-		Blake2b256.hash(&mut out, &data);
+	fn test_address_blake2b_160() {
+		let data = (0u8..32).collect::<Vec<_>>();
+		let mut out = [0u8; 20];
+		Blake2b160.address(&mut out, &data);
 
 		assert_eq!(
 			out,
 			[
-				17, 192, 231, 155, 113, 195, 151, 108, 205, 12, 2, 209, 49, 14, 37, 22, 192, 142,
-				220, 157, 139, 111, 87, 204, 214, 128, 214, 58, 77, 142, 114, 218
+				177, 177, 51, 185, 159, 81, 110, 108, 130, 206, 218, 137, 46, 245, 175, 80, 250,
+				75, 78, 113
 			]
 		);
 	}

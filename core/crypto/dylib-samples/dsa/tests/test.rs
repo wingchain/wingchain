@@ -16,7 +16,7 @@
 
 use std::os::raw::{c_char, c_uchar, c_uint};
 
-use crypto::dsa::{CDsaConf, Dsa, DsaImpl, KeyPair, Verifier};
+use crypto::dsa::{CLength, Dsa, DsaImpl, KeyPair, Verifier};
 use libloading::{Library, Symbol};
 use std::ffi::CStr;
 use std::str::FromStr;
@@ -34,6 +34,8 @@ fn test_custom_lib_dsa() {
 	let path = path.to_string_lossy();
 	let dsa = DsaImpl::from_str(&path).unwrap();
 
+	let (secret_len, public_len, signature_len) = dsa.length().into();
+
 	assert_eq!("ed25519", dsa.name());
 
 	let secret: [u8; 32] = [
@@ -44,12 +46,14 @@ fn test_custom_lib_dsa() {
 	let key_pair = dsa.key_pair_from_secret_key(&secret).unwrap();
 
 	// secret
-	let dump_secret = key_pair.secret_key();
+	let mut dump_secret = vec![0u8; secret_len];
+	key_pair.secret_key(&mut dump_secret);
 
 	assert_eq!(dump_secret, secret);
 
 	// public
-	let public_key = key_pair.public_key();
+	let mut public_key = vec![0u8; public_len];
+	key_pair.public_key(&mut public_key);
 
 	assert_eq!(
 		public_key,
@@ -61,7 +65,8 @@ fn test_custom_lib_dsa() {
 
 	// sign
 	let message = [97u8, 98, 99];
-	let signature = key_pair.sign(&message);
+	let mut signature = vec![0u8; signature_len];
+	key_pair.sign(&message, &mut signature);
 
 	assert_eq!(
 		signature,
@@ -104,13 +109,11 @@ fn test_dylib_dsa() {
 	type CallName = unsafe extern "C" fn() -> *mut c_char;
 	type CallNameFree = unsafe extern "C" fn(*mut c_char);
 
-	type CallGenerateKeyPair =
-		unsafe extern "C" fn(err: *mut c_uchar, err_len: *mut c_uint) -> *mut TKeyPair;
+	type CallGenerateKeyPair = unsafe extern "C" fn(err: *mut c_uint) -> *mut TKeyPair;
 	type CallKeyPairFromSecretKey = unsafe extern "C" fn(
 		secret_key: *const c_uchar,
 		secret_key_len: c_uint,
-		err: *mut c_uchar,
-		err_len: *mut c_uint,
+		err: *mut c_uint,
 	) -> *mut TKeyPair;
 	type CallKeyPairSecretKey =
 		unsafe extern "C" fn(key_pair: *mut TKeyPair, out: *mut c_uchar, out_len: c_uint);
@@ -127,8 +130,7 @@ fn test_dylib_dsa() {
 	type CallVerifierFromPublicKey = unsafe extern "C" fn(
 		public_key: *const c_uchar,
 		public_key_len: c_uint,
-		err: *mut c_uchar,
-		err_len: *mut c_uint,
+		err: *mut c_uint,
 	) -> *mut TVerifier;
 	type CallVerifierVerify = unsafe extern "C" fn(
 		verifier: *mut TVerifier,
@@ -136,20 +138,19 @@ fn test_dylib_dsa() {
 		message_len: c_uint,
 		signature: *const c_uchar,
 		signature_len: c_uint,
-		err: *mut c_uchar,
-		err_len: *mut c_uint,
+		err: *mut c_uint,
 	);
 	type CallVerifierFree = unsafe extern "C" fn(verifier: *mut TVerifier);
 
-	type CallConf = unsafe extern "C" fn() -> CDsaConf;
+	type CallLength = unsafe extern "C" fn() -> CLength;
 
-	// conf
-	let conf: CDsaConf = unsafe {
-		let call_conf: Symbol<CallConf> = lib.get(b"_crypto_dsa_custom_conf").unwrap();
-		let conf = call_conf();
-		conf
+	// length
+	let length: CLength = unsafe {
+		let call_length: Symbol<CallLength> = lib.get(b"_crypto_dsa_custom_length").unwrap();
+		let length = call_length();
+		length
 	};
-	assert_eq!(18, conf.err_len);
+	assert_eq!(32, length.public_len);
 
 	// name
 	let name: String = unsafe {
@@ -168,11 +169,11 @@ fn test_dylib_dsa() {
 	unsafe {
 		let call_generate_key_pair: Symbol<CallGenerateKeyPair> =
 			lib.get(b"_crypto_dsa_custom_generate_key_pair").unwrap();
-		let (mut err, mut err_len) = (vec![0u8; conf.err_len as usize], 0u32 as c_uint);
-		let raw = call_generate_key_pair(err.as_mut_ptr(), &mut err_len as *mut c_uint);
-		match err_len {
+		let mut err = 0u32 as c_uint;
+		let raw = call_generate_key_pair(&mut err as *mut c_uint);
+		match err {
 			0 => Ok(raw),
-			_ => Err(String::from_utf8(err[..err_len as usize].to_vec()).unwrap()),
+			_ => Err(()),
 		}
 	}
 	.unwrap();
@@ -186,22 +187,21 @@ fn test_dylib_dsa() {
 		let call_key_pair_from_secret_key: Symbol<CallKeyPairFromSecretKey> = lib
 			.get(b"_crypto_dsa_custom_key_pair_from_secret_key")
 			.unwrap();
-		let (mut err, mut err_len) = (vec![0u8; conf.err_len as usize], 0u32 as c_uint);
+		let mut err = 0u32 as c_uint;
 		let raw = call_key_pair_from_secret_key(
 			secret.as_ptr(),
 			secret.len() as c_uint,
-			err.as_mut_ptr(),
-			&mut err_len as *mut c_uint,
+			&mut err as *mut c_uint,
 		);
-		match err_len {
+		match err {
 			0 => Ok(raw),
-			_ => Err(String::from_utf8(err[..err_len as usize].to_vec()).unwrap()),
+			_ => Err(()),
 		}
 	}
 	.unwrap();
 
 	// secret key
-	let mut out = vec![0u8; conf.secret_len as usize];
+	let mut out = vec![0u8; length.secret_len as usize];
 	unsafe {
 		let call_key_pair_secret_key: Symbol<CallKeyPairSecretKey> =
 			lib.get(b"_crypto_dsa_custom_key_pair_secret_key").unwrap();
@@ -211,7 +211,7 @@ fn test_dylib_dsa() {
 	assert_eq!(out, secret);
 
 	// public key
-	let mut public_key = vec![0u8; conf.secret_len as usize];
+	let mut public_key = vec![0u8; length.secret_len as usize];
 	unsafe {
 		let call_key_pair_public_key: Symbol<CallKeyPairPublicKey> =
 			lib.get(b"_crypto_dsa_custom_key_pair_public_key").unwrap();
@@ -232,7 +232,7 @@ fn test_dylib_dsa() {
 
 	// sign
 	let message = [97u8, 98, 99];
-	let mut signature = vec![0u8; conf.signature_len as usize];
+	let mut signature = vec![0u8; length.signature_len as usize];
 	unsafe {
 		let call_key_pair_sign: Symbol<CallKeyPairSign> =
 			lib.get(b"_crypto_dsa_custom_key_pair_sign").unwrap();
@@ -259,16 +259,15 @@ fn test_dylib_dsa() {
 		let call_verifier_from_public_key: Symbol<CallVerifierFromPublicKey> = lib
 			.get(b"_crypto_dsa_custom_verifier_from_public_key")
 			.unwrap();
-		let (mut err, mut err_len) = (vec![0u8; conf.err_len as usize], 0u32 as c_uint);
+		let mut err = 0u32 as c_uint;
 		let raw = call_verifier_from_public_key(
 			public_key.as_ptr(),
 			public_key.len() as c_uint,
-			err.as_mut_ptr(),
-			&mut err_len as *mut c_uint,
+			&mut err as *mut c_uint,
 		);
-		match err_len {
+		match err {
 			0 => Ok(raw),
-			_ => Err(String::from_utf8(err[..err_len as usize].to_vec()).unwrap()),
+			_ => Err(()),
 		}
 	}
 	.unwrap();
@@ -277,19 +276,18 @@ fn test_dylib_dsa() {
 	unsafe {
 		let call_verifier_verify: Symbol<CallVerifierVerify> =
 			lib.get(b"_crypto_dsa_custom_verifier_verify").unwrap();
-		let (mut err, mut err_len) = (vec![0u8; conf.verifier_err_len as usize], 0u32 as c_uint);
+		let mut err = 0u32 as c_uint;
 		call_verifier_verify(
 			verifier,
 			message.as_ptr(),
 			message.len() as c_uint,
 			signature.as_ptr(),
 			signature.len() as c_uint,
-			err.as_mut_ptr(),
-			&mut err_len as *mut c_uint,
+			&mut err as *mut c_uint,
 		);
-		match err_len {
+		match err {
 			0 => Ok(()),
-			_ => Err(String::from_utf8(err[..err_len as usize].to_vec()).unwrap()),
+			_ => Err(()),
 		}
 	}
 	.unwrap();

@@ -23,7 +23,7 @@ use reference_trie::ReferenceNodeCodec;
 use trie_db::{DBValue, TrieLayout};
 
 use crypto::hash::{Hash, HashImpl};
-use crypto::KeyLength;
+use crypto::HashLength;
 use lazy_static::lazy_static;
 
 use crate::errors;
@@ -43,9 +43,9 @@ pub struct TrieHasher64;
 
 /// should call load before using TrieHasher20/TrieHasher32/TrieHasher64
 pub fn load_hasher(hash_impl: Arc<HashImpl>) -> errors::Result<()> {
-	let key_length = hash_impl.key_length();
-	match key_length {
-		KeyLength::KeyLength20 => {
+	let length = hash_impl.length();
+	match length {
+		HashLength::HashLength20 => {
 			let name = hash_impl.name();
 			match HASH_IMPL_20.set(hash_impl) {
 				Ok(_) => (),
@@ -60,7 +60,7 @@ pub fn load_hasher(hash_impl: Arc<HashImpl>) -> errors::Result<()> {
 				)),
 			}
 		}
-		KeyLength::KeyLength32 => {
+		HashLength::HashLength32 => {
 			let name = hash_impl.name();
 			match HASH_IMPL_32.set(hash_impl) {
 				Ok(_) => (),
@@ -75,7 +75,7 @@ pub fn load_hasher(hash_impl: Arc<HashImpl>) -> errors::Result<()> {
 				)),
 			}
 		}
-		KeyLength::KeyLength64 => {
+		HashLength::HashLength64 => {
 			let name = hash_impl.name();
 			match HASH_IMPL_64.set(hash_impl) {
 				Ok(_) => (),

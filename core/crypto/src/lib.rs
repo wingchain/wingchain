@@ -14,42 +14,105 @@
 
 use std::convert::TryFrom;
 
+pub mod address;
 pub mod dsa;
 pub mod errors;
 pub mod hash;
 
 #[derive(PartialEq, Debug, Clone)]
-pub enum KeyLength {
+pub enum HashLength {
 	/// 160 bits
-	KeyLength20,
+	HashLength20,
 
 	/// 256 bits
-	KeyLength32,
+	HashLength32,
 
 	/// 512 bits
-	KeyLength64,
+	HashLength64,
 }
 
-impl Into<usize> for KeyLength {
+impl Into<usize> for HashLength {
 	fn into(self) -> usize {
 		match self {
-			KeyLength::KeyLength20 => 20,
-			KeyLength::KeyLength32 => 32,
-			KeyLength::KeyLength64 => 64,
+			HashLength::HashLength20 => 20,
+			HashLength::HashLength32 => 32,
+			HashLength::HashLength64 => 64,
 		}
 	}
 }
 
-impl TryFrom<usize> for KeyLength {
+impl TryFrom<usize> for HashLength {
 	type Error = errors::Error;
 
 	#[inline]
 	fn try_from(i: usize) -> Result<Self, Self::Error> {
 		match i {
-			20 => Ok(KeyLength::KeyLength20),
-			32 => Ok(KeyLength::KeyLength32),
-			64 => Ok(KeyLength::KeyLength64),
-			other => Err(errors::ErrorKind::InvalidKeyLength(other).into()),
+			20 => Ok(HashLength::HashLength20),
+			32 => Ok(HashLength::HashLength32),
+			64 => Ok(HashLength::HashLength64),
+			other => Err(errors::ErrorKind::InvalidHashLength(other).into()),
+		}
+	}
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum DsaLength {
+	// secret key 32, public key 32, signature 64
+	DsaLength32_32_64,
+
+	// secret key 32, public key 65, signature 64
+	DsaLength32_65_64,
+}
+
+impl Into<(usize, usize, usize)> for DsaLength {
+	fn into(self) -> (usize, usize, usize) {
+		match self {
+			DsaLength::DsaLength32_32_64 => (32, 32, 64),
+			DsaLength::DsaLength32_65_64 => (32, 65, 64),
+		}
+	}
+}
+
+impl TryFrom<(usize, usize, usize)> for DsaLength {
+	type Error = errors::Error;
+
+	#[inline]
+	fn try_from(i: (usize, usize, usize)) -> Result<Self, Self::Error> {
+		match i {
+			(32, 32, 64) => Ok(DsaLength::DsaLength32_32_64),
+			(32, 65, 64) => Ok(DsaLength::DsaLength32_65_64),
+			other => Err(errors::ErrorKind::InvalidDsaLength(other).into()),
+		}
+	}
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum AddressLength {
+	/// 160 bits
+	AddressLength20,
+
+	/// 256 bits
+	AddressLength32,
+}
+
+impl Into<usize> for AddressLength {
+	fn into(self) -> usize {
+		match self {
+			AddressLength::AddressLength20 => 20,
+			AddressLength::AddressLength32 => 32,
+		}
+	}
+}
+
+impl TryFrom<usize> for AddressLength {
+	type Error = errors::Error;
+
+	#[inline]
+	fn try_from(i: usize) -> Result<Self, Self::Error> {
+		match i {
+			20 => Ok(AddressLength::AddressLength20),
+			32 => Ok(AddressLength::AddressLength32),
+			other => Err(errors::ErrorKind::InvalidAddressLength(other).into()),
 		}
 	}
 }

@@ -23,21 +23,21 @@ use libloading::os::unix as imp;
 use libloading::os::windows as imp;
 use libloading::{Library, Symbol};
 
-use crate::hash::Hash;
-use crate::{errors, HashLength};
+use crate::address::Address;
+use crate::{errors, AddressLength};
 
 type CallName = unsafe extern "C" fn() -> *mut c_char;
 type CallNameFree = unsafe extern "C" fn(*mut c_char);
-type CallHashLength = unsafe extern "C" fn() -> c_uint;
-type CallHash = unsafe extern "C" fn(*mut c_uchar, c_uint, *const c_uchar, c_uint);
+type CallAddressLength = unsafe extern "C" fn() -> c_uint;
+type CallAddress = unsafe extern "C" fn(*mut c_uchar, c_uint, *const c_uchar, c_uint);
 
 pub struct CustomLib {
 	#[allow(dead_code)]
 	/// lib is referred by symbols, should be kept
 	lib: Library,
 	name: String,
-	length: HashLength,
-	call_hash: imp::Symbol<CallHash>,
+	length: AddressLength,
+	call_address: imp::Symbol<CallAddress>,
 }
 
 impl CustomLib {
@@ -46,22 +46,24 @@ impl CustomLib {
 
 		let lib = Library::new(path).map_err(err)?;
 
-		let (call_name, call_name_free, call_length, call_hash) = unsafe {
-			let call_name: Symbol<CallName> = lib.get(b"_crypto_hash_custom_name").map_err(err)?;
+		let (call_name, call_name_free, call_length, call_address) = unsafe {
+			let call_name: Symbol<CallName> =
+				lib.get(b"_crypto_address_custom_name").map_err(err)?;
 			let call_name = call_name.into_raw();
 
 			let call_name_free: Symbol<CallNameFree> =
-				lib.get(b"_crypto_hash_custom_name_free").map_err(err)?;
+				lib.get(b"_crypto_address_custom_name_free").map_err(err)?;
 			let call_name_free = call_name_free.into_raw();
 
-			let call_length: Symbol<CallHashLength> =
-				lib.get(b"_crypto_hash_custom_length").map_err(err)?;
+			let call_length: Symbol<CallAddressLength> =
+				lib.get(b"_crypto_address_custom_length").map_err(err)?;
 			let call_length = call_length.into_raw();
 
-			let call_hash: Symbol<CallHash> = lib.get(b"_crypto_hash_custom_hash").map_err(err)?;
-			let call_hash = call_hash.into_raw();
+			let call_address: Symbol<CallAddress> =
+				lib.get(b"_crypto_address_custom_address").map_err(err)?;
+			let call_address = call_address.into_raw();
 
-			(call_name, call_name_free, call_length, call_hash)
+			(call_name, call_name_free, call_length, call_address)
 		};
 
 		let name = Self::name(&call_name, &call_name_free, &path)?;
@@ -71,7 +73,7 @@ impl CustomLib {
 			lib,
 			name,
 			length,
-			call_hash,
+			call_address,
 		})
 	}
 
@@ -92,7 +94,7 @@ impl CustomLib {
 		Ok(name)
 	}
 
-	fn length(call_length: &imp::Symbol<CallHashLength>) -> errors::Result<HashLength> {
+	fn length(call_length: &imp::Symbol<CallAddressLength>) -> errors::Result<AddressLength> {
 		let length: usize = unsafe {
 			let length = call_length();
 			length as usize
@@ -102,17 +104,17 @@ impl CustomLib {
 	}
 }
 
-impl Hash for CustomLib {
+impl Address for CustomLib {
 	fn name(&self) -> String {
 		self.name.clone()
 	}
 
-	fn length(&self) -> HashLength {
+	fn length(&self) -> AddressLength {
 		self.length.clone()
 	}
-	fn hash(&self, out: &mut [u8], data: &[u8]) {
+	fn address(&self, out: &mut [u8], data: &[u8]) {
 		unsafe {
-			(self.call_hash)(
+			(self.call_address)(
 				out.as_mut_ptr(),
 				out.len() as c_uint,
 				data.as_ptr(),
@@ -123,19 +125,19 @@ impl Hash for CustomLib {
 }
 
 #[macro_export]
-macro_rules! declare_hash_custom_lib {
+macro_rules! declare_address_custom_lib {
 	($impl:path) => {
 		use std::ffi::CString;
 		use std::os::raw::{c_char, c_uchar, c_uint};
 
 		#[no_mangle]
-		pub extern "C" fn _crypto_hash_custom_name() -> *mut c_char {
+		pub extern "C" fn _crypto_address_custom_name() -> *mut c_char {
 			let name = $impl.name();
 			CString::new(name).expect("qed").into_raw()
 		}
 
 		#[no_mangle]
-		pub extern "C" fn _crypto_hash_custom_name_free(name: *mut c_char) {
+		pub extern "C" fn _crypto_address_custom_name_free(name: *mut c_char) {
 			unsafe {
 				assert!(!name.is_null());
 				CString::from_raw(name)
@@ -143,13 +145,13 @@ macro_rules! declare_hash_custom_lib {
 		}
 
 		#[no_mangle]
-		pub extern "C" fn _crypto_hash_custom_length() -> c_uint {
+		pub extern "C" fn _crypto_address_custom_length() -> c_uint {
 			let length: usize = $impl.length().into();
 			length as c_uint
 		}
 
 		#[no_mangle]
-		pub extern "C" fn _crypto_hash_custom_hash(
+		pub extern "C" fn _crypto_address_custom_address(
 			out: *mut c_uchar,
 			out_len: c_uint,
 			data: *const c_uchar,
@@ -167,7 +169,7 @@ macro_rules! declare_hash_custom_lib {
 				slice::from_raw_parts_mut(out, out_len as usize)
 			};
 
-			$impl.hash(out, data);
+			$impl.address(out, data);
 		}
 	};
 }
