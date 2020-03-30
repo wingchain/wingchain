@@ -113,7 +113,7 @@ fn test_statedb_512_reopen() {
 
 	let hasher_len = hasher.length().into();
 
-	let statedb = StateDB::new(db.clone(), hasher_clone).unwrap();
+	let statedb = StateDB::new(db.clone(), node_db::columns::STATE, hasher_clone).unwrap();
 
 	let root = statedb.default_root();
 
@@ -144,7 +144,7 @@ fn test_statedb_512_reopen() {
 
 	let hasher_clone = hasher.clone();
 	let db = Arc::new(DB::open(&path).unwrap());
-	let statedb = StateDB::new(db, hasher_clone).unwrap();
+	let statedb = StateDB::new(db, node_db::columns::STATE, hasher_clone).unwrap();
 
 	let result = statedb.get(&update_2_root, &b"abc"[..]).unwrap();
 
@@ -167,7 +167,7 @@ fn test_statedb_for_hasher(hasher: HashImpl) {
 
 	let hasher_len = hasher.length().into();
 
-	let statedb = StateDB::new(db.clone(), hasher).unwrap();
+	let statedb = StateDB::new(db.clone(), node_db::columns::STATE, hasher).unwrap();
 
 	let root = statedb.default_root();
 

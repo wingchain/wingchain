@@ -5,12 +5,15 @@
 
 [genesis]
 
-# Set an unique chain id
+# System module init
 [[genesis.txs]]
-method = "system.set_chain_id"
-params = ["${CHAIN_ID}"]
-
-# Set genesis block time
-[[genesis.txs]]
-method = "system.set_time"
-params = [${TIME}]
+method = "system.init"
+params = ['''
+{
+    "chain_id": "${CHAIN_ID}",
+    "time": "${TIME}",
+    "hash": "blake2b_256",
+    "dsa": "ed25519",
+    "address": "blake2b_160"
+}
+''']

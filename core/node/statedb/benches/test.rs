@@ -69,7 +69,7 @@ fn prepare_statedb(records: usize) -> (StateDB, Vec<u8>) {
 
 	let hasher = Arc::new(HashImpl::Blake2b160);
 
-	let statedb = StateDB::new(db.clone(), hasher).unwrap();
+	let statedb = StateDB::new(db.clone(), node_db::columns::STATE, hasher).unwrap();
 
 	let root = statedb.default_root();
 

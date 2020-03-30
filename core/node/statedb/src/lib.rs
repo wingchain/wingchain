@@ -38,18 +38,20 @@ mod trie;
 
 pub struct StateDB {
 	db: Arc<DB>,
+	db_column: u32,
 	#[allow(dead_code)]
 	hasher: Arc<HashImpl>,
 	key_length: HashLength,
 }
 
 impl StateDB {
-	pub fn new(db: Arc<DB>, hasher: Arc<HashImpl>) -> errors::Result<Self> {
+	pub fn new(db: Arc<DB>, db_column: u32, hasher: Arc<HashImpl>) -> errors::Result<Self> {
 		load_hasher(hasher.clone())?;
 
 		let key_length = hasher.length();
 		Ok(Self {
 			db,
+			db_column,
 			hasher,
 			key_length,
 		})
@@ -86,7 +88,12 @@ impl StateDB {
 	}
 
 	pub fn prepare_stmt(&self, root: &[u8]) -> errors::Result<StateDBStmt> {
-		Ok(StateDBStmt::new(self.db.clone(), root, &self.key_length))
+		Ok(StateDBStmt::new(
+			self.db.clone(),
+			self.db_column,
+			root,
+			&self.key_length,
+		))
 	}
 
 	pub fn prepare_get(stmt: &StateDBStmt) -> errors::Result<StateDBGetter> {
@@ -159,6 +166,7 @@ impl StateDB {
 		let buffer = DefaultMemoryDB::<H>::default();
 		let proxy = ProxyHashDB {
 			db: self.db.clone(),
+			db_column: self.db_column,
 			buffer,
 		};
 
@@ -193,6 +201,7 @@ impl StateDB {
 		let buffer = DefaultMemoryDB::<H>::default();
 		let mut proxy = ProxyHashDB {
 			db: self.db.clone(),
+			db_column: self.db_column,
 			buffer: buffer,
 		};
 
@@ -221,7 +230,7 @@ impl StateDB {
 		for (k, (v, rc)) in proxy.buffer.drain() {
 			// only apply insert
 			if rc > 0 {
-				transaction.put_owned(node_db::columns::STATE, DBKey::from_slice(&k), v);
+				transaction.put_owned(self.db_column, DBKey::from_slice(&k), v);
 			}
 		}
 
@@ -236,23 +245,29 @@ pub enum StateDBStmt {
 }
 
 impl StateDBStmt {
-	pub fn new(db: Arc<DB>, root: &[u8], key_length: &HashLength) -> Self {
+	pub fn new(db: Arc<DB>, db_column: u32, root: &[u8], key_length: &HashLength) -> Self {
 		match key_length {
 			HashLength::HashLength20 => {
 				let mut typed_root = [0u8; 20];
 				typed_root.copy_from_slice(&root);
-				Self::Hasher20(StateDBStmtForHasher::<TrieHasher20>::new(db, typed_root))
+				Self::Hasher20(StateDBStmtForHasher::<TrieHasher20>::new(
+					db, db_column, typed_root,
+				))
 			}
 			HashLength::HashLength32 => {
 				let mut typed_root = [0u8; 32];
 				typed_root.copy_from_slice(&root);
-				Self::Hasher32(StateDBStmtForHasher::<TrieHasher32>::new(db, typed_root))
+				Self::Hasher32(StateDBStmtForHasher::<TrieHasher32>::new(
+					db, db_column, typed_root,
+				))
 			}
 			HashLength::HashLength64 => {
 				let mut typed_root = [0u8; 64];
 				typed_root.copy_from_slice(&root);
 				let typed_root = H512::from(typed_root);
-				Self::Hasher64(StateDBStmtForHasher::<TrieHasher64>::new(db, typed_root))
+				Self::Hasher64(StateDBStmtForHasher::<TrieHasher64>::new(
+					db, db_column, typed_root,
+				))
 			}
 		}
 	}
@@ -270,9 +285,13 @@ impl<H> StateDBStmtForHasher<H>
 where
 	H: Hasher,
 {
-	pub fn new(db: Arc<DB>, root: H::Out) -> Self {
+	pub fn new(db: Arc<DB>, db_column: u32, root: H::Out) -> Self {
 		let buffer = DefaultMemoryDB::<H>::default();
-		let proxy = ProxyHashDB { db, buffer };
+		let proxy = ProxyHashDB {
+			db,
+			db_column,
+			buffer,
+		};
 		Self { proxy, root }
 	}
 }
@@ -303,6 +322,7 @@ impl<'a> StateDBGetter<'a> {
 
 struct ProxyHashDB<H: Hasher> {
 	db: Arc<DB>,
+	db_column: u32,
 	buffer: DefaultMemoryDB<H>,
 }
 
@@ -312,7 +332,7 @@ impl<H: Hasher> HashDB<H, DBValue> for ProxyHashDB<H> {
 			Some(val)
 		} else {
 			let key = PrefixedKey::<H>::key(key, prefix);
-			match self.db.get(node_db::columns::STATE, &key) {
+			match self.db.get(self.db_column, &key) {
 				Ok(x) => x,
 				Err(e) => {
 					warn!("Failed to read from DB: {}", e);

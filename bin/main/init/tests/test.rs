@@ -15,11 +15,23 @@
 use std::fs;
 
 use tempfile::tempdir;
+use toml::Value;
 
 use base::spec::Spec;
 use base::SharedParams;
+use chrono::DateTime;
 use main_init::cli::InitOpt;
 use main_init::run;
+use serde::{Deserialize, Serialize};
+
+#[derive(Serialize, Deserialize)]
+struct InitParam {
+	chain_id: String,
+	time: String,
+	hash: String,
+	dsa: String,
+	address: String,
+}
 
 #[test]
 fn test_init() {
@@ -43,14 +55,24 @@ fn test_init() {
 		toml::from_str(&fs::read_to_string(home.join("config").join("spec.toml")).unwrap())
 			.unwrap();
 
-	assert_eq!(spec.genesis.txs[0].method, "system.set_chain_id");
-	assert_eq!(
-		spec.genesis.txs[0].params[0].as_str().map(str::len),
-		Some(14)
-	);
+	let tx = &spec.genesis.txs[0];
 
-	assert_eq!(spec.genesis.txs[1].method, "system.set_time");
-	assert!(spec.genesis.txs[1].params[0].as_datetime().is_some());
+	assert_eq!(tx.method, "system.init");
+
+	let param = &tx.params[0];
+
+	let param = match param {
+		Value::String(s) => s,
+		_ => unreachable!("param should be string"),
+	};
+
+	let param: InitParam = serde_json::from_str(param).unwrap();
+
+	assert_eq!(param.chain_id.len(), 14);
+	assert!(DateTime::parse_from_rfc3339(&param.time).is_ok());
+	assert_eq!(param.hash, "blake2b_256");
+	assert_eq!(param.dsa, "ed25519");
+	assert_eq!(param.address, "blake2b_160");
 }
 
 #[cfg(feature = "build-dep-test")]
@@ -77,12 +99,22 @@ fn test_init_command() {
 		toml::from_str(&fs::read_to_string(home.join("config").join("spec.toml")).unwrap())
 			.unwrap();
 
-	assert_eq!(spec.genesis.txs[0].method, "system.set_chain_id");
-	assert_eq!(
-		spec.genesis.txs[0].params[0].as_str().map(str::len),
-		Some(14)
-	);
+	let tx = &spec.genesis.txs[0];
 
-	assert_eq!(spec.genesis.txs[1].method, "system.set_time");
-	assert!(spec.genesis.txs[1].params[0].as_datetime().is_some());
+	assert_eq!(tx.method, "system.init");
+
+	let param = &tx.params[0];
+
+	let param = match param {
+		Value::String(s) => s,
+		_ => unreachable!("param should be string"),
+	};
+
+	let param: InitParam = serde_json::from_str(param).unwrap();
+
+	assert_eq!(param.chain_id.len(), 14);
+	assert!(DateTime::parse_from_rfc3339(&param.time).is_ok());
+	assert_eq!(param.hash, "blake2b_256");
+	assert_eq!(param.dsa, "ed25519");
+	assert_eq!(param.address, "blake2b_160");
 }
