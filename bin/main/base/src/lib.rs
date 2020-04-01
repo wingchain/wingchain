@@ -14,8 +14,9 @@
 
 use std::path::PathBuf;
 
-use app_dirs::get_app_root;
 use app_dirs::{AppDataType, AppInfo};
+use app_dirs::get_app_root;
+use serde::{Deserialize, Serialize};
 use structopt::StructOpt;
 
 pub mod errors;
@@ -25,12 +26,19 @@ pub const NAME: &str = "wingchain";
 pub const AUTHOR: &str = "Wingchain";
 pub const CONFIG: &str = "config";
 pub const DATA: &str = "data";
+pub const DB: &str = "db";
 pub const SPEC_FILE: &str = "spec.toml";
 
 #[derive(Debug, StructOpt, Clone)]
 pub struct SharedParams {
 	#[structopt(long = "home", value_name = "PATH", parse(from_os_str))]
 	pub home: Option<PathBuf>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SystemInitParam {
+	pub chain_id: String,
+	pub time: String,
 }
 
 pub fn get_default_home() -> errors::Result<PathBuf> {

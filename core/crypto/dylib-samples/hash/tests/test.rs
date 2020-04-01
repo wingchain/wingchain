@@ -25,7 +25,7 @@ use crypto::HashLength;
 
 #[test]
 fn test_custom_lib_hash() {
-	let path = utils::get_dylib("crypto_dylib_samples_hash");
+	let path = utils_test::get_dylib("crypto_dylib_samples_hash");
 
 	assert!(
 		path.exists(),
@@ -56,7 +56,7 @@ fn test_custom_lib_hash() {
 
 #[test]
 fn test_dylib_hash() {
-	let path = utils::get_dylib("crypto_dylib_samples_hash");
+	let path = utils_test::get_dylib("crypto_dylib_samples_hash");
 
 	assert!(
 		path.exists(),

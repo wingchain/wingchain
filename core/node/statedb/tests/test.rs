@@ -228,7 +228,7 @@ mod build_dep_test {
 
 	#[test]
 	fn test_statedb_256_dylib() {
-		let path = utils::get_dylib("crypto_dylib_samples_hash");
+		let path = utils_test::get_dylib("crypto_dylib_samples_hash");
 
 		assert!(
 			path.exists(),

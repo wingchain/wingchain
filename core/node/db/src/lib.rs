@@ -206,6 +206,12 @@ pub mod columns {
 pub mod global_key {
 	/// The best number of the chain
 	pub const BEST_NUMBER: &[u8] = b"best_number";
+	/// hash in spec
+	pub const HASH: &[u8] = b"hash";
+	/// dsa in spec
+	pub const DSA: &[u8] = b"dsa";
+	/// address in spec
+	pub const ADDRESS: &[u8] = b"address";
 }
 
 pub type DBKey = SmallVec<[u8; 32]>;

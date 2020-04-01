@@ -16,10 +16,18 @@ use error_chain::*;
 
 error_chain! {
 	foreign_links {
+		IO(std::io::Error) #[doc="IO error"];
+		Toml(toml::de::Error) #[doc="Toml error"];
 	}
 	links {
+		Crypto(crypto::errors::Error, crypto::errors::ErrorKind) #[doc="Crypto error"];
+		DB(node_db::errors::Error, node_db::errors::ErrorKind) #[doc="DB error"];
+		StateDB(node_statedb::errors::Error, node_statedb::errors::ErrorKind) #[doc="StateDB error"];
 	}
 	errors {
-
+		InvalidSpec {
+			description(""),
+			display("Invalid spec"),
+		}
 	}
 }

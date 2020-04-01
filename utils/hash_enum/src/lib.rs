@@ -12,20 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use error_chain::*;
-
-error_chain! {
-	foreign_links {
-		IO(std::io::Error) #[doc="IO error"];
-	}
-	links {
-		Base(base::errors::Error, base::errors::ErrorKind) #[doc="Base error"];
-		Service(service::errors::Error, service::errors::ErrorKind) #[doc="Service error"];
-	}
-	errors {
-		HomeDirNotInited(path: String) {
-			description(""),
-			display("Home dir not inited: {}", path),
-		}
-	}
+pub trait HashEnum: Sized {
+	fn from_hash(hash: &[u8]) -> Option<Self>;
+	fn from_name(name: &str) -> Option<Self>;
+	fn hash(&self) -> &[u8];
+	fn name(&self) -> &str;
 }

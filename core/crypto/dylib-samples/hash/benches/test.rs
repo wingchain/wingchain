@@ -33,7 +33,7 @@ fn bench_hash_native(b: &mut Bencher) {
 
 #[bench]
 fn bench_hash_dylib(b: &mut Bencher) {
-	let path = utils::get_dylib("crypto_dylib_samples_hash");
+	let path = utils_test::get_dylib("crypto_dylib_samples_hash");
 
 	assert!(
 		path.exists(),
@@ -59,7 +59,7 @@ fn bench_name_native(b: &mut Bencher) {
 
 #[bench]
 fn bench_name_dylib(b: &mut Bencher) {
-	let path = utils::get_dylib("crypto_dylib_samples_hash");
+	let path = utils_test::get_dylib("crypto_dylib_samples_hash");
 
 	assert!(
 		path.exists(),
@@ -82,7 +82,7 @@ fn bench_key_length_native(b: &mut Bencher) {
 
 #[bench]
 fn bench_key_length_dylib(b: &mut Bencher) {
-	let path = utils::get_dylib("crypto_dylib_samples_hash");
+	let path = utils_test::get_dylib("crypto_dylib_samples_hash");
 
 	assert!(
 		path.exists(),

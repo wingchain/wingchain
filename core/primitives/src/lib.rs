@@ -25,6 +25,7 @@ pub struct Witness {
 	address: Address,
 	signature: Signature,
 	nonce: Nonce,
+	expire: BlockNumber,
 }
 
 /// sliced digest of module name
@@ -49,3 +50,36 @@ pub struct Transaction {
 pub struct Hash(pub Vec<u8>);
 
 pub type BlockNumber = u32;
+
+pub struct Header {
+	pub number: BlockNumber,
+	pub timestamp: u32,
+	pub parent_hash: Hash,
+	pub meta_zone: Option<MetaZone>,
+	pub payload_zone: Option<PayloadZone>,
+	pub executed_zone: Option<ExecutedZone>,
+}
+
+pub struct MetaZone {
+	pub meta_txs_root: Hash,
+	pub meta_state_root: Hash,
+}
+
+pub struct PayloadZone {
+	pub payload_txs_root: Hash,
+}
+
+pub struct ExecutedZone {
+	pub executed_number: u32,
+	pub executed_state_root: Hash,
+}
+
+pub struct Body {
+	pub meta_txs: Vec<Transaction>,
+	pub payload_txs: Vec<Transaction>,
+}
+
+pub struct Block {
+	pub header: Header,
+	pub body: Body,
+}

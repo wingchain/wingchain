@@ -15,7 +15,7 @@ rust_crypto = { version = "0.2.36", package = "rust-crypto" }
 crypto = { path = "../../"}
 
 [dev-dependencies]
-utils = { path = "../../../../utils" }
+utils-test = { path = "../../../../utils/test" }
 libloading = "0.5.2"
 
 [features]

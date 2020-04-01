@@ -23,7 +23,7 @@ crypto = { path = "../../crypto" }
 
 [dev-dependencies]
 tempfile = "3.1.0"
-utils = { path = "../../../utils" }
+utils-test = { path = "../../../utils/test" }
 
 [features]
 build-dep-test = []

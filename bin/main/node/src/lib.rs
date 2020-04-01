@@ -12,11 +12,43 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::path::PathBuf;
+
+use error_chain::bail;
+
+use service::Config;
+use service::Service;
+
 use crate::cli::NodeOpt;
 
 pub mod cli;
 pub mod errors;
 
-pub fn run(_opt: NodeOpt) -> errors::Result<()> {
+pub fn run(opt: NodeOpt) -> errors::Result<()> {
+	let home = match opt.shared_params.home {
+		Some(home) => home,
+		None => base::get_default_home()?,
+	};
+
+	if !home_inited(&home) {
+		bail!(errors::ErrorKind::HomeDirNotInited(format!("{:?}", home)));
+	}
+
+	let config = Config {
+		home,
+	};
+
+	let mut service = Service::new(config)?;
+
+	service.start()?;
+
 	Ok(())
+}
+
+fn home_inited(home: &PathBuf) -> bool {
+	let spec_file = home.join(base::CONFIG).join(base::SPEC_FILE);
+	if !spec_file.exists() {
+		return false;
+	}
+	true
 }

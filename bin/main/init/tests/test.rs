@@ -14,24 +14,15 @@
 
 use std::fs;
 
+use chrono::DateTime;
 use tempfile::tempdir;
 use toml::Value;
 
-use base::spec::Spec;
 use base::SharedParams;
-use chrono::DateTime;
+use base::spec::Spec;
+use base::SystemInitParam;
 use main_init::cli::InitOpt;
 use main_init::run;
-use serde::{Deserialize, Serialize};
-
-#[derive(Serialize, Deserialize)]
-struct InitParam {
-	chain_id: String,
-	time: String,
-	hash: String,
-	dsa: String,
-	address: String,
-}
 
 #[test]
 fn test_init() {
@@ -55,6 +46,10 @@ fn test_init() {
 		toml::from_str(&fs::read_to_string(home.join("config").join("spec.toml")).unwrap())
 			.unwrap();
 
+	assert_eq!(spec.basic.hash, "blake2b_256");
+	assert_eq!(spec.basic.dsa, "ed25519");
+	assert_eq!(spec.basic.address, "blake2b_160");
+
 	let tx = &spec.genesis.txs[0];
 
 	assert_eq!(tx.method, "system.init");
@@ -66,13 +61,10 @@ fn test_init() {
 		_ => unreachable!("param should be string"),
 	};
 
-	let param: InitParam = serde_json::from_str(param).unwrap();
+	let param: SystemInitParam = serde_json::from_str(param).unwrap();
 
 	assert_eq!(param.chain_id.len(), 14);
 	assert!(DateTime::parse_from_rfc3339(&param.time).is_ok());
-	assert_eq!(param.hash, "blake2b_256");
-	assert_eq!(param.dsa, "ed25519");
-	assert_eq!(param.address, "blake2b_160");
 }
 
 #[cfg(feature = "build-dep-test")]
@@ -99,6 +91,10 @@ fn test_init_command() {
 		toml::from_str(&fs::read_to_string(home.join("config").join("spec.toml")).unwrap())
 			.unwrap();
 
+	assert_eq!(spec.basic.hash, "blake2b_256");
+	assert_eq!(spec.basic.dsa, "ed25519");
+	assert_eq!(spec.basic.address, "blake2b_160");
+
 	let tx = &spec.genesis.txs[0];
 
 	assert_eq!(tx.method, "system.init");
@@ -110,11 +106,8 @@ fn test_init_command() {
 		_ => unreachable!("param should be string"),
 	};
 
-	let param: InitParam = serde_json::from_str(param).unwrap();
+	let param: SystemInitParam = serde_json::from_str(param).unwrap();
 
 	assert_eq!(param.chain_id.len(), 14);
 	assert!(DateTime::parse_from_rfc3339(&param.time).is_ok());
-	assert_eq!(param.hash, "blake2b_256");
-	assert_eq!(param.dsa, "ed25519");
-	assert_eq!(param.address, "blake2b_160");
 }

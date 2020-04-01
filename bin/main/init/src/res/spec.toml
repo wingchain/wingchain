@@ -3,6 +3,11 @@
 
 # NOTICE: This file should NOT be modified once the chain node is started.
 
+[basic]
+hash = "blake2b_256"
+dsa = "ed25519"
+address = "blake2b_160"
+
 [genesis]
 
 # System module init
@@ -11,9 +16,6 @@ method = "system.init"
 params = ['''
 {
     "chain_id": "${CHAIN_ID}",
-    "time": "${TIME}",
-    "hash": "blake2b_256",
-    "dsa": "ed25519",
-    "address": "blake2b_160"
+    "time": "${TIME}"
 }
 ''']

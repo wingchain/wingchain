@@ -17,7 +17,15 @@ use toml::Value;
 
 #[derive(Deserialize, Debug)]
 pub struct Spec {
+	pub basic: Basic,
 	pub genesis: Genesis,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct Basic {
+	pub hash: String,
+	pub dsa: String,
+	pub address: String,
 }
 
 #[derive(Deserialize, Debug)]
