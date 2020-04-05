@@ -12,13 +12,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{Call, DispatchId, Params};
-use parity_codec::Encode;
+use error_chain::*;
+use primitives::DispatchId;
 
-pub trait Module {
-	const META_MODULE: bool = false;
-
-	const STORAGE_KEY: &'static [u8];
-
-	fn validate_call(call: &Call) -> bool;
+error_chain! {
+	foreign_links {
+	}
+	links {
+	}
+	errors {
+		CodecError {
+			description(""),
+			display("Codec error"),
+		}
+		TrieError {
+			description(""),
+			display("Trie error"),
+		}
+		InvalidDispatchId(dispatch_id: DispatchId) {
+			description(""),
+			display("Invalid dispatch id: {:?}", dispatch_id),
+		}
+		InvalidParams {
+			description(""),
+			display("Invalid params"),
+		}
+	}
 }

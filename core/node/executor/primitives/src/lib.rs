@@ -18,18 +18,30 @@ use std::marker::PhantomData;
 use parity_codec::{Decode, Encode};
 
 use node_db::DBValue;
-use primitives::traits::Module;
+use primitives::Call;
 
-pub type Value = DBValue;
-pub type Error = std::io::Error;
+pub mod errors;
 
 const SEPARATOR: &[u8] = b"_";
 
+pub trait Module<C> where
+	C: Context
+{
+	const META_MODULE: bool = false;
+	const STORAGE_KEY: &'static [u8];
+
+	fn new(context: C) -> Self;
+
+	fn validate_call(call: &Call) -> bool;
+
+	fn execute_call(&self, call: &Call) -> Result<(), errors::Error>;
+}
+
 pub trait Context: Clone {
-	fn meta_get(&self, key: &[u8]) -> Result<Option<Value>, Error>;
-	fn meta_set(&self, key: &[u8], value: Option<Value>) -> Result<(), Error>;
-	fn payload_get(&self, key: &[u8]) -> Result<Option<Value>, Error>;
-	fn payload_set(&self, key: &[u8], value: Option<Value>) -> Result<(), Error>;
+	fn meta_get(&self, key: &[u8]) -> errors::Result<Option<DBValue>>;
+	fn meta_set(&self, key: &[u8], value: Option<DBValue>) -> errors::Result<()>;
+	fn payload_get(&self, key: &[u8]) -> errors::Result<Option<DBValue>>;
+	fn payload_set(&self, key: &[u8], value: Option<DBValue>) -> errors::Result<()>;
 }
 
 pub struct StorageValue<T, C>
@@ -47,7 +59,7 @@ impl<T, C> StorageValue<T, C>
 	where T: Encode + Decode,
 		  C: Context,
 {
-	pub fn new<M: Module>(context: C, storage_key: &'static [u8]) -> Self {
+	pub fn new<M: Module<C>>(context: C, storage_key: &'static [u8]) -> Self {
 		let key = [M::STORAGE_KEY, SEPARATOR, storage_key].concat();
 		let meta_module = M::META_MODULE;
 		Self {
@@ -58,11 +70,11 @@ impl<T, C> StorageValue<T, C>
 		}
 	}
 
-	pub fn get(&self) -> Result<Option<T>, Error> {
+	pub fn get(&self) -> errors::Result<Option<T>> {
 		context_get(&self.context, self.meta_module, &self.key)
 	}
 
-	pub fn set(&self, value: &T) -> Result<(), Error> {
+	pub fn set(&self, value: &T) -> errors::Result<()> {
 		context_set(&self.context, self.meta_module, &self.key, value)
 	}
 }
@@ -95,18 +107,18 @@ impl<K, V, C> StorageMap<K, V, C>
 		}
 	}
 
-	pub fn get(&self, key: K) -> Result<Option<V>, Error> {
+	pub fn get(&self, key: K) -> errors::Result<Option<V>> {
 		let key = &[&self.key, SEPARATOR, &key.encode()].concat();
 		context_get(&self.context, self.meta_module, key)
 	}
 
-	pub fn set(&self, key: K, value: &V) -> Result<(), Error> {
+	pub fn set(&self, key: K, value: &V) -> errors::Result<()> {
 		let key = &[&self.key, SEPARATOR, &key.encode()].concat();
 		context_set(&self.context, self.meta_module, key, value)
 	}
 }
 
-fn context_get<C: Context, V: Decode>(context: &C, meta_module: bool, key: &[u8]) -> Result<Option<V>, Error> {
+fn context_get<C: Context, V: Decode>(context: &C, meta_module: bool, key: &[u8]) -> errors::Result<Option<V>> {
 	let value = match meta_module {
 		true => context.meta_get(key),
 		false => context.payload_get(key),
@@ -114,7 +126,7 @@ fn context_get<C: Context, V: Decode>(context: &C, meta_module: bool, key: &[u8]
 	match value {
 		Ok(value) => match value {
 			Some(value) => {
-				let value = Decode::decode(&mut &value[..]).ok_or(ErrorKind::InvalidData)?;
+				let value = Decode::decode(&mut &value[..]).ok_or(errors::ErrorKind::CodecError)?;
 				Ok(Some(value))
 			}
 			None => Ok(None),
@@ -123,7 +135,7 @@ fn context_get<C: Context, V: Decode>(context: &C, meta_module: bool, key: &[u8]
 	}
 }
 
-fn context_set<C: Context, V: Encode>(context: &C, meta_module: bool, key: &[u8], value: &V) -> Result<(), Error> {
+fn context_set<C: Context, V: Encode>(context: &C, meta_module: bool, key: &[u8], value: &V) -> errors::Result<()> {
 	let value = Some(value.encode());
 	match meta_module {
 		true => context.meta_set(&key, value),

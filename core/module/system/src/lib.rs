@@ -14,9 +14,8 @@
 
 use hash_enum::HashEnum;
 use parity_codec::{Decode, Encode};
-use primitives::traits::Module as ModuleT;
-use primitives::{Call, DispatchId, FromDispatchId, Params};
-use node_executor_primitives::{StorageValue, Context};
+use primitives::{Call, FromDispatchId};
+use node_executor_primitives::{StorageValue, Context, Module as ModuleT, errors::Result, errors::ErrorKind};
 
 #[derive(HashEnum)]
 pub enum MethodEnum {
@@ -30,17 +29,8 @@ pub struct InitParams {
 }
 
 impl MethodEnum {
-	fn validate_call(&self, call: &Call) -> bool {
-		let mut params = &call.params.0[..];
-		match *self {
-			MethodEnum::Init => {
-				match <InitParams as Decode>::decode(&mut params) {
-					Some(_params) => (),
-					None => return false,
-				};
-			}
-		}
-		true
+	fn execute_call<C: Context>(&self, module: &Module<C>, call: &Call) -> Result<()> {
+		unimplemented!()
 	}
 }
 
@@ -48,30 +38,59 @@ pub struct Module<C>
 	where C: Context
 {
 	chain_id: StorageValue<String, C>,
-	time: StorageValue<u32, C>,
+	timestamp: StorageValue<u32, C>,
 }
 
-impl<C> ModuleT for Module<C>
+impl<C> ModuleT<C> for Module<C>
 	where C: Context
 {
 	const META_MODULE: bool = true;
 	const STORAGE_KEY: &'static [u8] = b"system";
+
+	fn new(context: C) -> Self {
+		Self {
+			chain_id: StorageValue::new::<Self>(context.clone(), b"chain_id"),
+			timestamp: StorageValue::new::<Self>(context, b"timestamp"),
+		}
+	}
 
 	fn validate_call(call: &Call) -> bool {
 		let call_enum = match MethodEnum::from_dispatch_id(&call.method_id) {
 			Some(call_enum) => call_enum,
 			None => return false,
 		};
-		call_enum.validate_call(call)
+		let mut params = &call.params.0[..];
+		match call_enum {
+			MethodEnum::Init => {
+				match <InitParams as Decode>::decode(&mut params) {
+					Some(_params) => true,
+					None => false,
+				}
+			}
+		}
+	}
+
+	fn execute_call(&self, call: &Call) -> Result<()> {
+		let call_enum = match MethodEnum::from_dispatch_id(&call.method_id) {
+			Some(call_enum) => call_enum,
+			None => return Err(ErrorKind::InvalidDispatchId(call.module_id.clone()).into()),
+		};
+		let mut params = &call.params.0[..];
+		match call_enum {
+			MethodEnum::Init => {
+				let params = Decode::decode(&mut params).ok_or(ErrorKind::InvalidParams)?;
+				self.init(&params)
+			}
+		}
 	}
 }
 
-impl<C> Module<C>
-	where C: Context{
-	fn new(context: C) -> Self{
-		Self{
-			chain_id: StorageValue::new::<Self>(context.clone(), b"chain_id"),
-			time: StorageValue::new::<Self>(context, b"time"),
-		}
+impl<C: Context> Module<C> {
+
+	fn init(&self, params: &InitParams) -> Result<()> {
+		self.chain_id.set(&params.chain_id);
+		self.timestamp.set(&params.timestamp);
+		Ok(())
 	}
+
 }

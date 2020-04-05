@@ -30,10 +30,6 @@ error_chain! {
 			description(""),
 			display("Invalid spec"),
 		}
-		InvalidDispatchId(dispatch_id: DispatchId) {
-			description(""),
-			display("Invalid dispatch id: {:?}", dispatch_id),
-		}
 		DBIntegrityLess(reason: String) {
 			description(""),
 			display("DB integrity less: {:?}", reason),

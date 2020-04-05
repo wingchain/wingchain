@@ -15,8 +15,6 @@
 use hash_enum::HashEnum;
 use parity_codec::{Decode, Encode};
 
-pub mod traits;
-
 #[derive(Clone, Debug, Encode, Decode)]
 pub struct Address(pub Vec<u8>);
 

@@ -12,19 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::io::ErrorKind;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use parity_codec::Encode;
 
 use hash_enum::HashEnum;
 use node_db::{DBKey, DBValue};
-use node_executor_primitives::{Context as ContextT, Value, Error};
+use node_executor_primitives::{Context as ContextT, Module as ModuleT};
 use node_statedb::{StateDB, StateDBGetter, StateDBStmt};
-use primitives::{BlockNumber, Call, Params, traits::Module as ModuleT, Transaction};
-use std::io::ErrorKind;
-use std::rc::Rc;
-use std::cell::RefCell;
+use primitives::{BlockNumber, Call, Params, Transaction};
 
 pub mod errors;
 
@@ -92,31 +92,31 @@ impl ContextState {
 }
 
 impl ContextT for Context {
-	fn meta_get(&self, key: &[u8]) -> Result<Option<Value>, Error> {
+	fn meta_get(&self, key: &[u8]) -> node_executor_primitives::errors::Result<Option<DBValue>> {
 		let buffer = self.inner.meta_state.buffer.borrow();
 		match buffer.get(&DBKey::from_slice(key)) {
 			Some(value) => Ok(value.clone()),
 			None => {
-				self.inner.meta_state.statedb_getter.get(key).map_err(|_|ErrorKind::InvalidData.into())
+				self.inner.meta_state.statedb_getter.get(key).map_err(|_|node_executor_primitives::errors::ErrorKind::TrieError.into())
 			}
 		}
 
 	}
-	fn meta_set(&self, key: &[u8], value: Option<Value>) -> Result<(), Error> {
+	fn meta_set(&self, key: &[u8], value: Option<DBValue>) -> node_executor_primitives::errors::Result<()> {
 		let mut buffer = self.inner.meta_state.buffer.borrow_mut();
 		buffer.insert(DBKey::from_slice(key), value);
 		Ok(())
 	}
-	fn payload_get(&self, key: &[u8]) -> Result<Option<Value>, Error> {
+	fn payload_get(&self, key: &[u8]) -> node_executor_primitives::errors::Result<Option<DBValue>> {
 		let buffer = self.inner.payload_state.buffer.borrow();
 		match buffer.get(&DBKey::from_slice(key)) {
 			Some(value) => Ok(value.clone()),
 			None => {
-				self.inner.payload_state.statedb_getter.get(key).map_err(|_|ErrorKind::InvalidData.into())
+				self.inner.payload_state.statedb_getter.get(key).map_err(|_|node_executor_primitives::errors::ErrorKind::TrieError.into())
 			}
 		}
 	}
-	fn payload_set(&self, key: &[u8], value: Option<Value>) -> Result<(), Error> {
+	fn payload_set(&self, key: &[u8], value: Option<DBValue>) -> node_executor_primitives::errors::Result<()> {
 		let mut buffer = self.inner.payload_state.buffer.borrow_mut();
 		buffer.insert(DBKey::from_slice(key), value);
 		Ok(())
@@ -138,7 +138,7 @@ impl Executor {
 		};
 
 		let valid = match module {
-			ModuleEnum::System => <module::system::Module::<Context> as ModuleT>::validate_call(&call),
+			ModuleEnum::System => module::system::Module::<Context>::validate_call(&call),
 		};
 
 		match valid {

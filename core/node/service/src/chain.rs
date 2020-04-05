@@ -30,7 +30,7 @@ use node_db::DB;
 use node_executor::{Executor, module, ModuleEnum};
 use node_statedb::{StateDB, TrieRoot};
 use primitives::{Block, BlockNumber, Body, Hash, Header};
-use primitives::traits::Module;
+// use primitives::traits::Module;
 
 use crate::errors;
 
@@ -144,7 +144,7 @@ impl Chain {
 			.map_err(|_| errors::ErrorKind::InvalidSpec)?;
 		let timestamp = time.timestamp() as u32;
 
-		let init_params = node_executor::module::system::InitParams {
+		let init_params = module::system::InitParams {
 			chain_id,
 			timestamp,
 		};
