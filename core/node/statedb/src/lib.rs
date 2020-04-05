@@ -20,6 +20,7 @@ use std::sync::Arc;
 use hash_db::{AsHashDB, HashDB, Hasher, Prefix};
 use log::warn;
 use memory_db::{KeyFunction, PrefixedKey};
+use reference_trie::ReferenceTrieStream;
 use trie_db::{Trie, TrieMut};
 
 use crypto::hash::{Hash, HashImpl};
@@ -32,6 +33,7 @@ pub use trie::{
 
 use crate::errors::parse_trie_error;
 use crate::trie::load_hasher;
+use parity_codec::Encode;
 
 pub mod errors;
 mod trie;
@@ -41,24 +43,24 @@ pub struct StateDB {
 	db_column: u32,
 	#[allow(dead_code)]
 	hasher: Arc<HashImpl>,
-	key_length: HashLength,
+	hash_length: HashLength,
 }
 
 impl StateDB {
 	pub fn new(db: Arc<DB>, db_column: u32, hasher: Arc<HashImpl>) -> errors::Result<Self> {
 		load_hasher(hasher.clone())?;
 
-		let key_length = hasher.length();
+		let hash_length = hasher.length();
 		Ok(Self {
 			db,
 			db_column,
 			hasher,
-			key_length,
+			hash_length,
 		})
 	}
 
 	pub fn default_root(&self) -> Vec<u8> {
-		match self.key_length {
+		match self.hash_length {
 			HashLength::HashLength20 => self.default_root_for_hash::<TrieHasher20>(),
 			HashLength::HashLength32 => self.default_root_for_hash::<TrieHasher32>(),
 			HashLength::HashLength64 => self.default_root_for_hash::<TrieHasher64>(),
@@ -66,7 +68,7 @@ impl StateDB {
 	}
 
 	pub fn get(&self, root: &[u8], key: &[u8]) -> errors::Result<Option<DBValue>> {
-		let result = match self.key_length {
+		let result = match self.hash_length {
 			HashLength::HashLength20 => {
 				let mut typed_root = [0u8; 20];
 				typed_root.copy_from_slice(&root);
@@ -92,7 +94,7 @@ impl StateDB {
 			self.db.clone(),
 			self.db_column,
 			root,
-			&self.key_length,
+			&self.hash_length,
 		))
 	}
 
@@ -119,10 +121,10 @@ impl StateDB {
 		data: I,
 		new: bool,
 	) -> errors::Result<(Vec<u8>, DBTransaction)>
-	where
-		I: IntoIterator<Item = (DBKey, Option<DBValue>)>,
+		where
+			I: IntoIterator<Item=(DBKey, Option<DBValue>)>,
 	{
-		let result = match self.key_length {
+		let result = match self.hash_length {
 			HashLength::HashLength20 => {
 				let mut typed_root = [0u8; 20];
 				typed_root.copy_from_slice(&root);
@@ -153,15 +155,15 @@ impl StateDB {
 /// private impl
 impl StateDB {
 	fn default_root_for_hash<H>(&self) -> Vec<u8>
-	where
-		H: Hasher,
+		where
+			H: Hasher,
 	{
 		H::Out::default().as_ref().to_vec()
 	}
 
 	fn get_for_hasher<H>(&self, root: H::Out, key: &[u8]) -> errors::Result<Option<DBValue>>
-	where
-		H: Hasher,
+		where
+			H: Hasher,
 	{
 		let buffer = DefaultMemoryDB::<H>::default();
 		let proxy = ProxyHashDB {
@@ -180,8 +182,8 @@ impl StateDB {
 	fn prepare_get_for_hasher<H>(
 		stmt: &StateDBStmtForHasher<H>,
 	) -> errors::Result<StateDBGetterForHasher<H>>
-	where
-		H: Hasher,
+		where
+			H: Hasher,
 	{
 		let triedb = DefaultTrieDB::<H>::new(&stmt.proxy, &stmt.root).map_err(parse_trie_error)?;
 		let statedb_getter = StateDBGetterForHasher { triedb };
@@ -194,9 +196,9 @@ impl StateDB {
 		data: I,
 		new: bool,
 	) -> errors::Result<(H::Out, DBTransaction)>
-	where
-		I: IntoIterator<Item = (DBKey, Option<DBValue>)>,
-		H: Hasher,
+		where
+			I: IntoIterator<Item=(DBKey, Option<DBValue>)>,
+			H: Hasher,
 	{
 		let buffer = DefaultMemoryDB::<H>::default();
 		let mut proxy = ProxyHashDB {
@@ -245,8 +247,8 @@ pub enum StateDBStmt {
 }
 
 impl StateDBStmt {
-	pub fn new(db: Arc<DB>, db_column: u32, root: &[u8], key_length: &HashLength) -> Self {
-		match key_length {
+	pub fn new(db: Arc<DB>, db_column: u32, root: &[u8], hash_length: &HashLength) -> Self {
+		match hash_length {
 			HashLength::HashLength20 => {
 				let mut typed_root = [0u8; 20];
 				typed_root.copy_from_slice(&root);
@@ -274,16 +276,16 @@ impl StateDBStmt {
 }
 
 pub struct StateDBStmtForHasher<H>
-where
-	H: Hasher,
+	where
+		H: Hasher,
 {
 	proxy: ProxyHashDB<H>,
 	root: H::Out,
 }
 
 impl<H> StateDBStmtForHasher<H>
-where
-	H: Hasher,
+	where
+		H: Hasher,
 {
 	pub fn new(db: Arc<DB>, db_column: u32, root: H::Out) -> Self {
 		let buffer = DefaultMemoryDB::<H>::default();
@@ -303,8 +305,8 @@ pub enum StateDBGetter<'a> {
 }
 
 pub struct StateDBGetterForHasher<'a, H>
-where
-	H: Hasher,
+	where
+		H: Hasher,
 {
 	triedb: DefaultTrieDB<'a, H>,
 }
@@ -375,5 +377,57 @@ impl<H: Hasher> AsHashDB<H, DBValue> for ProxyHashDB<H> {
 	}
 	fn as_hash_db_mut<'b>(&'b mut self) -> &'b mut (dyn hash_db::HashDB<H, DBValue> + 'b) {
 		self
+	}
+}
+
+pub struct TrieRoot {
+	hash_length: HashLength,
+}
+
+impl TrieRoot {
+	pub fn new(hasher: Arc<HashImpl>) -> errors::Result<Self> {
+		let hash_length = hasher.length();
+		load_hasher(hasher)?;
+
+		Ok(Self { hash_length })
+	}
+
+	pub fn calc_trie_root<I, A, B>(&self, input: I) -> Vec<u8>
+		where
+			I: IntoIterator<Item=(A, B)>,
+			A: AsRef<[u8]> + Ord,
+			B: AsRef<[u8]>,
+	{
+		match self.hash_length {
+			HashLength::HashLength20 => {
+				let root =
+					trie_root::trie_root::<TrieHasher20, ReferenceTrieStream, I, A, B>(input);
+				root.to_vec()
+			}
+			HashLength::HashLength32 => {
+				let root =
+					trie_root::trie_root::<TrieHasher32, ReferenceTrieStream, I, A, B>(input);
+				root.to_vec()
+			}
+			HashLength::HashLength64 => {
+				let root =
+					trie_root::trie_root::<TrieHasher64, ReferenceTrieStream, I, A, B>(input);
+				root.as_bytes().to_vec()
+			}
+		}
+	}
+
+	pub fn calc_ordered_trie_root<I, A>(&self, input: I) -> Vec<u8>
+		where
+			I: IntoIterator<Item=A>,
+			A: AsRef<[u8]>,
+	{
+		let input = input
+			.into_iter()
+			.enumerate()
+			.map(|(k, v)| (Encode::encode(&(k as u32)), v))
+			.collect::<Vec<_>>();
+
+		self.calc_trie_root(input)
 	}
 }

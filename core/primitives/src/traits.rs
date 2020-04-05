@@ -12,16 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{MethodId, ModuleId, Params};
-
-pub trait Method {
-	fn execute(params: &Params);
-}
+use crate::{Call, DispatchId, Params};
+use parity_codec::Encode;
 
 pub trait Module {
-	fn execute(method_id: &MethodId, params: &Params);
-}
+	const META_MODULE: bool = false;
 
-pub trait Executor {
-	fn execute(module_id: &ModuleId, method_id: &MethodId, params: &Params);
+	const STORAGE_KEY: &'static [u8];
+
+	fn validate_call(call: &Call) -> bool;
 }

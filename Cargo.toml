@@ -14,6 +14,8 @@ members = [
 	"core/node/db",
 	"core/node/statedb",
 	"core/node/service",
+	"core/node/executor",
+	"core/node/executor/primitives",
 	"core/module/system",
 ]
 

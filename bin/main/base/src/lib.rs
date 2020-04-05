@@ -14,8 +14,8 @@
 
 use std::path::PathBuf;
 
-use app_dirs::{AppDataType, AppInfo};
 use app_dirs::get_app_root;
+use app_dirs::{AppDataType, AppInfo};
 use serde::{Deserialize, Serialize};
 use structopt::StructOpt;
 
@@ -36,7 +36,7 @@ pub struct SharedParams {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct SystemInitParam {
+pub struct SystemInitParams {
 	pub chain_id: String,
 	pub time: String,
 }

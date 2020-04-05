@@ -11,12 +11,14 @@ memory-db = "0.19.0"
 hash-db = "0.15.2"
 log = "0.4.8"
 trie-db = "0.20.0"
+trie-root = "0.16.0"
 lazy_static = "1.4.0"
 mut_static = "5.0.0"
 fixed-hash = "0.6.0"
 parity-scale-codec = "=1.1.2"
 reference-trie = "0.20.0"
 error-chain = "0.12.2"
+parity-codec = "4.1.4"
 
 node-db = { path = "../db" }
 crypto = { path = "../../crypto" }

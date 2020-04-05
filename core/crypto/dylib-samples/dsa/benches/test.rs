@@ -16,12 +16,12 @@
 
 extern crate test;
 
+use crypto::dsa::DsaImpl::SM2;
 use crypto::dsa::{Dsa, DsaImpl, KeyPair, Verifier};
 use crypto::DsaLength;
 use crypto_dylib_samples_dsa::Ed25519;
 use std::hint::black_box;
 use test::Bencher;
-use crypto::dsa::DsaImpl::SM2;
 
 #[bench]
 fn bench_sign_ed25519_ring(b: &mut Bencher) {

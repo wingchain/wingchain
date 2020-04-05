@@ -1,5 +1,5 @@
 [package]
-name = "node-service"
+name = "node-executor"
 version = "0.1.0"
 authors = ["developer <developer@wingchain.cn>"]
 edition = "2018"
@@ -9,14 +9,10 @@ edition = "2018"
 [dependencies]
 error-chain = "0.12.2"
 parity-codec = { version = "4.1.4", features = ["derive"] }
-toml = "0.5.6"
-serde = "1.0"
-serde_json = "1.0"
-chrono = "0.4.11"
 
-primitives = { path = "../../primitives" }
-crypto = { path = "../../crypto" }
 node-db = { path = "../db" }
 node-statedb = { path = "../statedb" }
-node-executor = { path = "../executor" }
-main-base = { path = "../../../bin/main/base" }
+primitives = { path = "../../primitives" }
+module-system = { path = "../../module/system" }
+hash_enum = { path = "../../../utils/hash_enum" }
+node-executor-primitives = { path = "primitives" }

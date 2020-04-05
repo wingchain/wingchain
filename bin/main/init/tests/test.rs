@@ -18,9 +18,9 @@ use chrono::DateTime;
 use tempfile::tempdir;
 use toml::Value;
 
-use base::SharedParams;
 use base::spec::Spec;
-use base::SystemInitParam;
+use base::SharedParams;
+use base::SystemInitParams;
 use main_init::cli::InitOpt;
 use main_init::run;
 
@@ -61,7 +61,7 @@ fn test_init() {
 		_ => unreachable!("param should be string"),
 	};
 
-	let param: SystemInitParam = serde_json::from_str(param).unwrap();
+	let param: SystemInitParams = serde_json::from_str(param).unwrap();
 
 	assert_eq!(param.chain_id.len(), 14);
 	assert!(DateTime::parse_from_rfc3339(&param.time).is_ok());
@@ -106,7 +106,7 @@ fn test_init_command() {
 		_ => unreachable!("param should be string"),
 	};
 
-	let param: SystemInitParam = serde_json::from_str(param).unwrap();
+	let param: SystemInitParams = serde_json::from_str(param).unwrap();
 
 	assert_eq!(param.chain_id.len(), 14);
 	assert!(DateTime::parse_from_rfc3339(&param.time).is_ok());

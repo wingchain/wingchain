@@ -22,7 +22,8 @@ use crypto::hash::Hash;
 use crypto::hash::HashImpl;
 use lazy_static::lazy_static;
 use node_db::{DBKey, DB};
-use node_statedb::StateDB;
+use node_statedb::{StateDB, TrieRoot};
+use parity_codec::Encode;
 
 #[test]
 fn test_static_hash() {
@@ -220,6 +221,43 @@ fn test_statedb_for_hasher(hasher: HashImpl) {
 
 	let result = getter.get(&b"abd"[..]).unwrap();
 	assert_eq!(Some(vec![1u8; 1024]), result);
+}
+
+#[test]
+fn test_calc_trie_root() {
+	let hasher = Arc::new(HashImpl::Blake2b512);
+
+	let trie_root = TrieRoot::new(hasher).unwrap();
+
+	let input = vec!["a", "b"];
+
+	let root = trie_root.calc_trie_root(input.iter()
+		.enumerate()
+		.map(|(k, v)| (Encode::encode(&(k as u32)), v))
+		.collect::<Vec<_>>());
+
+	assert_eq!(
+		root,
+		vec![
+			39, 107, 232, 90, 112, 186, 33, 13, 177, 69, 54, 175, 214, 152, 221, 220, 241, 202, 83,
+			94, 135, 219, 5, 8, 85, 48, 154, 106, 51, 145, 113, 54, 112, 199, 82, 147, 147, 239,
+			243, 36, 165, 104, 233, 123, 2, 95, 250, 7, 87, 94, 129, 44, 102, 95, 118, 159, 131,
+			61, 53, 34, 181, 186, 54, 214
+		]
+	);
+
+	let root = trie_root.calc_ordered_trie_root(&input);
+
+	assert_eq!(
+		root,
+		vec![
+			39, 107, 232, 90, 112, 186, 33, 13, 177, 69, 54, 175, 214, 152, 221, 220, 241, 202, 83,
+			94, 135, 219, 5, 8, 85, 48, 154, 106, 51, 145, 113, 54, 112, 199, 82, 147, 147, 239,
+			243, 36, 165, 104, 233, 123, 2, 95, 250, 7, 87, 94, 129, 44, 102, 95, 118, 159, 131,
+			61, 53, 34, 181, 186, 54, 214
+		]
+	);
+
 }
 
 #[cfg(feature = "build-dep-test")]

@@ -18,6 +18,7 @@ use std::sync::Arc;
 use error_chain::bail;
 use fixed_hash::construct_fixed_hash;
 use hash_db::Hasher;
+use memory_db::PrefixedKey;
 use mut_static::MutStatic;
 use reference_trie::ReferenceNodeCodec;
 use trie_db::{DBValue, TrieLayout};
@@ -27,7 +28,6 @@ use crypto::HashLength;
 use lazy_static::lazy_static;
 
 use crate::errors;
-use memory_db::PrefixedKey;
 
 lazy_static! {
 	pub static ref HASH_IMPL_20: MutStatic<Arc<HashImpl>> = MutStatic::new();
@@ -114,7 +114,7 @@ impl Hasher for TrieHasher20 {
 	const LENGTH: usize = 20;
 
 	fn hash(x: &[u8]) -> Self::Out {
-		let hasher = HASH_IMPL_20.read().unwrap();
+		let hasher = HASH_IMPL_20.read().expect("should load_hasher first");
 		let mut out = [0u8; 20];
 		hasher.hash(&mut out, x);
 		out
@@ -127,7 +127,7 @@ impl Hasher for TrieHasher32 {
 	const LENGTH: usize = 32;
 
 	fn hash(x: &[u8]) -> Self::Out {
-		let hasher = HASH_IMPL_32.read().unwrap();
+		let hasher = HASH_IMPL_32.read().expect("should load_hasher first");
 		let mut out = [0u8; 32];
 		hasher.hash(&mut out, x);
 		out
@@ -144,7 +144,7 @@ impl Hasher for TrieHasher64 {
 	const LENGTH: usize = 64;
 
 	fn hash(x: &[u8]) -> Self::Out {
-		let hasher = HASH_IMPL_64.read().unwrap();
+		let hasher = HASH_IMPL_64.read().expect("should load_hasher first");
 		let mut out = [0u8; 64];
 		hasher.hash(&mut out, x);
 		H512::from(out)

@@ -37,6 +37,7 @@ pub struct CustomLib {
 	lib: Library,
 	name: String,
 	length: HashLength,
+	/// unsafe, should never out live lib
 	call_hash: imp::Symbol<CallHash>,
 }
 

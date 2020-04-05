@@ -1,5 +1,5 @@
 [package]
-name = "primitives"
+name = "node-executor-primitives"
 version = "0.1.0"
 authors = ["developer <developer@wingchain.cn>"]
 edition = "2018"
@@ -9,6 +9,5 @@ edition = "2018"
 [dependencies]
 parity-codec = { version = "4.1.4", features = ["derive"] }
 
-hash_enum = { path = "../../utils/hash_enum" }
-
-[dev-dependencies]
+node-db = { path = "../../db" }
+primitives = { path = "../../../primitives" }

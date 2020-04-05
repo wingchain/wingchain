@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use error_chain::*;
+use primitives::DispatchId;
 
 error_chain! {
 	foreign_links {
@@ -28,6 +29,14 @@ error_chain! {
 		InvalidSpec {
 			description(""),
 			display("Invalid spec"),
+		}
+		InvalidDispatchId(dispatch_id: DispatchId) {
+			description(""),
+			display("Invalid dispatch id: {:?}", dispatch_id),
+		}
+		DBIntegrityLess(reason: String) {
+			description(""),
+			display("DB integrity less: {:?}", reason),
 		}
 	}
 }

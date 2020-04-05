@@ -14,13 +14,12 @@
 #![cfg(feature = "build-dep-test")]
 
 use assert_cmd::Command;
+use std::fs;
 use std::path::PathBuf;
 use tempfile::tempdir;
-use std::fs;
 
 #[test]
 fn test_node_command() {
-
 	let home = init();
 
 	assert!(home.exists());
@@ -33,11 +32,9 @@ fn test_node_command() {
 	let output = cmd.arg("node").arg("--home").arg(&home).output().unwrap();
 
 	assert_eq!(output.status.success(), true);
-
 }
 
 fn init() -> PathBuf {
-
 	let home = tempdir().expect("could not create a temp dir");
 	let home = home.into_path();
 

@@ -12,15 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use hash_enum::HashEnum;
+use parity_codec::{Decode, Encode};
+
 pub mod traits;
 
+#[derive(Clone, Debug, Encode, Decode)]
 pub struct Address(pub Vec<u8>);
 
+#[derive(Clone, Debug, Encode, Decode)]
 /// signature for (nonce, call)
 pub struct Signature(pub Vec<u8>);
 
 pub type Nonce = u32;
 
+#[derive(Clone, Debug, Encode, Decode)]
 pub struct Witness {
 	address: Address,
 	signature: Signature,
@@ -28,25 +34,26 @@ pub struct Witness {
 	expire: BlockNumber,
 }
 
-/// sliced digest of module name
-pub type ModuleId = [u8; 4];
+#[derive(Clone, Debug, Encode, Decode)]
+pub struct DispatchId(pub [u8; 4]);
 
-/// sliced digest of method name
-pub type MethodId = [u8; 4];
-
+#[derive(Clone, Debug, Encode, Decode)]
 pub struct Params(pub Vec<u8>);
 
+#[derive(Clone, Debug, Encode, Decode)]
 pub struct Call {
-	module_id: ModuleId,
-	method_id: MethodId,
-	params: Params,
+	pub module_id: DispatchId,
+	pub method_id: DispatchId,
+	pub params: Params,
 }
 
+#[derive(Clone, Debug, Encode, Decode)]
 pub struct Transaction {
-	witness: Option<Witness>,
-	call: Call,
+	pub witness: Option<Witness>,
+	pub call: Call,
 }
 
+#[derive(Clone, Debug)]
 pub struct Hash(pub Vec<u8>);
 
 pub type BlockNumber = u32;
@@ -55,23 +62,11 @@ pub struct Header {
 	pub number: BlockNumber,
 	pub timestamp: u32,
 	pub parent_hash: Hash,
-	pub meta_zone: Option<MetaZone>,
-	pub payload_zone: Option<PayloadZone>,
-	pub executed_zone: Option<ExecutedZone>,
-}
-
-pub struct MetaZone {
 	pub meta_txs_root: Hash,
 	pub meta_state_root: Hash,
-}
-
-pub struct PayloadZone {
 	pub payload_txs_root: Hash,
-}
-
-pub struct ExecutedZone {
-	pub executed_number: u32,
-	pub executed_state_root: Hash,
+	pub payload_executed_gap: u8,
+	pub payload_executed_state_root: Hash,
 }
 
 pub struct Body {
@@ -82,4 +77,22 @@ pub struct Body {
 pub struct Block {
 	pub header: Header,
 	pub body: Body,
+}
+
+impl<T: HashEnum> From<T> for DispatchId {
+	fn from(t: T) -> Self {
+		let mut dispatch_id = [0u8; 4];
+		dispatch_id.copy_from_slice(t.hash());
+		DispatchId(dispatch_id)
+	}
+}
+
+pub trait FromDispatchId: Sized {
+	fn from_dispatch_id(dispatch_id: &DispatchId) -> Option<Self>;
+}
+
+impl<T: HashEnum> FromDispatchId for T {
+	fn from_dispatch_id(dispatch_id: &DispatchId) -> Option<Self> {
+		T::from_hash(&dispatch_id.0)
+	}
 }

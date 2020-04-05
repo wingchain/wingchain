@@ -12,9 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use hash_enum::HashEnum;
-use hash_enum_derive::HashEnum;
 use crypto::blake2b;
+use hash_enum::HashEnum;
 
 #[test]
 fn test_hash_enum_derive() {

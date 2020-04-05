@@ -34,9 +34,7 @@ pub fn run(opt: NodeOpt) -> errors::Result<()> {
 		bail!(errors::ErrorKind::HomeDirNotInited(format!("{:?}", home)));
 	}
 
-	let config = Config {
-		home,
-	};
+	let config = Config { home };
 
 	let mut service = Service::new(config)?;
 
@@ -46,9 +44,5 @@ pub fn run(opt: NodeOpt) -> errors::Result<()> {
 }
 
 fn home_inited(home: &PathBuf) -> bool {
-	let spec_file = home.join(base::CONFIG).join(base::SPEC_FILE);
-	if !spec_file.exists() {
-		return false;
-	}
-	true
+	home.exists()
 }

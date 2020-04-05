@@ -12,11 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub use hash_enum_derive::*;
+use error_chain::*;
 
-pub trait HashEnum: Sized {
-	fn from_hash(hash: &[u8]) -> Option<Self>;
-	fn from_name(name: &str) -> Option<Self>;
-	fn hash(&self) -> &[u8];
-	fn name(&self) -> &str;
+error_chain! {
+	foreign_links {
+	}
+	links {
+		StateDB(node_statedb::errors::Error, node_statedb::errors::ErrorKind) #[doc="StateDB error"];
+	}
+	errors {
+	}
 }

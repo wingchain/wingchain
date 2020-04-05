@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use quote::quote;
-use syn::export::TokenStream;
 use crypto::blake2b;
 use heck::SnakeCase;
 use proc_macro2::Ident;
+use quote::quote;
+use syn::export::TokenStream;
 
 #[proc_macro_derive(HashEnum)]
 pub fn hash_enum(ts: TokenStream) -> TokenStream {
@@ -28,56 +28,68 @@ pub fn hash_enum(ts: TokenStream) -> TokenStream {
 	};
 	let type_name = &ast.ident;
 
-	let from_hash_ts_vec = variants.iter().map(|x| {
-		let ident = &x.ident;
-		let hash = get_hash(ident);
-		quote! { &[#(#hash),*] => Some(#type_name::#ident) }
-	}).collect::<Vec<_>>();
+	let from_hash_ts_vec = variants
+		.iter()
+		.map(|x| {
+			let ident = &x.ident;
+			let hash = get_hash(ident);
+			quote! { &[#(#hash),*] => Some(#type_name::#ident) }
+		})
+		.collect::<Vec<_>>();
 
-	let from_name_ts_vec = variants.iter().map(|x| {
-		let ident = &x.ident;
-		let name = get_name(ident);
-		quote! { #name => Some(#type_name::#ident) }
-	}).collect::<Vec<_>>();
+	let from_name_ts_vec = variants
+		.iter()
+		.map(|x| {
+			let ident = &x.ident;
+			let name = get_name(ident);
+			quote! { #name => Some(#type_name::#ident) }
+		})
+		.collect::<Vec<_>>();
 
-	let hash_ts_vec = variants.iter().map(|x| {
-		let ident = &x.ident;
-		let hash = get_hash(ident);
-		quote! { #type_name::#ident => &[#(#hash),*] }
-	}).collect::<Vec<_>>();
+	let hash_ts_vec = variants
+		.iter()
+		.map(|x| {
+			let ident = &x.ident;
+			let hash = get_hash(ident);
+			quote! { #type_name::#ident => &[#(#hash),*] }
+		})
+		.collect::<Vec<_>>();
 
-	let name_ts_vec = variants.iter().map(|x| {
-		let ident = &x.ident;
-		let name = get_name(ident);
-		quote! { #type_name::#ident => #name }
-	}).collect::<Vec<_>>();
+	let name_ts_vec = variants
+		.iter()
+		.map(|x| {
+			let ident = &x.ident;
+			let name = get_name(ident);
+			quote! { #type_name::#ident => #name }
+		})
+		.collect::<Vec<_>>();
 
 	let gen = quote! {
-        impl HashEnum for #type_name {
-        	fn from_hash(hash: &[u8]) -> Option<Self> {
-        		match hash {
-                    #(#from_hash_ts_vec),*,
-                    _ => None,
-                }
-        	}
-        	fn from_name(name: &str) -> Option<Self> {
-        		match name {
-                    #(#from_name_ts_vec),*,
-                    _ => None,
-                }
-        	}
-        	fn hash(&self) -> &[u8] {
-        		match *self {
-                    #(#hash_ts_vec),*
-                }
-        	}
-            fn name(&self) -> &str {
-                match *self {
-                    #(#name_ts_vec),*
-                }
-            }
-        }
-    };
+		impl HashEnum for #type_name {
+			fn from_hash(hash: &[u8]) -> Option<Self> {
+				match hash {
+					#(#from_hash_ts_vec),*,
+					_ => None,
+				}
+			}
+			fn from_name(name: &str) -> Option<Self> {
+				match name {
+					#(#from_name_ts_vec),*,
+					_ => None,
+				}
+			}
+			fn hash(&self) -> &[u8] {
+				match *self {
+					#(#hash_ts_vec),*
+				}
+			}
+			fn name(&self) -> &str {
+				match *self {
+					#(#name_ts_vec),*
+				}
+			}
+		}
+	};
 	gen.into()
 }
 
