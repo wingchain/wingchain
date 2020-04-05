@@ -22,18 +22,6 @@ pub enum MethodEnum {
 	Init,
 }
 
-#[derive(Encode, Decode)]
-pub struct InitParams {
-	pub chain_id: String,
-	pub timestamp: u32,
-}
-
-impl MethodEnum {
-	fn execute_call<C: Context>(&self, module: &Module<C>, call: &Call) -> Result<()> {
-		unimplemented!()
-	}
-}
-
 pub struct Module<C>
 	where C: Context
 {
@@ -86,11 +74,15 @@ impl<C> ModuleT<C> for Module<C>
 }
 
 impl<C: Context> Module<C> {
+	# [derive(Encode, Decode)]
+	pub struct InitParams {
+	pub chain_id: String,
+	pub timestamp: u32,
+	}
 
 	fn init(&self, params: &InitParams) -> Result<()> {
 		self.chain_id.set(&params.chain_id);
 		self.timestamp.set(&params.timestamp);
 		Ok(())
 	}
-
 }
