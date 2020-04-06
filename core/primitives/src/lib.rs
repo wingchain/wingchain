@@ -51,11 +51,12 @@ pub struct Transaction {
 	pub call: Call,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Encode, Decode)]
 pub struct Hash(pub Vec<u8>);
 
 pub type BlockNumber = u32;
 
+#[derive(Clone, Debug, Encode, Decode)]
 pub struct Header {
 	pub number: BlockNumber,
 	pub timestamp: u32,
@@ -63,10 +64,11 @@ pub struct Header {
 	pub meta_txs_root: Hash,
 	pub meta_state_root: Hash,
 	pub payload_txs_root: Hash,
-	pub payload_executed_gap: u8,
+	pub payload_executed_gap: i8,
 	pub payload_executed_state_root: Hash,
 }
 
+#[derive(Clone, Debug, Encode, Decode)]
 pub struct Body {
 	pub meta_txs: Vec<Transaction>,
 	pub payload_txs: Vec<Transaction>,
@@ -75,6 +77,11 @@ pub struct Body {
 pub struct Block {
 	pub header: Header,
 	pub body: Body,
+}
+
+#[derive(Clone, Debug, Encode, Decode)]
+pub struct Executed {
+	pub payload_executed_state_root: Hash,
 }
 
 impl<T: HashEnum> From<T> for DispatchId {

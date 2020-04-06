@@ -18,6 +18,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use chrono::DateTime;
+use log::info;
 use parity_codec::{Decode, Encode};
 use toml::Value;
 
@@ -26,11 +27,10 @@ use crypto::dsa::DsaImpl;
 use crypto::hash::{Hash as HashT, HashImpl};
 use main_base::spec::Spec;
 use main_base::SystemInitParams;
-use node_db::DB;
-use node_executor::{Executor, module, ModuleEnum};
+use node_db::{DBKey, DBTransaction, DB};
+use node_executor::{module, Context, Executor, ModuleEnum};
 use node_statedb::{StateDB, TrieRoot};
-use primitives::{Block, BlockNumber, Body, Hash, Header};
-// use primitives::traits::Module;
+use primitives::{Block, BlockNumber, Body, Executed, Hash, Header};
 
 use crate::errors;
 
@@ -44,6 +44,7 @@ pub struct Chain {
 	meta_statedb: Arc<StateDB>,
 	payload_statedb: Arc<StateDB>,
 	trie_root: Arc<TrieRoot>,
+	executor: Executor,
 	basic: Arc<Basic>,
 }
 
@@ -69,16 +70,14 @@ impl Chain {
 		)?);
 		let payload_statedb = Arc::new(StateDB::new(
 			db.clone(),
-			node_db::columns::STATE,
+			node_db::columns::PAYLOAD_STATE,
 			hash.clone(),
 		)?);
 		let trie_root = Arc::new(TrieRoot::new(hash.clone())?);
 
-		let basic = Arc::new(Basic {
-			hash,
-			dsa,
-			address,
-		});
+		let executor = Executor::new(trie_root.clone());
+
+		let basic = Arc::new(Basic { hash, dsa, address });
 
 		let chain = Self {
 			db,
@@ -86,6 +85,7 @@ impl Chain {
 			meta_statedb,
 			payload_statedb,
 			trie_root,
+			executor,
 			basic,
 		};
 
@@ -99,18 +99,24 @@ impl Chain {
 	fn get_spec(config: &Config) -> errors::Result<(bool, DB, Spec)> {
 		let db_path = config.home.join(main_base::DATA).join(main_base::DB);
 		let db = DB::open(&db_path)?;
-		let genesis_inited = db.get(node_db::columns::GLOBAL, node_db::global_key::BEST_NUMBER)?.is_some();
+		let genesis_inited = db
+			.get(node_db::columns::GLOBAL, node_db::global_key::BEST_NUMBER)?
+			.is_some();
 		let spec = match genesis_inited {
 			true => {
 				let spec = db.get(node_db::columns::GLOBAL, node_db::global_key::SPEC)?;
-				let spec = spec.and_then(|x| Decode::decode(&mut &x[..]));
-				let spec: String = spec.ok_or(errors::ErrorKind::DBIntegrityLess("miss spec".to_string()))?;
+				let spec =
+					spec.ok_or(errors::ErrorKind::DBIntegrityLess("miss spec".to_string()))?;
+				let spec: String = Decode::decode(&mut &spec[..])?;
 				spec
 			}
 			false => {
-				let spec = fs::read_to_string(config.home
-					.join(main_base::CONFIG)
-					.join(main_base::SPEC_FILE))?;
+				let spec = fs::read_to_string(
+					config
+						.home
+						.join(main_base::CONFIG)
+						.join(main_base::SPEC_FILE),
+				)?;
 				spec
 			}
 		};
@@ -120,9 +126,11 @@ impl Chain {
 	}
 
 	fn init_genesis(&self) -> errors::Result<()> {
-		let spec_str = fs::read_to_string(self.config.home
-											  .join(main_base::CONFIG)
-											  .join(main_base::SPEC_FILE),
+		let spec_str = fs::read_to_string(
+			self.config
+				.home
+				.join(main_base::CONFIG)
+				.join(main_base::SPEC_FILE),
 		)?;
 		let spec: Spec = toml::from_str(&spec_str)?;
 
@@ -144,29 +152,47 @@ impl Chain {
 			.map_err(|_| errors::ErrorKind::InvalidSpec)?;
 		let timestamp = time.timestamp() as u32;
 
-		let init_params = module::system::InitParams {
-			chain_id,
-			timestamp,
-		};
-
-		let tx = Executor::build_tx(ModuleEnum::System, module::system::MethodEnum::Init, init_params).expect("qed");
+		let tx = self
+			.executor
+			.build_tx(
+				ModuleEnum::System,
+				module::system::MethodEnum::Init,
+				module::system::InitParams {
+					chain_id,
+					timestamp,
+				},
+			)
+			.expect("qed");
 		let meta_txs = vec![tx];
 		let payload_txs = vec![];
 		let zero_hash = Hash(vec![0u8; self.basic.hash.length().into()]);
 
-		let meta_txs_root = Hash(self.trie_root.calc_ordered_trie_root(meta_txs.iter().map(Encode::encode)));
-		let payload_txs_root = Hash(self.trie_root.calc_ordered_trie_root(payload_txs.iter().map(Encode::encode)));
+		let number = 0;
+		let context = Context::new(
+			number,
+			timestamp,
+			self.meta_statedb.clone(),
+			self.meta_statedb.default_root(),
+			self.payload_statedb.clone(),
+			self.payload_statedb.default_root(),
+		)?;
 
-		println!("meta_txs_root: {:?}", meta_txs_root);
-		println!("payload_txs_root: {:?}", payload_txs_root);
+		let meta_txs_root = Hash(self.executor.execute_txs(&context, &meta_txs)?);
+		let payload_txs_root = Hash(self.executor.execute_txs(&context, &payload_txs)?);
+
+		let (meta_state_root, meta_transaction) = context.get_meta_update()?;
+		let (payload_state_root, payload_transaction) = context.get_meta_update()?;
+
+		let meta_state_root = Hash(meta_state_root);
+		let payload_state_root = Hash(payload_state_root);
 
 		let block = Block {
 			header: Header {
-				number: 0,
+				number,
 				timestamp,
 				parent_hash: zero_hash.clone(),
 				meta_txs_root,
-				meta_state_root: zero_hash.clone(),
+				meta_state_root,
 				payload_txs_root,
 				payload_executed_gap: 1,
 				payload_executed_state_root: zero_hash,
@@ -177,14 +203,92 @@ impl Chain {
 			},
 		};
 
+		let mut transaction = DBTransaction::new();
+
+		// commit block
+		let header_encoded = Encode::encode(&block.header);
+		let block_hash = {
+			let mut out = vec![0u8; self.basic.hash.length().into()];
+			self.basic.hash.hash(&mut out, &header_encoded);
+			out
+		};
+
+		// 1. meta state
+		transaction.extend(meta_transaction);
+
+		// 2. header
+		transaction.put_owned(
+			node_db::columns::HEADER,
+			DBKey::from_slice(&block_hash),
+			header_encoded,
+		);
+
+		// 3. body
+		transaction.put_owned(
+			node_db::columns::META_TXS,
+			DBKey::from_slice(&block_hash),
+			Encode::encode(&block.body.meta_txs),
+		);
+		transaction.put_owned(
+			node_db::columns::PAYLOAD_TXS,
+			DBKey::from_slice(&block_hash),
+			Encode::encode(&block.body.payload_txs),
+		);
+
+		// 4. block hash
+		transaction.put_owned(
+			node_db::columns::BLOCK_HASH,
+			DBKey::from_slice(&Encode::encode(&number)),
+			block_hash.clone(),
+		);
+
+		// 5. number
+		transaction.put_owned(
+			node_db::columns::GLOBAL,
+			DBKey::from_slice(node_db::global_key::BEST_NUMBER),
+			Encode::encode(&number),
+		);
+
+		// commit executed
+		// 1. payload state
+		transaction.extend(payload_transaction);
+
+		// 2. executed
+		let executed = Executed {
+			payload_executed_state_root: payload_state_root,
+		};
+		transaction.put_owned(
+			node_db::columns::EXECUTED,
+			DBKey::from_slice(&block_hash),
+			Encode::encode(&executed),
+		);
+
+		// commit spec
+		transaction.put_owned(
+			node_db::columns::GLOBAL,
+			DBKey::from_slice(node_db::global_key::SPEC),
+			Encode::encode(&spec_str),
+		);
+
+		self.db.write(transaction)?;
+
+		info!(
+			"Genesis block inited: block hash: {}",
+			hex::encode(block_hash)
+		);
+
 		Ok(())
 	}
 
 	fn get_best_number(&self) -> errors::Result<Option<BlockNumber>> {
 		let best_number = self
 			.db
-			.get(node_db::columns::GLOBAL, node_db::global_key::BEST_NUMBER)?
-			.and_then(|x| Decode::decode(&mut &x[..]));
+			.get(node_db::columns::GLOBAL, node_db::global_key::BEST_NUMBER)?;
+
+		let best_number = match best_number {
+			Some(best_number) => Decode::decode(&mut &best_number[..])?,
+			None => None,
+		};
 		Ok(best_number)
 	}
 }

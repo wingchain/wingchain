@@ -167,18 +167,24 @@ impl DBTransaction {
 			key: DBKey::from_slice(key),
 		});
 	}
+
+	/// Extend with another transaction
+	pub fn extend(&mut self, transaction: DBTransaction) {
+		self.ops.extend(transaction.ops);
+	}
 }
 
 pub mod columns {
 	/// column names, which should be corresponding to the following const
-	pub const COLUMN_NAMES: [&str; 7] = [
+	pub const COLUMN_NAMES: [&str; 8] = [
 		"global",
 		"block_hash",
 		"header",
 		"meta_state",
 		"meta_txs",
-		"state",
-		"txs",
+		"payload_state",
+		"payload_txs",
+		"executed",
 	];
 
 	/// see global_key
@@ -193,14 +199,17 @@ pub mod columns {
 	/// meta state trie
 	pub const META_STATE: u32 = 3;
 
-	/// meta transactions
+	/// block hash to meta transactions
 	pub const META_TXS: u32 = 4;
 
-	/// state trie
-	pub const STATE: u32 = 5;
+	/// payload state trie
+	pub const PAYLOAD_STATE: u32 = 5;
 
-	/// transactions
-	pub const TXS: u32 = 6;
+	/// block hash to payload transactions
+	pub const PAYLOAD_TXS: u32 = 6;
+
+	/// block hash to executed
+	pub const EXECUTED: u32 = 7;
 }
 
 pub mod global_key {

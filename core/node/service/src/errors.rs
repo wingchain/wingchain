@@ -13,17 +13,18 @@
 // limitations under the License.
 
 use error_chain::*;
-use primitives::DispatchId;
 
 error_chain! {
 	foreign_links {
 		IO(std::io::Error) #[doc="IO error"];
 		Toml(toml::de::Error) #[doc="Toml error"];
+		Codec(parity_codec::Error) #[doc="Codec error"];
 	}
 	links {
 		Crypto(crypto::errors::Error, crypto::errors::ErrorKind) #[doc="Crypto error"];
 		DB(node_db::errors::Error, node_db::errors::ErrorKind) #[doc="DB error"];
 		StateDB(node_statedb::errors::Error, node_statedb::errors::ErrorKind) #[doc="StateDB error"];
+		Executor(node_executor::errors::Error, node_executor::errors::ErrorKind) #[doc="Executor error"];
 	}
 	errors {
 		InvalidSpec {

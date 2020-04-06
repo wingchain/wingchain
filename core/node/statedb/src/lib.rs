@@ -61,9 +61,12 @@ impl StateDB {
 
 	pub fn default_root(&self) -> Vec<u8> {
 		match self.hash_length {
-			HashLength::HashLength20 => self.default_root_for_hash::<TrieHasher20>(),
-			HashLength::HashLength32 => self.default_root_for_hash::<TrieHasher32>(),
-			HashLength::HashLength64 => self.default_root_for_hash::<TrieHasher64>(),
+			HashLength::HashLength20 => self.default_root_for_hash::<TrieHasher20>().to_vec(),
+			HashLength::HashLength32 => self.default_root_for_hash::<TrieHasher32>().to_vec(),
+			HashLength::HashLength64 => self
+				.default_root_for_hash::<TrieHasher64>()
+				.as_ref()
+				.to_vec(),
 		}
 	}
 
@@ -90,10 +93,12 @@ impl StateDB {
 	}
 
 	pub fn prepare_stmt(&self, root: &[u8]) -> errors::Result<StateDBStmt> {
+		let new = self.default_root() == root;
 		Ok(StateDBStmt::new(
 			self.db.clone(),
 			self.db_column,
 			root,
+			new,
 			&self.hash_length,
 		))
 	}
@@ -115,28 +120,27 @@ impl StateDB {
 
 	/// try update with batch key-values,
 	/// return new trie root and db transaction to update the state column of DB
-	pub fn prepare_update<I>(
+	pub fn prepare_update<'a, I>(
 		&self,
 		root: &[u8],
 		data: I,
-		new: bool,
 	) -> errors::Result<(Vec<u8>, DBTransaction)>
-		where
-			I: IntoIterator<Item=(DBKey, Option<DBValue>)>,
+	where
+		I: Iterator<Item = (&'a DBKey, &'a Option<DBValue>)>,
 	{
 		let result = match self.hash_length {
 			HashLength::HashLength20 => {
 				let mut typed_root = [0u8; 20];
 				typed_root.copy_from_slice(&root);
 
-				self.prepare_update_for_hasher::<_, TrieHasher20>(typed_root, data, new)
+				self.prepare_update_for_hasher::<_, TrieHasher20>(typed_root, data)
 					.map(|(root, transaction)| (root.to_vec(), transaction))?
 			}
 			HashLength::HashLength32 => {
 				let mut typed_root = [0u8; 32];
 				typed_root.copy_from_slice(&root);
 
-				self.prepare_update_for_hasher::<_, TrieHasher32>(typed_root, data, new)
+				self.prepare_update_for_hasher::<_, TrieHasher32>(typed_root, data)
 					.map(|(root, transaction)| (root.to_vec(), transaction))?
 			}
 			HashLength::HashLength64 => {
@@ -144,7 +148,7 @@ impl StateDB {
 				typed_root.copy_from_slice(&root);
 				let typed_root = H512::from(typed_root);
 
-				self.prepare_update_for_hasher::<_, TrieHasher64>(typed_root, data, new)
+				self.prepare_update_for_hasher::<_, TrieHasher64>(typed_root, data)
 					.map(|(root, transaction)| (root.as_bytes().to_vec(), transaction))?
 			}
 		};
@@ -154,16 +158,16 @@ impl StateDB {
 
 /// private impl
 impl StateDB {
-	fn default_root_for_hash<H>(&self) -> Vec<u8>
-		where
-			H: Hasher,
+	fn default_root_for_hash<H>(&self) -> H::Out
+	where
+		H: Hasher,
 	{
-		H::Out::default().as_ref().to_vec()
+		H::Out::default()
 	}
 
 	fn get_for_hasher<H>(&self, root: H::Out, key: &[u8]) -> errors::Result<Option<DBValue>>
-		where
-			H: Hasher,
+	where
+		H: Hasher,
 	{
 		let buffer = DefaultMemoryDB::<H>::default();
 		let proxy = ProxyHashDB {
@@ -182,24 +186,30 @@ impl StateDB {
 	fn prepare_get_for_hasher<H>(
 		stmt: &StateDBStmtForHasher<H>,
 	) -> errors::Result<StateDBGetterForHasher<H>>
-		where
-			H: Hasher,
+	where
+		H: Hasher,
 	{
-		let triedb = DefaultTrieDB::<H>::new(&stmt.proxy, &stmt.root).map_err(parse_trie_error)?;
+		let triedb = match stmt.new {
+			false => {
+				Some(DefaultTrieDB::<H>::new(&stmt.proxy, &stmt.root).map_err(parse_trie_error)?)
+			}
+			true => None,
+		};
 		let statedb_getter = StateDBGetterForHasher { triedb };
 		Ok(statedb_getter)
 	}
 
-	fn prepare_update_for_hasher<I, H>(
+	fn prepare_update_for_hasher<'a, I, H>(
 		&self,
 		mut root: H::Out,
 		data: I,
-		new: bool,
 	) -> errors::Result<(H::Out, DBTransaction)>
-		where
-			I: IntoIterator<Item=(DBKey, Option<DBValue>)>,
-			H: Hasher,
+	where
+		I: Iterator<Item = (&'a DBKey, &'a Option<DBValue>)>,
+		H: Hasher,
 	{
+		let new = self.default_root_for_hash::<H>() == root;
+
 		let buffer = DefaultMemoryDB::<H>::default();
 		let mut proxy = ProxyHashDB {
 			db: self.db.clone(),
@@ -247,20 +257,26 @@ pub enum StateDBStmt {
 }
 
 impl StateDBStmt {
-	pub fn new(db: Arc<DB>, db_column: u32, root: &[u8], hash_length: &HashLength) -> Self {
+	pub fn new(
+		db: Arc<DB>,
+		db_column: u32,
+		root: &[u8],
+		new: bool,
+		hash_length: &HashLength,
+	) -> Self {
 		match hash_length {
 			HashLength::HashLength20 => {
 				let mut typed_root = [0u8; 20];
 				typed_root.copy_from_slice(&root);
 				Self::Hasher20(StateDBStmtForHasher::<TrieHasher20>::new(
-					db, db_column, typed_root,
+					db, db_column, typed_root, new,
 				))
 			}
 			HashLength::HashLength32 => {
 				let mut typed_root = [0u8; 32];
 				typed_root.copy_from_slice(&root);
 				Self::Hasher32(StateDBStmtForHasher::<TrieHasher32>::new(
-					db, db_column, typed_root,
+					db, db_column, typed_root, new,
 				))
 			}
 			HashLength::HashLength64 => {
@@ -268,7 +284,7 @@ impl StateDBStmt {
 				typed_root.copy_from_slice(&root);
 				let typed_root = H512::from(typed_root);
 				Self::Hasher64(StateDBStmtForHasher::<TrieHasher64>::new(
-					db, db_column, typed_root,
+					db, db_column, typed_root, new,
 				))
 			}
 		}
@@ -276,25 +292,26 @@ impl StateDBStmt {
 }
 
 pub struct StateDBStmtForHasher<H>
-	where
-		H: Hasher,
+where
+	H: Hasher,
 {
 	proxy: ProxyHashDB<H>,
 	root: H::Out,
+	new: bool,
 }
 
 impl<H> StateDBStmtForHasher<H>
-	where
-		H: Hasher,
+where
+	H: Hasher,
 {
-	pub fn new(db: Arc<DB>, db_column: u32, root: H::Out) -> Self {
+	pub fn new(db: Arc<DB>, db_column: u32, root: H::Out, new: bool) -> Self {
 		let buffer = DefaultMemoryDB::<H>::default();
 		let proxy = ProxyHashDB {
 			db,
 			db_column,
 			buffer,
 		};
-		Self { proxy, root }
+		Self { proxy, root, new }
 	}
 }
 
@@ -305,18 +322,27 @@ pub enum StateDBGetter<'a> {
 }
 
 pub struct StateDBGetterForHasher<'a, H>
-	where
-		H: Hasher,
+where
+	H: Hasher,
 {
-	triedb: DefaultTrieDB<'a, H>,
+	triedb: Option<DefaultTrieDB<'a, H>>,
 }
 
 impl<'a> StateDBGetter<'a> {
 	pub fn get(&self, key: &[u8]) -> errors::Result<Option<DBValue>> {
 		let result = match self {
-			Self::Hasher20(g) => g.triedb.get(key).map_err(parse_trie_error)?,
-			Self::Hasher32(g) => g.triedb.get(key).map_err(parse_trie_error)?,
-			Self::Hasher64(g) => g.triedb.get(key).map_err(parse_trie_error)?,
+			Self::Hasher20(g) => match &g.triedb {
+				Some(triedb) => triedb.get(key).map_err(parse_trie_error)?,
+				None => None,
+			},
+			Self::Hasher32(g) => match &g.triedb {
+				Some(triedb) => triedb.get(key).map_err(parse_trie_error)?,
+				None => None,
+			},
+			Self::Hasher64(g) => match &g.triedb {
+				Some(triedb) => triedb.get(key).map_err(parse_trie_error)?,
+				None => None,
+			},
 		};
 		Ok(result)
 	}
@@ -393,10 +419,10 @@ impl TrieRoot {
 	}
 
 	pub fn calc_trie_root<I, A, B>(&self, input: I) -> Vec<u8>
-		where
-			I: IntoIterator<Item=(A, B)>,
-			A: AsRef<[u8]> + Ord,
-			B: AsRef<[u8]>,
+	where
+		I: IntoIterator<Item = (A, B)>,
+		A: AsRef<[u8]> + Ord,
+		B: AsRef<[u8]>,
 	{
 		match self.hash_length {
 			HashLength::HashLength20 => {
@@ -418,9 +444,9 @@ impl TrieRoot {
 	}
 
 	pub fn calc_ordered_trie_root<I, A>(&self, input: I) -> Vec<u8>
-		where
-			I: IntoIterator<Item=A>,
-			A: AsRef<[u8]>,
+	where
+		I: IntoIterator<Item = A>,
+		A: AsRef<[u8]>,
 	{
 		let input = input
 			.into_iter()

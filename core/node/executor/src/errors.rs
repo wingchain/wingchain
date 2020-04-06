@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use error_chain::*;
+use primitives::DispatchId;
 
 error_chain! {
 	foreign_links {
@@ -21,5 +22,9 @@ error_chain! {
 		StateDB(node_statedb::errors::Error, node_statedb::errors::ErrorKind) #[doc="StateDB error"];
 	}
 	errors {
+		InvalidDispatchId(dispatch_id: DispatchId) {
+			description(""),
+			display("Invalid dispatch id: {:?}", dispatch_id),
+		}
 	}
 }

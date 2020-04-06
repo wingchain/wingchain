@@ -8,7 +8,7 @@ edition = "2018"
 
 [dependencies]
 error-chain = "0.12.2"
-parity-codec = { version = "4.1.4", features = ["derive"] }
+parity-codec = { package = "parity-scale-codec", version = "1.3", features = ["derive"] }
 
 node-db = { path = "../db" }
 node-statedb = { path = "../statedb" }
@@ -16,3 +16,8 @@ primitives = { path = "../../primitives" }
 module-system = { path = "../../module/system" }
 hash_enum = { path = "../../../utils/hash_enum" }
 node-executor-primitives = { path = "primitives" }
+
+[dev-dependencies]
+chrono = "0.4.11"
+crypto = { path = "../../crypto" }
+tempfile = "3.1.0"

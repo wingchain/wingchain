@@ -30,7 +30,7 @@ fn test_db() {
 	transaction.put(columns::BLOCK_HASH, &vec![1, 0, 0, 0], b"header");
 	transaction.put(columns::HEADER, b"header", b"header_value");
 	transaction.put_owned(
-		columns::TXS,
+		columns::PAYLOAD_TXS,
 		DBKey::from_vec(b"body".to_vec()),
 		b"body_value".to_vec(),
 	);
@@ -54,7 +54,7 @@ fn test_db() {
 		b"header_value"
 	);
 	assert_eq!(
-		db.get(columns::TXS, b"body").unwrap().unwrap(),
+		db.get(columns::PAYLOAD_TXS, b"body").unwrap().unwrap(),
 		b"body_value"
 	);
 }

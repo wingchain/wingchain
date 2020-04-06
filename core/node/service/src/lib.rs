@@ -36,10 +36,7 @@ impl Service {
 		};
 
 		let chain = Arc::new(Chain::new(chain_config)?);
-		Ok(Self {
-			config,
-			chain,
-		})
+		Ok(Self { config, chain })
 	}
 
 	pub fn start(&mut self) -> errors::Result<()> {

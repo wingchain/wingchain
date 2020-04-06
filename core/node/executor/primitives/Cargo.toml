@@ -8,7 +8,7 @@ edition = "2018"
 
 [dependencies]
 error-chain = "0.12.2"
-parity-codec = { version = "4.1.4", features = ["derive"] }
+parity-codec = { package = "parity-scale-codec", version = "1.3", features = ["derive"] }
 
 node-db = { path = "../../db" }
 primitives = { path = "../../../primitives" }

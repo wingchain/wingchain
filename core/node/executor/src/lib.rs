@@ -14,17 +14,16 @@
 
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::io::ErrorKind;
 use std::rc::Rc;
 use std::sync::Arc;
 
 use parity_codec::Encode;
 
 use hash_enum::HashEnum;
-use node_db::{DBKey, DBValue};
+use node_db::{DBKey, DBTransaction, DBValue};
 use node_executor_primitives::{Context as ContextT, Module as ModuleT};
-use node_statedb::{StateDB, StateDBGetter, StateDBStmt};
-use primitives::{BlockNumber, Call, Params, Transaction};
+use node_statedb::{StateDB, StateDBGetter, StateDBStmt, TrieRoot};
+use primitives::{BlockNumber, Call, FromDispatchId, Params, Transaction};
 
 pub mod errors;
 
@@ -36,31 +35,56 @@ pub struct Context {
 struct ContextInner {
 	number: BlockNumber,
 	timestamp: u32,
+	meta_statedb: Arc<StateDB>,
+	meta_state_root: Vec<u8>,
 	meta_state: ContextState,
+	payload_statedb: Arc<StateDB>,
+	payload_state_root: Vec<u8>,
 	payload_state: ContextState,
 }
 
 impl Context {
-	pub fn new(number: BlockNumber,
-			   timestamp: u32,
-			   meta_statedb: Arc<StateDB>,
-			   meta_state_root: Vec<u8>,
-			   payload_statedb: Arc<StateDB>,
-			   payload_state_root: Vec<u8>,
+	pub fn new(
+		number: BlockNumber,
+		timestamp: u32,
+		meta_statedb: Arc<StateDB>,
+		meta_state_root: Vec<u8>,
+		payload_statedb: Arc<StateDB>,
+		payload_state_root: Vec<u8>,
 	) -> errors::Result<Self> {
-		let meta_state = ContextState::new(meta_statedb, meta_state_root)?;
-		let payload_state = ContextState::new(payload_statedb, payload_state_root)?;
+		let meta_state = ContextState::new(meta_statedb.clone(), &meta_state_root)?;
+		let payload_state = ContextState::new(payload_statedb.clone(), &payload_state_root)?;
 
-		let inner = Rc::new(ContextInner{
+		let inner = Rc::new(ContextInner {
 			number,
 			timestamp,
+			meta_statedb,
+			meta_state_root,
 			meta_state,
+			payload_statedb,
+			payload_state_root,
 			payload_state,
 		});
 
-		Ok(Self {
-			inner
-		})
+		Ok(Self { inner })
+	}
+
+	pub fn get_meta_update(&self) -> errors::Result<(Vec<u8>, DBTransaction)> {
+		let buffer = self.inner.meta_state.buffer.borrow();
+		let result = self
+			.inner
+			.meta_statedb
+			.prepare_update(&self.inner.meta_state_root, buffer.iter())?;
+		Ok(result)
+	}
+
+	pub fn get_payload_update(&self) -> errors::Result<(Vec<u8>, DBTransaction)> {
+		let buffer = self.inner.payload_state.buffer.borrow();
+		let result = self
+			.inner
+			.payload_statedb
+			.prepare_update(&self.inner.payload_state_root, buffer.iter())?;
+		Ok(result)
 	}
 }
 
@@ -73,9 +97,8 @@ struct ContextState {
 }
 
 impl ContextState {
-	fn new(statedb: Arc<StateDB>,
-		   state_root: Vec<u8>) -> errors::Result<Self> {
-		let statedb_stmt = statedb.prepare_stmt(&state_root)?;
+	fn new(statedb: Arc<StateDB>, state_root: &[u8]) -> errors::Result<Self> {
+		let statedb_stmt = statedb.prepare_stmt(state_root)?;
 		let statedb_getter = StateDB::prepare_get(&statedb_stmt)?;
 		let buffer = Default::default();
 
@@ -96,13 +119,19 @@ impl ContextT for Context {
 		let buffer = self.inner.meta_state.buffer.borrow();
 		match buffer.get(&DBKey::from_slice(key)) {
 			Some(value) => Ok(value.clone()),
-			None => {
-				self.inner.meta_state.statedb_getter.get(key).map_err(|_|node_executor_primitives::errors::ErrorKind::TrieError.into())
-			}
+			None => self
+				.inner
+				.meta_state
+				.statedb_getter
+				.get(key)
+				.map_err(|_| node_executor_primitives::errors::ErrorKind::TrieError.into()),
 		}
-
 	}
-	fn meta_set(&self, key: &[u8], value: Option<DBValue>) -> node_executor_primitives::errors::Result<()> {
+	fn meta_set(
+		&self,
+		key: &[u8],
+		value: Option<DBValue>,
+	) -> node_executor_primitives::errors::Result<()> {
 		let mut buffer = self.inner.meta_state.buffer.borrow_mut();
 		buffer.insert(DBKey::from_slice(key), value);
 		Ok(())
@@ -111,22 +140,36 @@ impl ContextT for Context {
 		let buffer = self.inner.payload_state.buffer.borrow();
 		match buffer.get(&DBKey::from_slice(key)) {
 			Some(value) => Ok(value.clone()),
-			None => {
-				self.inner.payload_state.statedb_getter.get(key).map_err(|_|node_executor_primitives::errors::ErrorKind::TrieError.into())
-			}
+			None => self
+				.inner
+				.payload_state
+				.statedb_getter
+				.get(key)
+				.map_err(|_| node_executor_primitives::errors::ErrorKind::TrieError.into()),
 		}
 	}
-	fn payload_set(&self, key: &[u8], value: Option<DBValue>) -> node_executor_primitives::errors::Result<()> {
+	fn payload_set(
+		&self,
+		key: &[u8],
+		value: Option<DBValue>,
+	) -> node_executor_primitives::errors::Result<()> {
 		let mut buffer = self.inner.payload_state.buffer.borrow_mut();
 		buffer.insert(DBKey::from_slice(key), value);
 		Ok(())
 	}
 }
 
-pub struct Executor;
+pub struct Executor {
+	trie_root: Arc<TrieRoot>,
+}
 
 impl Executor {
+	pub fn new(trie_root: Arc<TrieRoot>) -> Self {
+		Self { trie_root }
+	}
+
 	pub fn build_tx<M: HashEnum, P: Encode>(
+		&self,
 		module: ModuleEnum,
 		method: M,
 		params: P,
@@ -150,8 +193,27 @@ impl Executor {
 		}
 	}
 
-	pub fn execute_txs(context: &mut Context, txs: Vec<Transaction>) -> errors::Result<Vec<u8>> {
-		unimplemented!()
+	pub fn execute_txs(
+		&self,
+		context: &Context,
+		txs: &Vec<Transaction>,
+	) -> errors::Result<Vec<u8>> {
+		for tx in txs {
+			let module_id = &tx.call.module_id;
+			let module_enum = ModuleEnum::from_dispatch_id(module_id).ok_or(
+				errors::ErrorKind::InvalidDispatchId(tx.call.module_id.clone()),
+			)?;
+			let call = &tx.call;
+			match module_enum {
+				ModuleEnum::System => {
+					let module = module::system::Module::new(context.clone());
+					let _result = module.execute_call(call);
+				}
+			}
+		}
+		let txs = txs.into_iter().map(|x| Encode::encode(&x));
+		let txs_root = self.trie_root.calc_ordered_trie_root(txs);
+		Ok(txs_root)
 	}
 }
 

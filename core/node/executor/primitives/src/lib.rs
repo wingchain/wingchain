@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::io::ErrorKind;
 use std::marker::PhantomData;
 
 use parity_codec::{Decode, Encode};
@@ -24,8 +23,9 @@ pub mod errors;
 
 const SEPARATOR: &[u8] = b"_";
 
-pub trait Module<C> where
-	C: Context
+pub trait Module<C>
+where
+	C: Context,
 {
 	const META_MODULE: bool = false;
 	const STORAGE_KEY: &'static [u8];
@@ -45,9 +45,9 @@ pub trait Context: Clone {
 }
 
 pub struct StorageValue<T, C>
-	where
-		T: Encode + Decode,
-		C: Context,
+where
+	T: Encode + Decode,
+	C: Context,
 {
 	context: C,
 	meta_module: bool,
@@ -56,8 +56,9 @@ pub struct StorageValue<T, C>
 }
 
 impl<T, C> StorageValue<T, C>
-	where T: Encode + Decode,
-		  C: Context,
+where
+	T: Encode + Decode,
+	C: Context,
 {
 	pub fn new<M: Module<C>>(context: C, storage_key: &'static [u8]) -> Self {
 		let key = [M::STORAGE_KEY, SEPARATOR, storage_key].concat();
@@ -77,13 +78,17 @@ impl<T, C> StorageValue<T, C>
 	pub fn set(&self, value: &T) -> errors::Result<()> {
 		context_set(&self.context, self.meta_module, &self.key, value)
 	}
+
+	pub fn delete(&self) -> errors::Result<()> {
+		context_delete(&self.context, self.meta_module, &self.key)
+	}
 }
 
 pub struct StorageMap<K, V, C>
-	where
-		K: Encode + Decode,
-		V: Encode + Decode,
-		C: Context
+where
+	K: Encode + Decode,
+	V: Encode + Decode,
+	C: Context,
 {
 	context: C,
 	meta_module: bool,
@@ -92,12 +97,17 @@ pub struct StorageMap<K, V, C>
 }
 
 impl<K, V, C> StorageMap<K, V, C>
-	where
-		K: Encode + Decode,
-		V: Encode + Decode,
-		C: Context
+where
+	K: Encode + Decode,
+	V: Encode + Decode,
+	C: Context,
 {
-	pub fn new(context: C, meta_module: bool, module_key: &'static [u8], storage_key: &'static [u8]) -> Self {
+	pub fn new(
+		context: C,
+		meta_module: bool,
+		module_key: &'static [u8],
+		storage_key: &'static [u8],
+	) -> Self {
 		let key = [module_key, storage_key].concat();
 		Self {
 			context,
@@ -116,9 +126,18 @@ impl<K, V, C> StorageMap<K, V, C>
 		let key = &[&self.key, SEPARATOR, &key.encode()].concat();
 		context_set(&self.context, self.meta_module, key, value)
 	}
+
+	pub fn delete(&self, key: K) -> errors::Result<()> {
+		let key = &[&self.key, SEPARATOR, &key.encode()].concat();
+		context_delete(&self.context, self.meta_module, key)
+	}
 }
 
-fn context_get<C: Context, V: Decode>(context: &C, meta_module: bool, key: &[u8]) -> errors::Result<Option<V>> {
+fn context_get<C: Context, V: Decode>(
+	context: &C,
+	meta_module: bool,
+	key: &[u8],
+) -> errors::Result<Option<V>> {
 	let value = match meta_module {
 		true => context.meta_get(key),
 		false => context.payload_get(key),
@@ -126,7 +145,8 @@ fn context_get<C: Context, V: Decode>(context: &C, meta_module: bool, key: &[u8]
 	match value {
 		Ok(value) => match value {
 			Some(value) => {
-				let value = Decode::decode(&mut &value[..]).ok_or(errors::ErrorKind::CodecError)?;
+				let value =
+					Decode::decode(&mut &value[..]).map_err(|_| errors::ErrorKind::CodecError)?;
 				Ok(Some(value))
 			}
 			None => Ok(None),
@@ -135,10 +155,22 @@ fn context_get<C: Context, V: Decode>(context: &C, meta_module: bool, key: &[u8]
 	}
 }
 
-fn context_set<C: Context, V: Encode>(context: &C, meta_module: bool, key: &[u8], value: &V) -> errors::Result<()> {
+fn context_set<C: Context, V: Encode>(
+	context: &C,
+	meta_module: bool,
+	key: &[u8],
+	value: &V,
+) -> errors::Result<()> {
 	let value = Some(value.encode());
 	match meta_module {
 		true => context.meta_set(&key, value),
 		false => context.payload_set(&key, value),
+	}
+}
+
+fn context_delete<C: Context>(context: &C, meta_module: bool, key: &[u8]) -> errors::Result<()> {
+	match meta_module {
+		true => context.meta_set(key, None),
+		false => context.payload_set(key, None),
 	}
 }
