@@ -167,14 +167,28 @@ impl DBTransaction {
 			key: DBKey::from_slice(key),
 		});
 	}
+
+	/// Extend with another transaction
+	pub fn extend(&mut self, transaction: DBTransaction) {
+		self.ops.extend(transaction.ops);
+	}
 }
 
 pub mod columns {
 	/// column names, which should be corresponding to the following const
-	pub const COLUMN_NAMES: [&str; 5] = ["meta", "block_hash", "header", "body", "state"];
+	pub const COLUMN_NAMES: [&str; 8] = [
+		"global",
+		"block_hash",
+		"header",
+		"meta_state",
+		"meta_txs",
+		"payload_state",
+		"payload_txs",
+		"executed",
+	];
 
-	/// see meta_key
-	pub const META: u32 = 0;
+	/// see global_key
+	pub const GLOBAL: u32 = 0;
 
 	/// block number to block hash
 	pub const BLOCK_HASH: u32 = 1;
@@ -182,22 +196,27 @@ pub mod columns {
 	/// block hash to header
 	pub const HEADER: u32 = 2;
 
-	/// block hash to body
-	pub const BODY: u32 = 3;
+	/// meta state trie
+	pub const META_STATE: u32 = 3;
 
-	/// for trie db
-	pub const STATE: u32 = 4;
+	/// block hash to meta transactions
+	pub const META_TXS: u32 = 4;
+
+	/// payload state trie
+	pub const PAYLOAD_STATE: u32 = 5;
+
+	/// block hash to payload transactions
+	pub const PAYLOAD_TXS: u32 = 6;
+
+	/// block hash to executed
+	pub const EXECUTED: u32 = 7;
 }
 
-pub mod meta_key {
+pub mod global_key {
 	/// The best number of the chain
 	pub const BEST_NUMBER: &[u8] = b"best_number";
-
-	/// A hash result to check hashing algorithm
-	pub const TEST_HASH: &[u8] = b"test_hash";
-
-	/// A signature to check signing algorithm
-	pub const TEST_SIG: &[u8] = b"test_sig";
+	/// spec
+	pub const SPEC: &[u8] = b"spec";
 }
 
 pub type DBKey = SmallVec<[u8; 32]>;

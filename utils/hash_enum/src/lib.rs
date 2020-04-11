@@ -12,16 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{MethodId, ModuleId, Params};
+pub use hash_enum_derive::*;
 
-pub trait Method {
-	fn execute(params: &Params);
-}
-
-pub trait Module {
-	fn execute(method_id: &MethodId, params: &Params);
-}
-
-pub trait Executor {
-	fn execute(module_id: &ModuleId, method_id: &MethodId, params: &Params);
+pub trait HashEnum: Sized {
+	fn from_hash(hash: &[u8]) -> Option<Self>;
+	fn from_name(name: &str) -> Option<Self>;
+	fn hash(&self) -> &[u8];
+	fn name(&self) -> &str;
 }

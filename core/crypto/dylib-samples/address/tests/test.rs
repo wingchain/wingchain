@@ -21,7 +21,7 @@ use crypto::AddressLength;
 
 #[test]
 fn test_custom_lib_address() {
-	let path = utils::get_dylib("crypto_dylib_samples_address");
+	let path = utils_test::get_dylib("crypto_dylib_samples_address");
 
 	assert!(
 		path.exists(),

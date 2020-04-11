@@ -14,10 +14,13 @@
 
 use std::fs;
 
+use chrono::DateTime;
 use tempfile::tempdir;
+use toml::Value;
 
 use base::spec::Spec;
 use base::SharedParams;
+use base::SystemInitParams;
 use main_init::cli::InitOpt;
 use main_init::run;
 
@@ -32,6 +35,7 @@ fn test_init() {
 	let opt = InitOpt {
 		shared_params: SharedParams {
 			home: Some(home.to_path_buf()),
+			log: None,
 		},
 	};
 
@@ -43,14 +47,25 @@ fn test_init() {
 		toml::from_str(&fs::read_to_string(home.join("config").join("spec.toml")).unwrap())
 			.unwrap();
 
-	assert_eq!(spec.genesis.txs[0].method, "system.set_chain_id");
-	assert_eq!(
-		spec.genesis.txs[0].params[0].as_str().map(str::len),
-		Some(14)
-	);
+	assert_eq!(spec.basic.hash, "blake2b_256");
+	assert_eq!(spec.basic.dsa, "ed25519");
+	assert_eq!(spec.basic.address, "blake2b_160");
 
-	assert_eq!(spec.genesis.txs[1].method, "system.set_time");
-	assert!(spec.genesis.txs[1].params[0].as_datetime().is_some());
+	let tx = &spec.genesis.txs[0];
+
+	assert_eq!(tx.method, "system.init");
+
+	let param = &tx.params[0];
+
+	let param = match param {
+		Value::String(s) => s,
+		_ => unreachable!("param should be string"),
+	};
+
+	let param: SystemInitParams = serde_json::from_str(param).unwrap();
+
+	assert_eq!(param.chain_id.len(), 14);
+	assert!(DateTime::parse_from_rfc3339(&param.time).is_ok());
 }
 
 #[cfg(feature = "build-dep-test")]
@@ -77,12 +92,23 @@ fn test_init_command() {
 		toml::from_str(&fs::read_to_string(home.join("config").join("spec.toml")).unwrap())
 			.unwrap();
 
-	assert_eq!(spec.genesis.txs[0].method, "system.set_chain_id");
-	assert_eq!(
-		spec.genesis.txs[0].params[0].as_str().map(str::len),
-		Some(14)
-	);
+	assert_eq!(spec.basic.hash, "blake2b_256");
+	assert_eq!(spec.basic.dsa, "ed25519");
+	assert_eq!(spec.basic.address, "blake2b_160");
 
-	assert_eq!(spec.genesis.txs[1].method, "system.set_time");
-	assert!(spec.genesis.txs[1].params[0].as_datetime().is_some());
+	let tx = &spec.genesis.txs[0];
+
+	assert_eq!(tx.method, "system.init");
+
+	let param = &tx.params[0];
+
+	let param = match param {
+		Value::String(s) => s,
+		_ => unreachable!("param should be string"),
+	};
+
+	let param: SystemInitParams = serde_json::from_str(param).unwrap();
+
+	assert_eq!(param.chain_id.len(), 14);
+	assert!(DateTime::parse_from_rfc3339(&param.time).is_ok());
 }

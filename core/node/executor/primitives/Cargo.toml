@@ -1,5 +1,5 @@
 [package]
-name = "module-system"
+name = "node-executor-primitives"
 version = "0.1.0"
 authors = ["developer <developer@wingchain.cn>"]
 edition = "2018"
@@ -7,9 +7,8 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+error-chain = "0.12.2"
 parity-codec = { package = "parity-scale-codec", version = "1.3", features = ["derive"] }
 
-hash_enum = { path = "../../../utils/hash_enum" }
-primitives = { path = "../../primitives" }
-node-executor-primitives = { path = "../../node/executor/primitives" }
-
+node-db = { path = "../../db" }
+primitives = { path = "../../../primitives" }

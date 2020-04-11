@@ -12,12 +12,34 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use crate::chain::Chain;
+
+mod chain;
 pub mod errors;
 
-pub struct Service;
+pub struct Config {
+	pub home: PathBuf,
+}
+
+pub struct Service {
+	config: Config,
+	chain: Arc<Chain>,
+}
 
 impl Service {
-	pub fn start() -> errors::Result<()> {
+	pub fn new(config: Config) -> errors::Result<Self> {
+		let chain_config = chain::Config {
+			home: config.home.clone(),
+		};
+
+		let chain = Arc::new(Chain::new(chain_config)?);
+		Ok(Self { config, chain })
+	}
+
+	pub fn start(&mut self) -> errors::Result<()> {
 		Ok(())
 	}
 }

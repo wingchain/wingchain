@@ -22,6 +22,7 @@ use test::{black_box, Bencher};
 use crypto::hash::HashImpl;
 use node_db::{DBKey, DB};
 use node_statedb::StateDB;
+use std::collections::HashMap;
 
 #[bench]
 fn bench_statedb_get_1(b: &mut Bencher) {
@@ -69,7 +70,7 @@ fn prepare_statedb(records: usize) -> (StateDB, Vec<u8>) {
 
 	let hasher = Arc::new(HashImpl::Blake2b160);
 
-	let statedb = StateDB::new(db.clone(), hasher).unwrap();
+	let statedb = StateDB::new(db.clone(), node_db::columns::META_STATE, hasher).unwrap();
 
 	let root = statedb.default_root();
 
@@ -81,17 +82,21 @@ fn prepare_statedb(records: usize) -> (StateDB, Vec<u8>) {
 			(DBKey::from_slice(b"abd"), Some(vec![1u8; 1024])),
 		],
 		_ => unimplemented!(),
-	};
+	}
+	.into_iter()
+	.collect::<HashMap<_, _>>();
 
-	let (update_1_root, transaction) = statedb.prepare_update(&root, data, true).unwrap();
+	let (update_1_root, transaction) = statedb.prepare_update(&root, data.iter()).unwrap();
 	db.write(transaction).unwrap();
 	let result = statedb.get(&update_1_root, &b"abc"[..]).unwrap();
 
 	assert_eq!(Some(vec![1u8; 1024]), result);
 
 	// update 2
-	let data = vec![(DBKey::from_slice(b"abc"), Some(vec![2u8; 1024]))];
-	let (update_2_root, transaction) = statedb.prepare_update(&update_1_root, data, false).unwrap();
+	let data = vec![(DBKey::from_slice(b"abc"), Some(vec![2u8; 1024]))]
+		.into_iter()
+		.collect::<HashMap<_, _>>();
+	let (update_2_root, transaction) = statedb.prepare_update(&update_1_root, data.iter()).unwrap();
 	db.write(transaction).unwrap();
 	let result = statedb.get(&update_2_root, &b"abc"[..]).unwrap();
 

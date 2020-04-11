@@ -23,7 +23,7 @@ use std::str::FromStr;
 
 #[test]
 fn test_custom_lib_dsa() {
-	let path = utils::get_dylib("crypto_dylib_samples_dsa");
+	let path = utils_test::get_dylib("crypto_dylib_samples_dsa");
 
 	assert!(
 		path.exists(),
@@ -86,7 +86,7 @@ fn test_custom_lib_dsa() {
 
 #[test]
 fn test_dylib_dsa() {
-	let path = utils::get_dylib("crypto_dylib_samples_dsa");
+	let path = utils_test::get_dylib("crypto_dylib_samples_dsa");
 
 	assert!(
 		path.exists(),

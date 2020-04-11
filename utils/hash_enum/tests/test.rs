@@ -12,20 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use error_chain::*;
+use crypto::blake2b;
+use hash_enum::HashEnum;
 
-error_chain! {
-	foreign_links {
-		IO(std::io::Error) #[doc="IO error"];
+#[test]
+fn test_hash_enum_derive() {
+	#[derive(HashEnum, PartialEq, Debug)]
+	enum Test {
+		Foo,
+		Bar,
 	}
-	links {
-		Base(base::errors::Error, base::errors::ErrorKind) #[doc="Base error"];
-		Service(service::errors::Error, service::errors::ErrorKind) #[doc="Service error"];
-	}
-	errors {
-		HomeDirNotInited(path: String) {
-			description(""),
-			display("Home dir not inited: {}", path),
-		}
-	}
+
+	let test = Test::Bar;
+	assert_eq!(test.name(), "bar");
+	assert_eq!(test.hash(), &blake2b256(b"bar")[0..4]);
+	assert_eq!(Test::from_name("bar"), Some(Test::Bar));
+
+	let hash = &blake2b256(b"bar")[0..4];
+	assert_eq!(Test::from_hash(hash), Some(Test::Bar));
+}
+
+fn blake2b256(data: &[u8]) -> [u8; 32] {
+	let mut out = [0u8; 32];
+	blake2b::Blake2b::blake2b(&mut out, &data, &[]);
+	out
 }

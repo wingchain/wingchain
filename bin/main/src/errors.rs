@@ -16,6 +16,7 @@ use error_chain::*;
 
 error_chain! {
 	foreign_links {
+		Log(log::SetLoggerError) #[doc="Log error"];
 	}
 	links {
 		Init(init::errors::Error, init::errors::ErrorKind) #[doc="Init error"];

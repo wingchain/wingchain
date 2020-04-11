@@ -22,7 +22,9 @@ use crypto::hash::Hash;
 use crypto::hash::HashImpl;
 use lazy_static::lazy_static;
 use node_db::{DBKey, DB};
-use node_statedb::StateDB;
+use node_statedb::{StateDB, TrieRoot};
+use parity_codec::Encode;
+use std::collections::HashMap;
 
 #[test]
 fn test_static_hash() {
@@ -113,23 +115,27 @@ fn test_statedb_512_reopen() {
 
 	let hasher_len = hasher.length().into();
 
-	let statedb = StateDB::new(db.clone(), hasher_clone).unwrap();
+	let statedb = StateDB::new(db.clone(), node_db::columns::PAYLOAD_STATE, hasher_clone).unwrap();
 
 	let root = statedb.default_root();
 
 	assert_eq!(root.len(), hasher_len);
 
 	// update 1
-	let data = vec![(DBKey::from_slice(b"abc"), Some(vec![1u8; 1024]))];
-	let (update_1_root, transaction) = statedb.prepare_update(&root, data, true).unwrap();
+	let data = vec![(DBKey::from_slice(b"abc"), Some(vec![1u8; 1024]))]
+		.into_iter()
+		.collect::<HashMap<_, _>>();
+	let (update_1_root, transaction) = statedb.prepare_update(&root, data.iter()).unwrap();
 	db.write(transaction).unwrap();
 	let result = statedb.get(&update_1_root, &b"abc"[..]).unwrap();
 
 	assert_eq!(Some(vec![1u8; 1024]), result);
 
 	// update 2
-	let data = vec![(DBKey::from_slice(b"abc"), Some(vec![2u8; 1024]))];
-	let (update_2_root, transaction) = statedb.prepare_update(&update_1_root, data, false).unwrap();
+	let data = vec![(DBKey::from_slice(b"abc"), Some(vec![2u8; 1024]))]
+		.into_iter()
+		.collect::<HashMap<_, _>>();
+	let (update_2_root, transaction) = statedb.prepare_update(&update_1_root, data.iter()).unwrap();
 	db.write(transaction).unwrap();
 	let result = statedb.get(&update_2_root, &b"abc"[..]).unwrap();
 
@@ -144,7 +150,7 @@ fn test_statedb_512_reopen() {
 
 	let hasher_clone = hasher.clone();
 	let db = Arc::new(DB::open(&path).unwrap());
-	let statedb = StateDB::new(db, hasher_clone).unwrap();
+	let statedb = StateDB::new(db, node_db::columns::PAYLOAD_STATE, hasher_clone).unwrap();
 
 	let result = statedb.get(&update_2_root, &b"abc"[..]).unwrap();
 
@@ -167,7 +173,7 @@ fn test_statedb_for_hasher(hasher: HashImpl) {
 
 	let hasher_len = hasher.length().into();
 
-	let statedb = StateDB::new(db.clone(), hasher).unwrap();
+	let statedb = StateDB::new(db.clone(), node_db::columns::PAYLOAD_STATE, hasher).unwrap();
 
 	let root = statedb.default_root();
 
@@ -177,16 +183,21 @@ fn test_statedb_for_hasher(hasher: HashImpl) {
 	let data = vec![
 		(DBKey::from_slice(b"abc"), Some(vec![1u8; 1024])),
 		(DBKey::from_slice(b"abd"), Some(vec![1u8; 1024])),
-	];
-	let (update_1_root, transaction) = statedb.prepare_update(&root, data, true).unwrap();
+	]
+	.into_iter()
+	.collect::<HashMap<_, _>>();
+
+	let (update_1_root, transaction) = statedb.prepare_update(&root, data.iter()).unwrap();
 	db.write(transaction).unwrap();
 	let result = statedb.get(&update_1_root, &b"abc"[..]).unwrap();
 
 	assert_eq!(Some(vec![1u8; 1024]), result);
 
 	// update 2
-	let data = vec![(DBKey::from_slice(b"abc"), Some(vec![2u8; 1024]))];
-	let (update_2_root, transaction) = statedb.prepare_update(&update_1_root, data, false).unwrap();
+	let data = vec![(DBKey::from_slice(b"abc"), Some(vec![2u8; 1024]))]
+		.into_iter()
+		.collect::<HashMap<_, _>>();
+	let (update_2_root, transaction) = statedb.prepare_update(&update_1_root, data.iter()).unwrap();
 	db.write(transaction).unwrap();
 	let result = statedb.get(&update_2_root, &b"abc"[..]).unwrap();
 
@@ -197,8 +208,10 @@ fn test_statedb_for_hasher(hasher: HashImpl) {
 	assert_eq!(Some(vec![1u8; 1024]), result);
 
 	// update 3
-	let data = vec![(DBKey::from_slice(b"abc"), None)];
-	let (update_3_root, transaction) = statedb.prepare_update(&update_2_root, data, false).unwrap();
+	let data = vec![(DBKey::from_slice(b"abc"), None)]
+		.into_iter()
+		.collect::<HashMap<_, _>>();
+	let (update_3_root, transaction) = statedb.prepare_update(&update_2_root, data.iter()).unwrap();
 	db.write(transaction).unwrap();
 	let result = statedb.get(&update_3_root, &b"abc"[..]).unwrap();
 
@@ -222,13 +235,52 @@ fn test_statedb_for_hasher(hasher: HashImpl) {
 	assert_eq!(Some(vec![1u8; 1024]), result);
 }
 
+#[test]
+fn test_calc_trie_root() {
+	let hasher = Arc::new(HashImpl::Blake2b512);
+
+	let trie_root = TrieRoot::new(hasher).unwrap();
+
+	let input = vec!["a", "b"];
+
+	let root = trie_root.calc_trie_root(
+		input
+			.iter()
+			.enumerate()
+			.map(|(k, v)| (Encode::encode(&(k as u32)), v))
+			.collect::<Vec<_>>(),
+	);
+
+	assert_eq!(
+		root,
+		vec![
+			39, 107, 232, 90, 112, 186, 33, 13, 177, 69, 54, 175, 214, 152, 221, 220, 241, 202, 83,
+			94, 135, 219, 5, 8, 85, 48, 154, 106, 51, 145, 113, 54, 112, 199, 82, 147, 147, 239,
+			243, 36, 165, 104, 233, 123, 2, 95, 250, 7, 87, 94, 129, 44, 102, 95, 118, 159, 131,
+			61, 53, 34, 181, 186, 54, 214
+		]
+	);
+
+	let root = trie_root.calc_ordered_trie_root(&input);
+
+	assert_eq!(
+		root,
+		vec![
+			39, 107, 232, 90, 112, 186, 33, 13, 177, 69, 54, 175, 214, 152, 221, 220, 241, 202, 83,
+			94, 135, 219, 5, 8, 85, 48, 154, 106, 51, 145, 113, 54, 112, 199, 82, 147, 147, 239,
+			243, 36, 165, 104, 233, 123, 2, 95, 250, 7, 87, 94, 129, 44, 102, 95, 118, 159, 131,
+			61, 53, 34, 181, 186, 54, 214
+		]
+	);
+}
+
 #[cfg(feature = "build-dep-test")]
 mod build_dep_test {
 	use super::*;
 
 	#[test]
 	fn test_statedb_256_dylib() {
-		let path = utils::get_dylib("crypto_dylib_samples_hash");
+		let path = utils_test::get_dylib("crypto_dylib_samples_hash");
 
 		assert!(
 			path.exists(),

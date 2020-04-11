@@ -13,19 +13,29 @@
 // limitations under the License.
 
 use error_chain::*;
+use primitives::DispatchId;
 
 error_chain! {
 	foreign_links {
-		IO(std::io::Error) #[doc="IO error"];
 	}
 	links {
-		Base(base::errors::Error, base::errors::ErrorKind) #[doc="Base error"];
-		Service(service::errors::Error, service::errors::ErrorKind) #[doc="Service error"];
 	}
 	errors {
-		HomeDirNotInited(path: String) {
+		CodecError {
 			description(""),
-			display("Home dir not inited: {}", path),
+			display("Codec error"),
+		}
+		TrieError {
+			description(""),
+			display("Trie error"),
+		}
+		InvalidDispatchId(dispatch_id: DispatchId) {
+			description(""),
+			display("Invalid dispatch id: {:?}", dispatch_id),
+		}
+		InvalidParams {
+			description(""),
+			display("Invalid params"),
 		}
 	}
 }
