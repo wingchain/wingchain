@@ -33,6 +33,9 @@ pub const SPEC_FILE: &str = "spec.toml";
 pub struct SharedParams {
 	#[structopt(long = "home", value_name = "PATH", parse(from_os_str))]
 	pub home: Option<PathBuf>,
+
+	#[structopt(long = "log", value_name = "LOG", help = "Log pattern")]
+	pub log: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

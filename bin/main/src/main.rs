@@ -20,7 +20,9 @@ use crate::cli::{Opt, Subcommand};
 mod cli;
 mod errors;
 
-fn main() {
+error_chain::quick_main!(run_main);
+
+fn run_main() -> errors::Result<()> {
 	let app = get_app();
 
 	let opt = Opt::from_clap(&app.get_matches_from(std::env::args()));
@@ -28,24 +30,21 @@ fn main() {
 	match opt.subcommand {
 		None => {
 			print_help();
+			Ok(())
 		}
-		Some(subcommand) => {
-			let result = run(subcommand);
-			match result {
-				Err(e) => eprintln!("ERROR: {}", e),
-				_ => (),
-			}
-		}
+		Some(subcommand) => run(subcommand),
 	}
 }
 
 fn run(subcommand: Subcommand) -> errors::Result<()> {
 	match subcommand {
-		Subcommand::Init(init_opt) => {
-			init::run(init_opt)?;
+		Subcommand::Init(opt) => {
+			init_logger(&opt.shared_params.log)?;
+			init::run(opt)?;
 		}
-		Subcommand::Node(node_opt) => {
-			node::run(node_opt)?;
+		Subcommand::Node(opt) => {
+			init_logger(&opt.shared_params.log)?;
+			node::run(opt)?;
 		}
 	}
 	Ok(())
@@ -72,4 +71,22 @@ fn print_help() {
 	let mut app = get_app();
 	app.print_help().expect("qed");
 	println!()
+}
+
+fn init_logger(log: &Option<String>) -> errors::Result<()> {
+	let mut builder = env_logger::Builder::new();
+
+	builder.filter(None, log::LevelFilter::Info);
+
+	if let Ok(rust_log) = std::env::var("RUST_LOG") {
+		builder.parse_filters(&rust_log);
+	}
+
+	if let Some(log) = log {
+		builder.parse_filters(&log);
+	}
+
+	builder.try_init()?;
+
+	Ok(())
 }

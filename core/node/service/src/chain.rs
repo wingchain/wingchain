@@ -89,6 +89,8 @@ impl Chain {
 			basic,
 		};
 
+		info!("Initializing chain: genesis_inited: {}", genesis_inited);
+
 		if !genesis_inited {
 			chain.init_genesis()?;
 		}

@@ -17,6 +17,7 @@ use std::path::PathBuf;
 
 use chrono::TimeZone;
 use error_chain::bail;
+use log::info;
 use rand::{thread_rng, Rng};
 
 use base::{get_default_home, spec::Spec, SPEC_FILE};
@@ -38,6 +39,8 @@ pub fn run(opt: InitOpt) -> errors::Result<()> {
 
 	init_config(&home)?;
 	init_data(&home)?;
+
+	info!("Inited: home dir: {:?}", home);
 
 	Ok(())
 }

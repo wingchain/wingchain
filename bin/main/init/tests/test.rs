@@ -35,6 +35,7 @@ fn test_init() {
 	let opt = InitOpt {
 		shared_params: SharedParams {
 			home: Some(home.to_path_buf()),
+			log: None,
 		},
 	};
 

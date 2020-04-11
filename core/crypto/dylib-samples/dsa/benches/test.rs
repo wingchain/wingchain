@@ -16,7 +16,6 @@
 
 extern crate test;
 
-use crypto::dsa::DsaImpl::SM2;
 use crypto::dsa::{Dsa, DsaImpl, KeyPair, Verifier};
 use crypto::DsaLength;
 use crypto_dylib_samples_dsa::Ed25519;
