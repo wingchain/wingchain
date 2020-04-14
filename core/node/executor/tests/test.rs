@@ -43,30 +43,34 @@ fn test_executor() {
 
 	let timestamp = Local::now().timestamp() as u32;
 
-	let executor = Executor::new(trie_root);
+	let executor = Executor::new();
 
 	// block 0
 	let txs_0 = vec![
-		executor
-			.build_tx(
-				ModuleEnum::System,
-				module::system::MethodEnum::Init,
-				module::system::InitParams {
-					chain_id: "chain-001".to_string(),
-					timestamp,
-				},
-			)
-			.unwrap(),
-		executor
-			.build_tx(
-				ModuleEnum::System,
-				module::system::MethodEnum::Init,
-				module::system::InitParams {
-					chain_id: "chain-002".to_string(),
-					timestamp: timestamp + 1,
-				},
-			)
-			.unwrap(),
+		Arc::new(
+			executor
+				.build_tx(
+					ModuleEnum::System,
+					module::system::MethodEnum::Init,
+					module::system::InitParams {
+						chain_id: "chain-001".to_string(),
+						timestamp,
+					},
+				)
+				.unwrap(),
+		),
+		Arc::new(
+			executor
+				.build_tx(
+					ModuleEnum::System,
+					module::system::MethodEnum::Init,
+					module::system::InitParams {
+						chain_id: "chain-002".to_string(),
+						timestamp: timestamp + 1,
+					},
+				)
+				.unwrap(),
+		),
 	];
 
 	let number = 0;
@@ -77,6 +81,7 @@ fn test_executor() {
 	let context = Context::new(
 		number,
 		timestamp,
+		trie_root.clone(),
 		meta_statedb.clone(),
 		meta_state_root,
 		payload_statedb.clone(),
@@ -84,8 +89,10 @@ fn test_executor() {
 	)
 	.unwrap();
 
-	let txs_root = executor.execute_txs(&context, &txs_0.clone()).unwrap();
+	executor.execute_txs(&context, txs_0.clone()).unwrap();
 	let (state_root, transaction) = context.get_meta_update().unwrap();
+
+	let (txs_root, _txs) = context.get_meta_txs().unwrap();
 
 	assert_eq!(txs_root, expected_txs_root(txs_0.clone()));
 	assert_eq!(state_root, expected_state_root_0(txs_0.clone()));
@@ -95,26 +102,30 @@ fn test_executor() {
 
 	// block 1
 	let txs_1 = vec![
-		executor
-			.build_tx(
-				ModuleEnum::System,
-				module::system::MethodEnum::Init,
-				module::system::InitParams {
-					chain_id: "chain-003".to_string(),
-					timestamp: timestamp + 2,
-				},
-			)
-			.unwrap(),
-		executor
-			.build_tx(
-				ModuleEnum::System,
-				module::system::MethodEnum::Init,
-				module::system::InitParams {
-					chain_id: "chain-004".to_string(),
-					timestamp: timestamp + 3,
-				},
-			)
-			.unwrap(),
+		Arc::new(
+			executor
+				.build_tx(
+					ModuleEnum::System,
+					module::system::MethodEnum::Init,
+					module::system::InitParams {
+						chain_id: "chain-003".to_string(),
+						timestamp: timestamp + 2,
+					},
+				)
+				.unwrap(),
+		),
+		Arc::new(
+			executor
+				.build_tx(
+					ModuleEnum::System,
+					module::system::MethodEnum::Init,
+					module::system::InitParams {
+						chain_id: "chain-004".to_string(),
+						timestamp: timestamp + 3,
+					},
+				)
+				.unwrap(),
+		),
 	];
 
 	let number = 1;
@@ -125,6 +136,7 @@ fn test_executor() {
 	let context = Context::new(
 		number,
 		timestamp,
+		trie_root.clone(),
 		meta_statedb,
 		meta_state_root,
 		payload_statedb,
@@ -132,8 +144,9 @@ fn test_executor() {
 	)
 	.unwrap();
 
-	let txs_root = executor.execute_txs(&context, &txs_1.clone()).unwrap();
+	let txs_root = executor.execute_txs(&context, txs_1.clone()).unwrap();
 	let (state_root, _) = context.get_meta_update().unwrap();
+	let (txs_root, _txs) = context.get_meta_txs().unwrap();
 
 	assert_eq!(txs_root, expected_txs_root(txs_1.clone()));
 	assert_eq!(
@@ -142,13 +155,13 @@ fn test_executor() {
 	);
 }
 
-fn expected_txs_root(txs: Vec<Transaction>) -> Vec<u8> {
+fn expected_txs_root(txs: Vec<Arc<Transaction>>) -> Vec<u8> {
 	let trie_root = TrieRoot::new(Arc::new(HashImpl::Blake2b160)).unwrap();
 	let txs = txs.into_iter().map(|x| Encode::encode(&x));
 	trie_root.calc_ordered_trie_root(txs)
 }
 
-fn expected_state_root_0(txs: Vec<Transaction>) -> Vec<u8> {
+fn expected_state_root_0(txs: Vec<Arc<Transaction>>) -> Vec<u8> {
 	let tx = &txs[1]; // use the last tx
 	let params: InitParams = Decode::decode(&mut &tx.call.params.0[..]).unwrap();
 
@@ -182,7 +195,7 @@ fn expected_state_root_0(txs: Vec<Transaction>) -> Vec<u8> {
 	state_root
 }
 
-fn expected_state_root_1(txs_0: Vec<Transaction>, txs_1: Vec<Transaction>) -> Vec<u8> {
+fn expected_state_root_1(txs_0: Vec<Arc<Transaction>>, txs_1: Vec<Arc<Transaction>>) -> Vec<u8> {
 	let tx = &txs_0[1]; // use the last tx
 	let params: InitParams = Decode::decode(&mut &tx.call.params.0[..]).unwrap();
 

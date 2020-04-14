@@ -12,27 +12,4 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use error_chain::*;
-use primitives::DispatchId;
-
-error_chain! {
-	foreign_links {
-	}
-	links {
-		StateDB(node_statedb::errors::Error, node_statedb::errors::ErrorKind) #[doc="StateDB error"];
-	}
-	errors {
-		InvalidDispatchId(dispatch_id: DispatchId) {
-			description(""),
-			display("Invalid dispatch id: {:?}", dispatch_id),
-		}
-		IllegalTxsPhase {
-			description(""),
-			display("Illegal txs phase, should not execute meta txs after payload txs"),
-		}
-		MixedTxs {
-			description(""),
-			display("Mixed txs, should not mix meta txs and payload txs in one batch"),
-		}
-	}
-}
+pub struct TxPool {}

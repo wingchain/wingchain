@@ -35,5 +35,9 @@ error_chain! {
 			description(""),
 			display("DB integrity less: {:?}", reason),
 		}
+		NotReleasedProperly {
+			description(""),
+			display("Not released properly"),
+		}
 	}
 }

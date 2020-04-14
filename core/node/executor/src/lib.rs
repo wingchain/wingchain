@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -27,6 +27,9 @@ use primitives::{BlockNumber, Call, FromDispatchId, Params, Transaction};
 
 pub mod errors;
 
+const META_TXS_SIZE: usize = 64;
+const PAYLOAD_TXS_SIZE: usize = 512;
+
 #[derive(Clone)]
 pub struct Context {
 	inner: Rc<ContextInner>,
@@ -35,18 +38,24 @@ pub struct Context {
 struct ContextInner {
 	number: BlockNumber,
 	timestamp: u32,
+	trie_root: Arc<TrieRoot>,
 	meta_statedb: Arc<StateDB>,
 	meta_state_root: Vec<u8>,
 	meta_state: ContextState,
+	meta_txs: RefCell<Vec<Arc<Transaction>>>,
 	payload_statedb: Arc<StateDB>,
 	payload_state_root: Vec<u8>,
 	payload_state: ContextState,
+	payload_txs: RefCell<Vec<Arc<Transaction>>>,
+	// to mark the context has already started to executed payload txs
+	payload_phase: Cell<bool>,
 }
 
 impl Context {
 	pub fn new(
 		number: BlockNumber,
 		timestamp: u32,
+		trie_root: Arc<TrieRoot>,
 		meta_statedb: Arc<StateDB>,
 		meta_state_root: Vec<u8>,
 		payload_statedb: Arc<StateDB>,
@@ -58,12 +67,16 @@ impl Context {
 		let inner = Rc::new(ContextInner {
 			number,
 			timestamp,
+			trie_root,
 			meta_statedb,
 			meta_state_root,
 			meta_state,
+			meta_txs: RefCell::new(Vec::with_capacity(META_TXS_SIZE)),
 			payload_statedb,
 			payload_state_root,
 			payload_state,
+			payload_txs: RefCell::new(Vec::with_capacity(PAYLOAD_TXS_SIZE)),
+			payload_phase: Cell::new(false),
 		});
 
 		Ok(Self { inner })
@@ -78,6 +91,15 @@ impl Context {
 		Ok(result)
 	}
 
+	pub fn get_meta_txs(&self) -> errors::Result<(Vec<u8>, Vec<Arc<Transaction>>)> {
+		let txs = self.inner.meta_txs.borrow().clone();
+
+		let input = txs.iter().map(|x| Encode::encode(&x));
+		let txs_root = self.inner.trie_root.calc_ordered_trie_root(input);
+
+		Ok((txs_root, txs))
+	}
+
 	pub fn get_payload_update(&self) -> errors::Result<(Vec<u8>, DBTransaction)> {
 		let buffer = self.inner.payload_state.buffer.borrow();
 		let result = self
@@ -86,9 +108,19 @@ impl Context {
 			.prepare_update(&self.inner.payload_state_root, buffer.iter())?;
 		Ok(result)
 	}
+
+	pub fn get_payload_txs(&self) -> errors::Result<(Vec<u8>, Vec<Arc<Transaction>>)> {
+		let txs = self.inner.payload_txs.borrow().clone();
+
+		let input = txs.iter().map(|x| Encode::encode(&x));
+		let txs_root = self.inner.trie_root.calc_ordered_trie_root(input);
+
+		Ok((txs_root, txs))
+	}
 }
 
 struct ContextState {
+	#[allow(dead_code)]
 	/// statedb_stmt is referred by statedb_getter, should be kept
 	statedb_stmt: StateDBStmt,
 	/// unsafe, should never out live lib
@@ -159,13 +191,11 @@ impl ContextT for Context {
 	}
 }
 
-pub struct Executor {
-	trie_root: Arc<TrieRoot>,
-}
+pub struct Executor;
 
 impl Executor {
-	pub fn new(trie_root: Arc<TrieRoot>) -> Self {
-		Self { trie_root }
+	pub fn new() -> Self {
+		Self
 	}
 
 	pub fn build_tx<M: HashEnum, P: Encode>(
@@ -193,27 +223,47 @@ impl Executor {
 		}
 	}
 
-	pub fn execute_txs(
-		&self,
-		context: &Context,
-		txs: &Vec<Transaction>,
-	) -> errors::Result<Vec<u8>> {
-		for tx in txs {
+	pub fn execute_txs(&self, context: &Context, txs: Vec<Arc<Transaction>>) -> errors::Result<()> {
+		let mut txs_is_meta: Option<bool> = None;
+		for tx in &txs {
 			let module_id = &tx.call.module_id;
 			let module_enum = ModuleEnum::from_dispatch_id(module_id).ok_or(
 				errors::ErrorKind::InvalidDispatchId(tx.call.module_id.clone()),
 			)?;
 			let call = &tx.call;
-			match module_enum {
+			let (_result, is_meta) = match module_enum {
 				ModuleEnum::System => {
+					let is_meta =
+						<module::system::Module<Context> as ModuleT<Context>>::META_MODULE;
 					let module = module::system::Module::new(context.clone());
-					let _result = module.execute_call(call);
+					let result = module.execute_call(call);
+					(result, is_meta)
+				}
+			};
+			match txs_is_meta {
+				None => {
+					txs_is_meta = Some(is_meta);
+				}
+				Some(txs_is_meta) => {
+					if txs_is_meta != is_meta {
+						return Err(errors::ErrorKind::MixedTxs.into());
+					}
 				}
 			}
 		}
-		let txs = txs.into_iter().map(|x| Encode::encode(&x));
-		let txs_root = self.trie_root.calc_ordered_trie_root(txs);
-		Ok(txs_root)
+
+		if context.inner.payload_phase.get() && txs_is_meta == Some(true) {
+			return Err(errors::ErrorKind::IllegalTxsPhase.into());
+		}
+
+		let mut txs = txs;
+		match txs_is_meta {
+			Some(true) => context.inner.meta_txs.borrow_mut().append(&mut txs),
+			Some(false) => context.inner.payload_txs.borrow_mut().append(&mut txs),
+			_ => (),
+		}
+
+		Ok(())
 	}
 }
 

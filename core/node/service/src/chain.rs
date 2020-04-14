@@ -75,7 +75,7 @@ impl Chain {
 		)?);
 		let trie_root = Arc::new(TrieRoot::new(hash.clone())?);
 
-		let executor = Executor::new(trie_root.clone());
+		let executor = Executor::new();
 
 		let basic = Arc::new(Basic { hash, dsa, address });
 
@@ -154,17 +154,18 @@ impl Chain {
 			.map_err(|_| errors::ErrorKind::InvalidSpec)?;
 		let timestamp = time.timestamp() as u32;
 
-		let tx = self
-			.executor
-			.build_tx(
-				ModuleEnum::System,
-				module::system::MethodEnum::Init,
-				module::system::InitParams {
-					chain_id,
-					timestamp,
-				},
-			)
-			.expect("qed");
+		let tx = Arc::new(
+			self.executor
+				.build_tx(
+					ModuleEnum::System,
+					module::system::MethodEnum::Init,
+					module::system::InitParams {
+						chain_id,
+						timestamp,
+					},
+				)
+				.expect("qed"),
+		);
 		let meta_txs = vec![tx];
 		let payload_txs = vec![];
 		let zero_hash = Hash(vec![0u8; self.basic.hash.length().into()]);
@@ -173,20 +174,44 @@ impl Chain {
 		let context = Context::new(
 			number,
 			timestamp,
+			self.trie_root.clone(),
 			self.meta_statedb.clone(),
 			self.meta_statedb.default_root(),
 			self.payload_statedb.clone(),
 			self.payload_statedb.default_root(),
 		)?;
 
-		let meta_txs_root = Hash(self.executor.execute_txs(&context, &meta_txs)?);
-		let payload_txs_root = Hash(self.executor.execute_txs(&context, &payload_txs)?);
+		self.executor.execute_txs(&context, meta_txs)?;
+		self.executor.execute_txs(&context, payload_txs)?;
 
 		let (meta_state_root, meta_transaction) = context.get_meta_update()?;
-		let (payload_state_root, payload_transaction) = context.get_meta_update()?;
+		let (meta_txs_root, meta_txs) = context.get_meta_txs()?;
 
 		let meta_state_root = Hash(meta_state_root);
+		let meta_txs_root = Hash(meta_txs_root);
+
+		let (payload_state_root, payload_transaction) = context.get_meta_update()?;
+		let (payload_txs_root, payload_txs) = context.get_payload_txs()?;
+
 		let payload_state_root = Hash(payload_state_root);
+		let payload_txs_root = Hash(payload_txs_root);
+
+		drop(context);
+
+		// In common case, before reaching consensus and beginning to commit the new block, we should deref and clone Arc<Transaction>,
+		// however, for genesis block, we're sure Arc<Transaction> is released, and we can use try_unwrap.
+		let meta_txs = meta_txs
+			.into_iter()
+			.map(Arc::try_unwrap)
+			.collect::<Result<Vec<_>, _>>()
+			.map_err(|_| errors::ErrorKind::NotReleasedProperly)
+			.expect("qed");
+		let payload_txs = payload_txs
+			.into_iter()
+			.map(Arc::try_unwrap)
+			.collect::<Result<Vec<_>, _>>()
+			.map_err(|_| errors::ErrorKind::NotReleasedProperly)
+			.expect("qed");
 
 		let block = Block {
 			header: Header {
