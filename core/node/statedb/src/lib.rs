@@ -23,7 +23,7 @@ use memory_db::{KeyFunction, PrefixedKey};
 use reference_trie::ReferenceTrieStream;
 use trie_db::{Trie, TrieMut};
 
-use crypto::hash::{Hash, HashImpl};
+use crypto::hash::{Hash as HashT, HashImpl};
 use crypto::HashLength;
 use node_db::{DBKey, DBTransaction, DBValue, DB};
 pub use trie::{

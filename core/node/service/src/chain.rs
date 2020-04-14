@@ -176,9 +176,9 @@ impl Chain {
 			timestamp,
 			self.trie_root.clone(),
 			self.meta_statedb.clone(),
-			self.meta_statedb.default_root(),
+			Hash(self.meta_statedb.default_root()),
 			self.payload_statedb.clone(),
-			self.payload_statedb.default_root(),
+			Hash(self.payload_statedb.default_root()),
 		)?;
 
 		self.executor.execute_txs(&context, meta_txs)?;
@@ -187,14 +187,8 @@ impl Chain {
 		let (meta_state_root, meta_transaction) = context.get_meta_update()?;
 		let (meta_txs_root, meta_txs) = context.get_meta_txs()?;
 
-		let meta_state_root = Hash(meta_state_root);
-		let meta_txs_root = Hash(meta_txs_root);
-
 		let (payload_state_root, payload_transaction) = context.get_meta_update()?;
 		let (payload_txs_root, payload_txs) = context.get_payload_txs()?;
-
-		let payload_state_root = Hash(payload_state_root);
-		let payload_txs_root = Hash(payload_txs_root);
 
 		drop(context);
 

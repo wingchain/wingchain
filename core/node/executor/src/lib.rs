@@ -23,7 +23,7 @@ use hash_enum::HashEnum;
 use node_db::{DBKey, DBTransaction, DBValue};
 use node_executor_primitives::{Context as ContextT, Module as ModuleT};
 use node_statedb::{StateDB, StateDBGetter, StateDBStmt, TrieRoot};
-use primitives::{BlockNumber, Call, FromDispatchId, Params, Transaction};
+use primitives::{BlockNumber, Call, FromDispatchId, Params, Transaction, Hash};
 
 pub mod errors;
 
@@ -40,11 +40,11 @@ struct ContextInner {
 	timestamp: u32,
 	trie_root: Arc<TrieRoot>,
 	meta_statedb: Arc<StateDB>,
-	meta_state_root: Vec<u8>,
+	meta_state_root: Hash,
 	meta_state: ContextState,
 	meta_txs: RefCell<Vec<Arc<Transaction>>>,
 	payload_statedb: Arc<StateDB>,
-	payload_state_root: Vec<u8>,
+	payload_state_root: Hash,
 	payload_state: ContextState,
 	payload_txs: RefCell<Vec<Arc<Transaction>>>,
 	// to mark the context has already started to executed payload txs
@@ -57,12 +57,12 @@ impl Context {
 		timestamp: u32,
 		trie_root: Arc<TrieRoot>,
 		meta_statedb: Arc<StateDB>,
-		meta_state_root: Vec<u8>,
+		meta_state_root: Hash,
 		payload_statedb: Arc<StateDB>,
-		payload_state_root: Vec<u8>,
+		payload_state_root: Hash,
 	) -> errors::Result<Self> {
-		let meta_state = ContextState::new(meta_statedb.clone(), &meta_state_root)?;
-		let payload_state = ContextState::new(payload_statedb.clone(), &payload_state_root)?;
+		let meta_state = ContextState::new(meta_statedb.clone(), &meta_state_root.0)?;
+		let payload_state = ContextState::new(payload_statedb.clone(), &payload_state_root.0)?;
 
 		let inner = Rc::new(ContextInner {
 			number,
@@ -82,40 +82,40 @@ impl Context {
 		Ok(Self { inner })
 	}
 
-	pub fn get_meta_update(&self) -> errors::Result<(Vec<u8>, DBTransaction)> {
+	pub fn get_meta_update(&self) -> errors::Result<(Hash, DBTransaction)> {
 		let buffer = self.inner.meta_state.buffer.borrow();
-		let result = self
+		let (root, transaction) = self
 			.inner
 			.meta_statedb
-			.prepare_update(&self.inner.meta_state_root, buffer.iter())?;
-		Ok(result)
+			.prepare_update(&self.inner.meta_state_root.0, buffer.iter())?;
+		Ok((Hash(root), transaction))
 	}
 
-	pub fn get_meta_txs(&self) -> errors::Result<(Vec<u8>, Vec<Arc<Transaction>>)> {
+	pub fn get_meta_txs(&self) -> errors::Result<(Hash, Vec<Arc<Transaction>>)> {
 		let txs = self.inner.meta_txs.borrow().clone();
 
 		let input = txs.iter().map(|x| Encode::encode(&x));
 		let txs_root = self.inner.trie_root.calc_ordered_trie_root(input);
 
-		Ok((txs_root, txs))
+		Ok((Hash(txs_root), txs))
 	}
 
-	pub fn get_payload_update(&self) -> errors::Result<(Vec<u8>, DBTransaction)> {
+	pub fn get_payload_update(&self) -> errors::Result<(Hash, DBTransaction)> {
 		let buffer = self.inner.payload_state.buffer.borrow();
-		let result = self
+		let (root, transaction) = self
 			.inner
 			.payload_statedb
-			.prepare_update(&self.inner.payload_state_root, buffer.iter())?;
-		Ok(result)
+			.prepare_update(&self.inner.payload_state_root.0, buffer.iter())?;
+		Ok((Hash(root), transaction))
 	}
 
-	pub fn get_payload_txs(&self) -> errors::Result<(Vec<u8>, Vec<Arc<Transaction>>)> {
+	pub fn get_payload_txs(&self) -> errors::Result<(Hash, Vec<Arc<Transaction>>)> {
 		let txs = self.inner.payload_txs.borrow().clone();
 
 		let input = txs.iter().map(|x| Encode::encode(&x));
 		let txs_root = self.inner.trie_root.calc_ordered_trie_root(input);
 
-		Ok((txs_root, txs))
+		Ok((Hash(txs_root), txs))
 	}
 }
 

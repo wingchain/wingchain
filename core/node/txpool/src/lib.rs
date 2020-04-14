@@ -12,4 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub struct TxPool {}
+use chashmap::CHashMap;
+use primitives::Hash;
+
+pub struct TxPool {
+
+	// map: CHashMap<Hash>
+
+}

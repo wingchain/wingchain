@@ -51,7 +51,7 @@ pub struct Transaction {
 	pub call: Call,
 }
 
-#[derive(Clone, Debug, Encode, Decode)]
+#[derive(Clone, Debug, Encode, Decode, PartialEq)]
 pub struct Hash(pub Vec<u8>);
 
 pub type BlockNumber = u32;

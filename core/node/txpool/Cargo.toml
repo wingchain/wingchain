@@ -8,3 +8,5 @@ edition = "2018"
 
 [dependencies]
 chashmap = "2.2.2"
+
+primitives = { path = "../../primitives" }
