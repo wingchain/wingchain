@@ -21,7 +21,9 @@ use rocksdb::{
 	BlockBasedOptions, ColumnFamily, ColumnFamilyDescriptor, Options, ReadOptions, WriteBatch,
 	WriteOptions, DB as RocksDB,
 };
-use smallvec::SmallVec;
+
+use primitives::errors::CommonResult;
+use primitives::{DBKey, DBValue};
 
 use crate::config::{gen_block_opts, gen_cf_opts, gen_db_opts, gen_read_opts, gen_write_opts};
 
@@ -39,7 +41,7 @@ pub struct DB {
 }
 
 impl DB {
-	pub fn open(path: &PathBuf) -> errors::Result<DB> {
+	pub fn open(path: &PathBuf) -> CommonResult<DB> {
 		let col_count = columns::COLUMN_NAMES.len();
 		let db_opts = gen_db_opts(col_count);
 		let block_opts = gen_block_opts();
@@ -54,14 +56,16 @@ impl DB {
 			Err(_) => match RocksDB::open_cf(&db_opts, path, &[] as &[&str]) {
 				Ok(mut db) => {
 					for &name in columns::COLUMN_NAMES.iter() {
-						let _ = db.create_cf(name, &gen_cf_opts(col_count, &block_opts))?;
+						let _ = db
+							.create_cf(name, &gen_cf_opts(col_count, &block_opts))
+							.map_err(|e| errors::ErrorKind::RocksDB(e))?;
 					}
-					Ok(db)
+					db
 				}
-				err => err,
+				Err(e) => return Err(errors::ErrorKind::RocksDB(e).into()),
 			},
-			ok => ok,
-		}?;
+			Ok(db) => db,
+		};
 
 		let db = Self {
 			db: RwLock::new(rocksdb),
@@ -74,16 +78,18 @@ impl DB {
 		Ok(db)
 	}
 
-	pub fn get(&self, col: u32, key: &[u8]) -> errors::Result<Option<DBValue>> {
+	pub fn get(&self, col: u32, key: &[u8]) -> CommonResult<Option<DBValue>> {
 		let ref db = *self.db.read();
 		let cf = Self::get_cf(&db, col);
 
-		let result = db.get_cf_opt(cf, key, &self.read_opts)?;
+		let result = db
+			.get_cf_opt(cf, key, &self.read_opts)
+			.map_err(|e| errors::ErrorKind::RocksDB(e))?;
 
 		Ok(result)
 	}
 
-	pub fn write(&self, transaction: DBTransaction) -> errors::Result<()> {
+	pub fn write(&self, transaction: DBTransaction) -> CommonResult<()> {
 		let ref db = *self.db.write();
 
 		let ops = transaction.ops;
@@ -92,15 +98,20 @@ impl DB {
 			match op {
 				DBOp::Insert { col, key, value } => {
 					let cf = Self::get_cf(&db, col);
-					batch.put_cf(cf, &key, &value)?;
+					batch
+						.put_cf(cf, &key, &value)
+						.map_err(|e| errors::ErrorKind::RocksDB(e))?;
 				}
 				DBOp::Delete { col, key } => {
 					let cf = Self::get_cf(&db, col);
-					batch.delete_cf(cf, &key)?;
+					batch
+						.delete_cf(cf, &key)
+						.map_err(|e| errors::ErrorKind::RocksDB(e))?;
 				}
 			};
 		}
-		db.write_opt(batch, &self.write_opts)?;
+		db.write_opt(batch, &self.write_opts)
+			.map_err(|e| errors::ErrorKind::RocksDB(e))?;
 		Ok(())
 	}
 
@@ -218,6 +229,3 @@ pub mod global_key {
 	/// spec
 	pub const SPEC: &[u8] = b"spec";
 }
-
-pub type DBKey = SmallVec<[u8; 32]>;
-pub type DBValue = Vec<u8>;

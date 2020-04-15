@@ -12,8 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use hash_enum::HashEnum;
 use parity_codec::{Decode, Encode};
+use smallvec::SmallVec;
+
+use hash_enum::HashEnum;
+
+pub mod errors;
 
 #[derive(Clone, Debug, Encode, Decode)]
 pub struct Address(pub Vec<u8>);
@@ -101,3 +105,6 @@ impl<T: HashEnum> FromDispatchId for T {
 		T::from_hash(&dispatch_id.0)
 	}
 }
+
+pub type DBKey = SmallVec<[u8; 32]>;
+pub type DBValue = Vec<u8>;

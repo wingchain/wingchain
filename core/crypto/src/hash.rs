@@ -16,9 +16,9 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use blake2b::{Blake2b160, Blake2b256, Blake2b512};
+use primitives::errors::CommonError;
 use sm3::SM3;
 
-use crate::errors;
 use crate::hash::custom_lib::CustomLib;
 use crate::HashLength;
 
@@ -75,7 +75,7 @@ impl Hash for HashImpl {
 }
 
 impl FromStr for HashImpl {
-	type Err = errors::Error;
+	type Err = CommonError;
 	#[inline]
 	fn from_str(s: &str) -> Result<HashImpl, Self::Err> {
 		match s {

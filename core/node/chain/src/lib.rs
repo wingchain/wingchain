@@ -27,12 +27,14 @@ use crypto::dsa::DsaImpl;
 use crypto::hash::{Hash as HashT, HashImpl};
 use main_base::spec::Spec;
 use main_base::SystemInitParams;
-use node_db::{DBKey, DBTransaction, DB};
+use node_db::{DBTransaction, DB};
 use node_executor::{module, Context, Executor, ModuleEnum};
 use node_statedb::{StateDB, TrieRoot};
-use primitives::{Block, BlockNumber, Body, Executed, Hash, Header};
+use primitives::{Block, BlockNumber, Body, DBKey, Executed, Hash, Header};
 
-use crate::errors;
+use primitives::errors::CommonResult;
+
+pub mod errors;
 
 pub struct Config {
 	pub home: PathBuf,
@@ -55,7 +57,7 @@ pub struct Basic {
 }
 
 impl Chain {
-	pub fn new(config: Config) -> errors::Result<Self> {
+	pub fn new(config: Config) -> CommonResult<Self> {
 		let (genesis_inited, db, spec) = Self::get_spec(&config)?;
 
 		let db = Arc::new(db);
@@ -98,7 +100,7 @@ impl Chain {
 		Ok(chain)
 	}
 
-	fn get_spec(config: &Config) -> errors::Result<(bool, DB, Spec)> {
+	fn get_spec(config: &Config) -> CommonResult<(bool, DB, Spec)> {
 		let db_path = config.home.join(main_base::DATA).join(main_base::DB);
 		let db = DB::open(&db_path)?;
 		let genesis_inited = db
@@ -107,51 +109,75 @@ impl Chain {
 		let spec = match genesis_inited {
 			true => {
 				let spec = db.get(node_db::columns::GLOBAL, node_db::global_key::SPEC)?;
-				let spec =
-					spec.ok_or(errors::ErrorKind::DBIntegrityLess("miss spec".to_string()))?;
-				let spec: String = Decode::decode(&mut &spec[..])?;
+				let spec = spec.ok_or(errors::ErrorKind::Spec("missing spec in db".to_string()))?;
+				let spec: String = Decode::decode(&mut &spec[..])
+					.map_err(|_| errors::ErrorKind::Spec("codec error".to_string()))?;
 				spec
 			}
 			false => {
-				let spec = fs::read_to_string(
-					config
-						.home
-						.join(main_base::CONFIG)
-						.join(main_base::SPEC_FILE),
-				)?;
+				let spec_path = config
+					.home
+					.join(main_base::CONFIG)
+					.join(main_base::SPEC_FILE);
+				let spec = fs::read_to_string(&spec_path).map_err(|_| {
+					errors::ErrorKind::Spec(format!("failed to read spec file: {:?}", spec_path))
+				})?;
 				spec
 			}
 		};
-		let spec = toml::from_str(&spec)?;
+		let spec = toml::from_str(&spec)
+			.map_err(|e| errors::ErrorKind::Spec(format!("failed to parse spec file: {:?}", e)))?;
 
 		Ok((genesis_inited, db, spec))
 	}
 
-	fn init_genesis(&self) -> errors::Result<()> {
-		let spec_str = fs::read_to_string(
-			self.config
-				.home
-				.join(main_base::CONFIG)
-				.join(main_base::SPEC_FILE),
-		)?;
-		let spec: Spec = toml::from_str(&spec_str)?;
+	fn init_genesis(&self) -> CommonResult<()> {
+		let spec_path = self
+			.config
+			.home
+			.join(main_base::CONFIG)
+			.join(main_base::SPEC_FILE);
+		let spec_str = fs::read_to_string(&spec_path).map_err(|_| {
+			errors::ErrorKind::Spec(format!("failed to read spec file: {:?}", spec_path))
+		})?;
+		let spec: Spec = toml::from_str(&spec_str)
+			.map_err(|e| errors::ErrorKind::Spec(format!("failed to parse spec file: {:?}", e)))?;
 
 		let tx = match spec.genesis.txs.get(0) {
 			Some(tx) if tx.method == "system.init" => tx,
-			_ => return Err(errors::ErrorKind::InvalidSpec.into()),
+			_ => {
+				return Err(errors::ErrorKind::Spec(format!(
+					"invalid genesis txs: missing system.init"
+				))
+				.into())
+			}
 		};
 
 		let param = match tx.params.get(0) {
 			Some(Value::String(param)) => match serde_json::from_str::<SystemInitParams>(param) {
 				Ok(param) => param,
-				_ => return Err(errors::ErrorKind::InvalidSpec.into()),
+				_ => {
+					return Err(errors::ErrorKind::Spec(format!(
+						"invalid genesis txs: invalid system.init params"
+					))
+					.into())
+				}
 			},
-			_ => return Err(errors::ErrorKind::InvalidSpec.into()),
+			_ => {
+				return Err(errors::ErrorKind::Spec(format!(
+					"invalid genesis txs: invalid system.init params"
+				))
+				.into())
+			}
 		};
 
-		let chain_id = param.chain_id;
-		let time = DateTime::parse_from_rfc3339(&param.time)
-			.map_err(|_| errors::ErrorKind::InvalidSpec)?;
+		let chain_id = param.chain_id.clone();
+		let time = DateTime::parse_from_rfc3339(&param.time).map_err(|_| {
+			errors::ErrorKind::Spec(format!(
+				"invalid genesis txs: invalid system.init param time: {:?}",
+				param.time.clone()
+			))
+		})?;
 		let timestamp = time.timestamp() as u32;
 
 		let tx = Arc::new(
@@ -198,13 +224,11 @@ impl Chain {
 			.into_iter()
 			.map(Arc::try_unwrap)
 			.collect::<Result<Vec<_>, _>>()
-			.map_err(|_| errors::ErrorKind::NotReleasedProperly)
 			.expect("qed");
 		let payload_txs = payload_txs
 			.into_iter()
 			.map(Arc::try_unwrap)
 			.collect::<Result<Vec<_>, _>>()
-			.map_err(|_| errors::ErrorKind::NotReleasedProperly)
 			.expect("qed");
 
 		let block = Block {
@@ -301,13 +325,15 @@ impl Chain {
 		Ok(())
 	}
 
-	fn get_best_number(&self) -> errors::Result<Option<BlockNumber>> {
+	fn get_best_number(&self) -> CommonResult<Option<BlockNumber>> {
 		let best_number = self
 			.db
 			.get(node_db::columns::GLOBAL, node_db::global_key::BEST_NUMBER)?;
 
 		let best_number = match best_number {
-			Some(best_number) => Decode::decode(&mut &best_number[..])?,
+			Some(best_number) => {
+				Decode::decode(&mut &best_number[..]).map_err(|e| errors::ErrorKind::Codec(e))?
+			}
 			None => None,
 		};
 		Ok(best_number)

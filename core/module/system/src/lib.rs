@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use hash_enum::HashEnum;
-use node_executor_primitives::{
-	errors::ErrorKind, errors::Result, Context, Module as ModuleT, StorageValue,
-};
 use parity_codec::{Decode, Encode};
+
+use hash_enum::HashEnum;
+use node_executor_primitives::{errors, Context, Module as ModuleT, StorageValue};
+use primitives::errors::CommonResult;
 use primitives::{Call, FromDispatchId};
 
 #[derive(HashEnum)]
@@ -60,15 +60,16 @@ where
 		}
 	}
 
-	fn execute_call(&self, call: &Call) -> Result<()> {
+	fn execute_call(&self, call: &Call) -> CommonResult<()> {
 		let call_enum = match MethodEnum::from_dispatch_id(&call.method_id) {
 			Some(call_enum) => call_enum,
-			None => return Err(ErrorKind::InvalidDispatchId(call.module_id.clone()).into()),
+			None => return Err(errors::ErrorKind::InvalidDispatchId(call.module_id.clone()).into()),
 		};
 		let mut params = &call.params.0[..];
 		match call_enum {
 			MethodEnum::Init => {
-				let params = Decode::decode(&mut params).map_err(|_| ErrorKind::InvalidParams)?;
+				let params =
+					Decode::decode(&mut params).map_err(|_| errors::ErrorKind::InvalidParams)?;
 				self.init(&params)
 			}
 		}
@@ -82,7 +83,7 @@ pub struct InitParams {
 }
 
 impl<C: Context> Module<C> {
-	fn init(&self, params: &InitParams) -> Result<()> {
+	fn init(&self, params: &InitParams) -> CommonResult<()> {
 		self.chain_id.set(&params.chain_id)?;
 		self.timestamp.set(&params.timestamp)?;
 		Ok(())

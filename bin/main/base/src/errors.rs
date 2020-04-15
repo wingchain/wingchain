@@ -12,12 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use error_chain::*;
+use std::error::Error;
 
-error_chain! {
-	foreign_links {
-		AppDirs(::app_dirs::AppDirsError) #[doc="AppDirs error"];
-	}
-	links {
+use primitives::errors::{CommonError, CommonErrorKind, Display};
+
+#[derive(Debug, Display)]
+pub enum ErrorKind {
+	#[display(fmt = "{:?}", _0)]
+	AppDir(app_dirs::AppDirsError),
+}
+
+impl Error for ErrorKind {}
+
+impl From<ErrorKind> for CommonError {
+	fn from(error: ErrorKind) -> Self {
+		CommonError::new(CommonErrorKind::Main, Box::new(error))
 	}
 }

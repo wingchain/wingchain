@@ -12,14 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use error_chain::*;
+use primitives::errors::{CommonError, CommonErrorKind, Display};
+use std::error::Error;
 
-error_chain! {
-	foreign_links {
-		Log(log::SetLoggerError) #[doc="Log error"];
-	}
-	links {
-		Init(init::errors::Error, init::errors::ErrorKind) #[doc="Init error"];
-		Node(node::errors::Error, node::errors::ErrorKind) #[doc="Node error"];
+#[derive(Debug, Display)]
+pub enum ErrorKind {
+	#[display(fmt = "Init log error: {:?}", _0)]
+	InitLogger(log::SetLoggerError),
+}
+
+impl Error for ErrorKind {}
+
+impl From<ErrorKind> for CommonError {
+	fn from(error: ErrorKind) -> Self {
+		CommonError::new(CommonErrorKind::Main, Box::new(error))
 	}
 }

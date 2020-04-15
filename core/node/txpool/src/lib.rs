@@ -18,12 +18,14 @@ use chashmap::CHashMap;
 use parking_lot::RwLock;
 use tokio::stream::StreamExt;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
-use error_chain::bail;
 
-use node_txpool_support::TxPoolSupport;
+use primitives::errors::CommonResult;
 use primitives::{Hash, Transaction};
 
+use crate::support::TxPoolSupport;
+
 pub mod errors;
+mod support;
 
 pub struct Config {
 	pub pool_capacity: usize,
@@ -35,8 +37,9 @@ pub struct PoolTransaction {
 	tx_hash: Hash,
 }
 
-pub struct TxPool<S> where
-	S: TxPoolSupport
+pub struct TxPool<S>
+where
+	S: TxPoolSupport,
 {
 	config: Config,
 	support: S,
@@ -45,10 +48,11 @@ pub struct TxPool<S> where
 	buffer_tx: Sender<Arc<PoolTransaction>>,
 }
 
-impl<S> TxPool<S> where
-	S: TxPoolSupport
+impl<S> TxPool<S>
+where
+	S: TxPoolSupport,
 {
-	pub fn new(config: Config, support: S) -> errors::Result<Self> {
+	pub fn new(config: Config, support: S) -> CommonResult<Self> {
 		let map = CHashMap::with_capacity(config.pool_capacity);
 		let pool = Arc::new(RwLock::new(Vec::with_capacity(config.pool_capacity)));
 
@@ -67,7 +71,7 @@ impl<S> TxPool<S> where
 		Ok(tx_pool)
 	}
 
-	pub async fn insert(&self, tx: Transaction) -> errors::Result<()> {
+	pub async fn insert(&self, tx: Transaction) -> CommonResult<()> {
 		self.check_capacity()?;
 		let tx_hash = self.support.get_tx_hash(&tx);
 		self.check_exist(&tx_hash)?;
@@ -77,16 +81,16 @@ impl<S> TxPool<S> where
 		Ok(())
 	}
 
-	fn check_capacity(&self) -> errors::Result<()> {
+	fn check_capacity(&self) -> CommonResult<()> {
 		if self.map.len() >= self.config.pool_capacity {
-			bail!(errors::ErrorKind::ExceedCapacity)
+			return Err(errors::ErrorKind::ExceedCapacity(self.config.pool_capacity).into());
 		}
 		Ok(())
 	}
 
-	fn check_exist(&self, tx_hash: &Hash) -> errors::Result<()> {
+	fn check_exist(&self, tx_hash: &Hash) -> CommonResult<()> {
 		if self.contain(tx_hash) {
-			bail!(errors::ErrorKind::Duplicated)
+			return Err(errors::ErrorKind::Duplicated.into());
 		}
 		Ok(())
 	}
@@ -96,7 +100,10 @@ impl<S> TxPool<S> where
 	}
 }
 
-async fn process_buffer(buffer_rx: Receiver<Arc<PoolTransaction>>, pool: Arc<RwLock<Vec<Arc<PoolTransaction>>>>) {
+async fn process_buffer(
+	buffer_rx: Receiver<Arc<PoolTransaction>>,
+	pool: Arc<RwLock<Vec<Arc<PoolTransaction>>>>,
+) {
 	let mut buffer_rx = buffer_rx.fuse();
 	loop {
 		let tx = buffer_rx.next().await;

@@ -16,13 +16,14 @@
 
 extern crate test;
 
+use std::collections::HashMap;
 use std::sync::Arc;
 use test::{black_box, Bencher};
 
 use crypto::hash::HashImpl;
-use node_db::{DBKey, DB};
+use node_db::DB;
 use node_statedb::StateDB;
-use std::collections::HashMap;
+use primitives::DBKey;
 
 #[bench]
 fn bench_statedb_get_1(b: &mut Bencher) {

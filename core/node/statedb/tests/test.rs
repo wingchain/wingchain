@@ -12,19 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
 
 use hash_db::Hasher;
 use mut_static::MutStatic;
+use parity_codec::Encode;
 
 use crypto::hash::Hash;
 use crypto::hash::HashImpl;
 use lazy_static::lazy_static;
-use node_db::{DBKey, DB};
+use node_db::DB;
 use node_statedb::{StateDB, TrieRoot};
-use parity_codec::Encode;
-use std::collections::HashMap;
+use primitives::DBKey;
 
 #[test]
 fn test_static_hash() {

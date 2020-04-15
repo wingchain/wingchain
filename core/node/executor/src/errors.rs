@@ -12,27 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use error_chain::*;
+use std::error::Error;
+use std::fmt::Debug;
+
+use primitives::errors::{CommonError, CommonErrorKind, Display};
 use primitives::DispatchId;
 
-error_chain! {
-	foreign_links {
-	}
-	links {
-		StateDB(node_statedb::errors::Error, node_statedb::errors::ErrorKind) #[doc="StateDB error"];
-	}
-	errors {
-		InvalidDispatchId(dispatch_id: DispatchId) {
-			description(""),
-			display("Invalid dispatch id: {:?}", dispatch_id),
-		}
-		IllegalTxsPhase {
-			description(""),
-			display("Illegal txs phase, should not execute meta txs after payload txs"),
-		}
-		MixedTxs {
-			description(""),
-			display("Mixed txs, should not mix meta txs and payload txs in one batch"),
-		}
+#[derive(Debug, Display)]
+pub enum ErrorKind {
+	#[display(fmt = "Invalid dispatch id: {:?}", _0)]
+	InvalidDispatchId(DispatchId),
+
+	#[display(fmt = "Invalid txs: {:?}", _0)]
+	InvalidTxs(String),
+}
+
+impl Error for ErrorKind {}
+
+impl From<ErrorKind> for CommonError {
+	fn from(error: ErrorKind) -> Self {
+		CommonError::new(CommonErrorKind::Executor, Box::new(error))
 	}
 }

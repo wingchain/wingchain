@@ -15,7 +15,6 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use error_chain::bail;
 use fixed_hash::construct_fixed_hash;
 use hash_db::Hasher;
 use memory_db::PrefixedKey;
@@ -26,6 +25,7 @@ use trie_db::{DBValue, TrieLayout};
 use crypto::hash::{Hash, HashImpl};
 use crypto::HashLength;
 use lazy_static::lazy_static;
+use primitives::errors::CommonResult;
 
 use crate::errors;
 
@@ -42,7 +42,7 @@ pub struct TrieHasher32;
 pub struct TrieHasher64;
 
 /// should call load before using TrieHasher20/TrieHasher32/TrieHasher64
-pub fn load_hasher(hash_impl: Arc<HashImpl>) -> errors::Result<()> {
+pub fn load_hasher(hash_impl: Arc<HashImpl>) -> CommonResult<()> {
 	let length = hash_impl.length();
 	match length {
 		HashLength::HashLength20 => {
@@ -50,14 +50,23 @@ pub fn load_hasher(hash_impl: Arc<HashImpl>) -> errors::Result<()> {
 			match HASH_IMPL_20.set(hash_impl) {
 				Ok(_) => (),
 				Err(mut_static::Error(mut_static::ErrorKind::StaticIsAlreadySet, _))
-					if HASH_IMPL_20.read()?.name() == name =>
+					if HASH_IMPL_20
+						.read()
+						.map_err(|_| errors::ErrorKind::LoadHasherFail)?
+						.name() == name =>
 				{
 					()
 				}
-				_ => bail!(errors::ErrorKind::LoadHasherConflict(
-					HASH_IMPL_32.read()?.name(),
-					name
-				)),
+				_ => {
+					return Err(errors::ErrorKind::LoadHasherConflict(
+						HASH_IMPL_32
+							.read()
+							.map_err(|_| errors::ErrorKind::LoadHasherFail)?
+							.name(),
+						name,
+					)
+					.into())
+				}
 			}
 		}
 		HashLength::HashLength32 => {
@@ -65,14 +74,23 @@ pub fn load_hasher(hash_impl: Arc<HashImpl>) -> errors::Result<()> {
 			match HASH_IMPL_32.set(hash_impl) {
 				Ok(_) => (),
 				Err(mut_static::Error(mut_static::ErrorKind::StaticIsAlreadySet, _))
-					if HASH_IMPL_32.read()?.name() == name =>
+					if HASH_IMPL_32
+						.read()
+						.map_err(|_| errors::ErrorKind::LoadHasherFail)?
+						.name() == name =>
 				{
 					()
 				}
-				_ => bail!(errors::ErrorKind::LoadHasherConflict(
-					HASH_IMPL_32.read()?.name(),
-					name
-				)),
+				_ => {
+					return Err(errors::ErrorKind::LoadHasherConflict(
+						HASH_IMPL_32
+							.read()
+							.map_err(|_| errors::ErrorKind::LoadHasherFail)?
+							.name(),
+						name,
+					)
+					.into())
+				}
 			}
 		}
 		HashLength::HashLength64 => {
@@ -80,14 +98,23 @@ pub fn load_hasher(hash_impl: Arc<HashImpl>) -> errors::Result<()> {
 			match HASH_IMPL_64.set(hash_impl) {
 				Ok(_) => (),
 				Err(mut_static::Error(mut_static::ErrorKind::StaticIsAlreadySet, _))
-					if HASH_IMPL_64.read()?.name() == name =>
+					if HASH_IMPL_64
+						.read()
+						.map_err(|_| errors::ErrorKind::LoadHasherFail)?
+						.name() == name =>
 				{
 					()
 				}
-				_ => bail!(errors::ErrorKind::LoadHasherConflict(
-					HASH_IMPL_32.read()?.name(),
-					name
-				)),
+				_ => {
+					return Err(errors::ErrorKind::LoadHasherConflict(
+						HASH_IMPL_32
+							.read()
+							.map_err(|_| errors::ErrorKind::LoadHasherFail)?
+							.name(),
+						name,
+					)
+					.into())
+				}
 			}
 		}
 	}

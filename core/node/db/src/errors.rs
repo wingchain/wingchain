@@ -12,14 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use error_chain::*;
+use std::error::Error;
 
-error_chain! {
-	foreign_links {
-		DB(rocksdb::Error) #[doc="DB error"];
-	}
-	links {
-	}
-	errors {
+use primitives::errors::{CommonError, CommonErrorKind, Display};
+
+#[derive(Debug, Display)]
+pub enum ErrorKind {
+	#[display(fmt = "RocksDB error: {:?}", _0)]
+	RocksDB(rocksdb::Error),
+}
+
+impl Error for ErrorKind {}
+
+impl From<ErrorKind> for CommonError {
+	fn from(error: ErrorKind) -> Self {
+		CommonError::new(CommonErrorKind::DB, Box::new(error))
 	}
 }

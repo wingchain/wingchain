@@ -12,28 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::error::Error;
-use std::fmt::Debug;
-
 use primitives::errors::{CommonError, CommonErrorKind, Display};
-use primitives::DispatchId;
+use std::error::Error;
 
 #[derive(Debug, Display)]
 pub enum ErrorKind {
+	#[display(fmt = "Spec error: {:?}", _0)]
+	Spec(String),
+
 	#[display(fmt = "Codec error: {:?}", _0)]
-	CodecError(parity_codec::Error),
-
-	#[display(fmt = "Invalid dispatch id: {:?}", _0)]
-	InvalidDispatchId(DispatchId),
-
-	#[display(fmt = "Invalid params")]
-	InvalidParams,
+	Codec(parity_codec::Error),
 }
 
 impl Error for ErrorKind {}
 
 impl From<ErrorKind> for CommonError {
 	fn from(error: ErrorKind) -> Self {
-		CommonError::new(CommonErrorKind::Executor, Box::new(error))
+		CommonError::new(CommonErrorKind::Chain, Box::new(error))
 	}
 }

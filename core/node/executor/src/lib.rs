@@ -20,10 +20,11 @@ use std::sync::Arc;
 use parity_codec::Encode;
 
 use hash_enum::HashEnum;
-use node_db::{DBKey, DBTransaction, DBValue};
+use node_db::DBTransaction;
 use node_executor_primitives::{Context as ContextT, Module as ModuleT};
 use node_statedb::{StateDB, StateDBGetter, StateDBStmt, TrieRoot};
-use primitives::{BlockNumber, Call, FromDispatchId, Params, Transaction, Hash};
+use primitives::errors::CommonResult;
+use primitives::{BlockNumber, Call, DBKey, DBValue, FromDispatchId, Hash, Params, Transaction};
 
 pub mod errors;
 
@@ -60,7 +61,7 @@ impl Context {
 		meta_state_root: Hash,
 		payload_statedb: Arc<StateDB>,
 		payload_state_root: Hash,
-	) -> errors::Result<Self> {
+	) -> CommonResult<Self> {
 		let meta_state = ContextState::new(meta_statedb.clone(), &meta_state_root.0)?;
 		let payload_state = ContextState::new(payload_statedb.clone(), &payload_state_root.0)?;
 
@@ -82,7 +83,7 @@ impl Context {
 		Ok(Self { inner })
 	}
 
-	pub fn get_meta_update(&self) -> errors::Result<(Hash, DBTransaction)> {
+	pub fn get_meta_update(&self) -> CommonResult<(Hash, DBTransaction)> {
 		let buffer = self.inner.meta_state.buffer.borrow();
 		let (root, transaction) = self
 			.inner
@@ -91,7 +92,7 @@ impl Context {
 		Ok((Hash(root), transaction))
 	}
 
-	pub fn get_meta_txs(&self) -> errors::Result<(Hash, Vec<Arc<Transaction>>)> {
+	pub fn get_meta_txs(&self) -> CommonResult<(Hash, Vec<Arc<Transaction>>)> {
 		let txs = self.inner.meta_txs.borrow().clone();
 
 		let input = txs.iter().map(|x| Encode::encode(&x));
@@ -100,7 +101,7 @@ impl Context {
 		Ok((Hash(txs_root), txs))
 	}
 
-	pub fn get_payload_update(&self) -> errors::Result<(Hash, DBTransaction)> {
+	pub fn get_payload_update(&self) -> CommonResult<(Hash, DBTransaction)> {
 		let buffer = self.inner.payload_state.buffer.borrow();
 		let (root, transaction) = self
 			.inner
@@ -109,7 +110,7 @@ impl Context {
 		Ok((Hash(root), transaction))
 	}
 
-	pub fn get_payload_txs(&self) -> errors::Result<(Hash, Vec<Arc<Transaction>>)> {
+	pub fn get_payload_txs(&self) -> CommonResult<(Hash, Vec<Arc<Transaction>>)> {
 		let txs = self.inner.payload_txs.borrow().clone();
 
 		let input = txs.iter().map(|x| Encode::encode(&x));
@@ -129,7 +130,7 @@ struct ContextState {
 }
 
 impl ContextState {
-	fn new(statedb: Arc<StateDB>, state_root: &[u8]) -> errors::Result<Self> {
+	fn new(statedb: Arc<StateDB>, state_root: &[u8]) -> CommonResult<Self> {
 		let statedb_stmt = statedb.prepare_stmt(state_root)?;
 		let statedb_getter = StateDB::prepare_get(&statedb_stmt)?;
 		let buffer = Default::default();
@@ -147,44 +148,26 @@ impl ContextState {
 }
 
 impl ContextT for Context {
-	fn meta_get(&self, key: &[u8]) -> node_executor_primitives::errors::Result<Option<DBValue>> {
+	fn meta_get(&self, key: &[u8]) -> CommonResult<Option<DBValue>> {
 		let buffer = self.inner.meta_state.buffer.borrow();
 		match buffer.get(&DBKey::from_slice(key)) {
 			Some(value) => Ok(value.clone()),
-			None => self
-				.inner
-				.meta_state
-				.statedb_getter
-				.get(key)
-				.map_err(|_| node_executor_primitives::errors::ErrorKind::TrieError.into()),
+			None => self.inner.meta_state.statedb_getter.get(key),
 		}
 	}
-	fn meta_set(
-		&self,
-		key: &[u8],
-		value: Option<DBValue>,
-	) -> node_executor_primitives::errors::Result<()> {
+	fn meta_set(&self, key: &[u8], value: Option<DBValue>) -> CommonResult<()> {
 		let mut buffer = self.inner.meta_state.buffer.borrow_mut();
 		buffer.insert(DBKey::from_slice(key), value);
 		Ok(())
 	}
-	fn payload_get(&self, key: &[u8]) -> node_executor_primitives::errors::Result<Option<DBValue>> {
+	fn payload_get(&self, key: &[u8]) -> CommonResult<Option<DBValue>> {
 		let buffer = self.inner.payload_state.buffer.borrow();
 		match buffer.get(&DBKey::from_slice(key)) {
 			Some(value) => Ok(value.clone()),
-			None => self
-				.inner
-				.payload_state
-				.statedb_getter
-				.get(key)
-				.map_err(|_| node_executor_primitives::errors::ErrorKind::TrieError.into()),
+			None => self.inner.payload_state.statedb_getter.get(key),
 		}
 	}
-	fn payload_set(
-		&self,
-		key: &[u8],
-		value: Option<DBValue>,
-	) -> node_executor_primitives::errors::Result<()> {
+	fn payload_set(&self, key: &[u8], value: Option<DBValue>) -> CommonResult<()> {
 		let mut buffer = self.inner.payload_state.buffer.borrow_mut();
 		buffer.insert(DBKey::from_slice(key), value);
 		Ok(())
@@ -223,7 +206,7 @@ impl Executor {
 		}
 	}
 
-	pub fn execute_txs(&self, context: &Context, txs: Vec<Arc<Transaction>>) -> errors::Result<()> {
+	pub fn execute_txs(&self, context: &Context, txs: Vec<Arc<Transaction>>) -> CommonResult<()> {
 		let mut txs_is_meta: Option<bool> = None;
 		for tx in &txs {
 			let module_id = &tx.call.module_id;
@@ -246,14 +229,20 @@ impl Executor {
 				}
 				Some(txs_is_meta) => {
 					if txs_is_meta != is_meta {
-						return Err(errors::ErrorKind::MixedTxs.into());
+						return Err(errors::ErrorKind::InvalidTxs(
+							"mixed meta and payload in one txs batch".to_string(),
+						)
+						.into());
 					}
 				}
 			}
 		}
 
 		if context.inner.payload_phase.get() && txs_is_meta == Some(true) {
-			return Err(errors::ErrorKind::IllegalTxsPhase.into());
+			return Err(errors::ErrorKind::InvalidTxs(
+				"meta after payload not allowed".to_string(),
+			)
+			.into());
 		}
 
 		let mut txs = txs;

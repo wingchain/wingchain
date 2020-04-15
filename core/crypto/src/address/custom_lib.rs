@@ -23,6 +23,8 @@ use libloading::os::unix as imp;
 use libloading::os::windows as imp;
 use libloading::{Library, Symbol};
 
+use primitives::errors::CommonResult;
+
 use crate::address::Address;
 use crate::{errors, AddressLength};
 
@@ -41,8 +43,8 @@ pub struct CustomLib {
 }
 
 impl CustomLib {
-	pub fn new(path: &PathBuf) -> errors::Result<Self> {
-		let err = |_| errors::ErrorKind::CustomLibLoadFailed(format!("{:?}", path));
+	pub fn new(path: &PathBuf) -> CommonResult<Self> {
+		let err = |_| errors::ErrorKind::CustomLibLoadFailed(path.clone());
 
 		let lib = Library::new(path).map_err(err)?;
 
@@ -81,7 +83,7 @@ impl CustomLib {
 		call_name: &imp::Symbol<CallName>,
 		call_name_free: &imp::Symbol<CallNameFree>,
 		path: &PathBuf,
-	) -> errors::Result<String> {
+	) -> CommonResult<String> {
 		let err = |_| errors::ErrorKind::InvalidName(format!("{:?}", path));
 
 		let name: String = unsafe {
@@ -94,7 +96,7 @@ impl CustomLib {
 		Ok(name)
 	}
 
-	fn length(call_length: &imp::Symbol<CallAddressLength>) -> errors::Result<AddressLength> {
+	fn length(call_length: &imp::Symbol<CallAddressLength>) -> CommonResult<AddressLength> {
 		let length: usize = unsafe {
 			let length = call_length();
 			length as usize

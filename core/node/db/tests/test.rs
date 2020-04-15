@@ -16,7 +16,8 @@ use tempfile::tempdir;
 
 use node_db::columns;
 use node_db::global_key;
-use node_db::{DBKey, DB};
+use node_db::DB;
+use primitives::DBKey;
 
 #[test]
 fn test_db() {

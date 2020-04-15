@@ -1,5 +1,5 @@
 [package]
-name = "node-service"
+name = "node-chain"
 version = "0.1.0"
 authors = ["developer <developer@wingchain.cn>"]
 edition = "2018"
@@ -20,5 +20,4 @@ crypto = { path = "../../crypto" }
 node-db = { path = "../db" }
 node-statedb = { path = "../statedb" }
 node-executor = { path = "../executor" }
-node-chain = { path = "../chain" }
 main-base = { path = "../../../bin/main/base" }

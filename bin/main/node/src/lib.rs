@@ -14,8 +14,7 @@
 
 use std::path::PathBuf;
 
-use error_chain::bail;
-
+use primitives::errors::CommonResult;
 use service::Config;
 use service::Service;
 
@@ -24,14 +23,14 @@ use crate::cli::NodeOpt;
 pub mod cli;
 pub mod errors;
 
-pub fn run(opt: NodeOpt) -> errors::Result<()> {
+pub fn run(opt: NodeOpt) -> CommonResult<()> {
 	let home = match opt.shared_params.home {
 		Some(home) => home,
 		None => base::get_default_home()?,
 	};
 
 	if !home_inited(&home) {
-		bail!(errors::ErrorKind::HomeDirNotInited(format!("{:?}", home)));
+		return Err(errors::ErrorKind::NotInited(home).into());
 	}
 
 	let config = Config { home };

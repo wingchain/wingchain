@@ -12,14 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::path::PathBuf;
 use std::str::FromStr;
+
+use primitives::errors::CommonError;
 
 use crate::address::blake2b::Blake2b160;
 use crate::address::custom_lib::CustomLib;
 use crate::address::original::{Original160, Original256};
-use crate::errors;
 use crate::AddressLength;
-use std::path::PathBuf;
 
 mod blake2b;
 mod custom_lib;
@@ -70,7 +71,7 @@ impl Address for AddressImpl {
 }
 
 impl FromStr for AddressImpl {
-	type Err = errors::Error;
+	type Err = CommonError;
 	#[inline]
 	fn from_str(s: &str) -> Result<AddressImpl, Self::Err> {
 		match s {

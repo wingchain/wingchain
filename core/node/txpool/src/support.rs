@@ -12,11 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use primitives::errors::CommonResult;
 use primitives::{Hash, Transaction};
-
-pub mod errors;
 
 pub trait TxPoolSupport {
 	fn get_tx_hash(&self, tx: &Transaction) -> Hash;
-	fn validate_tx(&self, tx: &Transaction) -> errors::Result<()>;
+	fn validate_tx(&self, tx: &Transaction) -> CommonResult<()>;
 }

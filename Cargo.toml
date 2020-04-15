@@ -17,7 +17,7 @@ members = [
 	"core/node/executor",
 	"core/node/executor/primitives",
 	"core/node/txpool",
-	"core/node/txpool/support",
+	"core/node/chain",
 	"core/module/system",
 ]
 

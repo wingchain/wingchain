@@ -12,22 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use error_chain::*;
+use std::error::Error;
+use std::fmt::Debug;
 
-error_chain! {
-	foreign_links {
-	}
-	links {
-		TxPoolSupport(node_txpool_support::errors::Error, node_txpool_support::errors::ErrorKind) #[doc="Txpool support error"];
-	}
-	errors {
-		ExceedCapacity {
-			description(""),
-			display("Exceed capacity"),
-		}
-		Duplicated {
-			description(""),
-			display("Duplicated"),
-		}
+use primitives::errors::{CommonError, CommonErrorKind, Display};
+
+#[derive(Debug, Display)]
+pub enum ErrorKind {
+	#[display(fmt = "Exceed capacity: {}", _0)]
+	ExceedCapacity(usize),
+
+	#[display(fmt = "Duplicated tx")]
+	Duplicated,
+}
+
+impl Error for ErrorKind {}
+
+impl From<ErrorKind> for CommonError {
+	fn from(error: ErrorKind) -> Self {
+		CommonError::new(CommonErrorKind::TxPool, Box::new(error))
 	}
 }

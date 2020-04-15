@@ -12,13 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use error_chain::*;
+pub use derive_more::{Constructor, Display};
+use std::error::Error;
 
-error_chain! {
-	foreign_links {
-	}
-	links {
-	}
-	errors {
-	}
+#[derive(Debug, Display)]
+pub enum CommonErrorKind {
+	Main,
+	Service,
+	Crypto,
+	DB,
+	StateDB,
+	Executor,
+	TxPool,
+	Chain,
 }
+
+#[derive(Debug, Constructor, Display)]
+#[display(fmt = "[CommonError] Kind: {:?} Error: {:?}", kind, error)]
+pub struct CommonError {
+	kind: CommonErrorKind,
+	error: Box<dyn Error + Send>,
+}
+
+impl Error for CommonError {}
+
+pub type CommonResult<T> = Result<T, CommonError>;

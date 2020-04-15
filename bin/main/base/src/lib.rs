@@ -19,6 +19,8 @@ use app_dirs::{AppDataType, AppInfo};
 use serde::{Deserialize, Serialize};
 use structopt::StructOpt;
 
+use primitives::errors::CommonResult;
+
 pub mod errors;
 pub mod spec;
 
@@ -44,13 +46,14 @@ pub struct SystemInitParams {
 	pub time: String,
 }
 
-pub fn get_default_home() -> errors::Result<PathBuf> {
+pub fn get_default_home() -> CommonResult<PathBuf> {
 	let app_info = AppInfo {
 		name: NAME,
 		author: AUTHOR,
 	};
 
-	let home = get_app_root(AppDataType::UserData, &app_info)?;
+	let home =
+		get_app_root(AppDataType::UserData, &app_info).map_err(|e| errors::ErrorKind::AppDir(e))?;
 	Ok(home)
 }
 

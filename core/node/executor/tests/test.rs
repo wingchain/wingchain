@@ -12,16 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::sync::Arc;
+
 use chrono::Local;
-use crypto::hash::HashImpl;
-use module_system::InitParams;
-use node_db::{DBKey, DB};
-use node_executor::{module, Context, Executor, ModuleEnum};
-use node_statedb::{StateDB, TrieRoot};
 use parity_codec::alloc::collections::HashMap;
 use parity_codec::{Decode, Encode};
-use primitives::{Transaction, Hash};
-use std::sync::Arc;
+
+use crypto::hash::HashImpl;
+use module_system::InitParams;
+use node_db::DB;
+use node_executor::{module, Context, Executor, ModuleEnum};
+use node_statedb::{StateDB, TrieRoot};
+use primitives::{DBKey, Hash, Transaction};
 
 #[test]
 fn test_executor() {
@@ -87,7 +89,7 @@ fn test_executor() {
 		payload_statedb.clone(),
 		Hash(payload_state_root),
 	)
-		.unwrap();
+	.unwrap();
 
 	executor.execute_txs(&context, txs_0.clone()).unwrap();
 	let (state_root, transaction) = context.get_meta_update().unwrap();
@@ -142,7 +144,7 @@ fn test_executor() {
 		payload_statedb,
 		Hash(payload_state_root),
 	)
-		.unwrap();
+	.unwrap();
 
 	executor.execute_txs(&context, txs_1.clone()).unwrap();
 	let (state_root, _) = context.get_meta_update().unwrap();
@@ -175,8 +177,8 @@ fn expected_state_root_0(txs: Vec<Arc<Transaction>>) -> Hash {
 			Some(params.timestamp.encode()),
 		),
 	]
-		.into_iter()
-		.collect::<HashMap<_, _>>();
+	.into_iter()
+	.collect::<HashMap<_, _>>();
 
 	use tempfile::tempdir;
 
@@ -209,8 +211,8 @@ fn expected_state_root_1(txs_0: Vec<Arc<Transaction>>, txs_1: Vec<Arc<Transactio
 			Some(params.timestamp.encode()),
 		),
 	]
-		.into_iter()
-		.collect::<HashMap<_, _>>();
+	.into_iter()
+	.collect::<HashMap<_, _>>();
 
 	use tempfile::tempdir;
 
@@ -242,8 +244,8 @@ fn expected_state_root_1(txs_0: Vec<Arc<Transaction>>, txs_1: Vec<Arc<Transactio
 			Some(params.timestamp.encode()),
 		),
 	]
-		.into_iter()
-		.collect::<HashMap<_, _>>();
+	.into_iter()
+	.collect::<HashMap<_, _>>();
 
 	let (state_root, _) = statedb.prepare_update(&state_root, data.iter()).unwrap();
 	Hash(state_root)

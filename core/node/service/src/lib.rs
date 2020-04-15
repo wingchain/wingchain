@@ -15,9 +15,9 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use crate::chain::Chain;
+use node_chain::Chain;
+use primitives::errors::CommonResult;
 
-mod chain;
 pub mod errors;
 
 pub struct Config {
@@ -30,8 +30,8 @@ pub struct Service {
 }
 
 impl Service {
-	pub fn new(config: Config) -> errors::Result<Self> {
-		let chain_config = chain::Config {
+	pub fn new(config: Config) -> CommonResult<Self> {
+		let chain_config = node_chain::Config {
 			home: config.home.clone(),
 		};
 
@@ -39,7 +39,7 @@ impl Service {
 		Ok(Self { config, chain })
 	}
 
-	pub fn start(&mut self) -> errors::Result<()> {
+	pub fn start(&mut self) -> CommonResult<()> {
 		Ok(())
 	}
 }
