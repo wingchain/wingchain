@@ -12,11 +12,96 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::sync::Arc;
+
 use chashmap::CHashMap;
-use primitives::Hash;
+use parking_lot::RwLock;
+use tokio::stream::StreamExt;
+use tokio::sync::mpsc::{channel, Receiver, Sender};
+use error_chain::bail;
 
-pub struct TxPool {
+use node_txpool_support::TxPoolSupport;
+use primitives::{Hash, Transaction};
 
-	// map: CHashMap<Hash>
+pub mod errors;
 
+pub struct Config {
+	pub pool_capacity: usize,
+	pub buffer_capacity: usize,
+}
+
+pub struct PoolTransaction {
+	tx: Arc<Transaction>,
+	tx_hash: Hash,
+}
+
+pub struct TxPool<S> where
+	S: TxPoolSupport
+{
+	config: Config,
+	support: S,
+	map: CHashMap<Hash, Arc<PoolTransaction>>,
+	pool: Arc<RwLock<Vec<Arc<PoolTransaction>>>>,
+	buffer_tx: Sender<Arc<PoolTransaction>>,
+}
+
+impl<S> TxPool<S> where
+	S: TxPoolSupport
+{
+	pub fn new(config: Config, support: S) -> errors::Result<Self> {
+		let map = CHashMap::with_capacity(config.pool_capacity);
+		let pool = Arc::new(RwLock::new(Vec::with_capacity(config.pool_capacity)));
+
+		let (buffer_tx, buffer_rx) = channel(config.buffer_capacity);
+
+		let tx_pool = Self {
+			config,
+			support,
+			map,
+			pool: pool.clone(),
+			buffer_tx,
+		};
+
+		tokio::spawn(process_buffer(buffer_rx, pool));
+
+		Ok(tx_pool)
+	}
+
+	pub async fn insert(&self, tx: Transaction) -> errors::Result<()> {
+		self.check_capacity()?;
+		let tx_hash = self.support.get_tx_hash(&tx);
+		self.check_exist(&tx_hash)?;
+
+		self.support.validate_tx(&tx)?;
+
+		Ok(())
+	}
+
+	fn check_capacity(&self) -> errors::Result<()> {
+		if self.map.len() >= self.config.pool_capacity {
+			bail!(errors::ErrorKind::ExceedCapacity)
+		}
+		Ok(())
+	}
+
+	fn check_exist(&self, tx_hash: &Hash) -> errors::Result<()> {
+		if self.contain(tx_hash) {
+			bail!(errors::ErrorKind::Duplicated)
+		}
+		Ok(())
+	}
+
+	fn contain(&self, tx_hash: &Hash) -> bool {
+		self.map.contains_key(tx_hash)
+	}
+}
+
+async fn process_buffer(buffer_rx: Receiver<Arc<PoolTransaction>>, pool: Arc<RwLock<Vec<Arc<PoolTransaction>>>>) {
+	let mut buffer_rx = buffer_rx.fuse();
+	loop {
+		let tx = buffer_rx.next().await;
+		if let Some(tx) = tx {
+			pool.write().push(tx);
+		}
+	}
 }
