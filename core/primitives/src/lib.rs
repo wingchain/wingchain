@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::fmt;
+
 use parity_codec::{Decode, Encode};
 use smallvec::SmallVec;
 
@@ -19,16 +21,16 @@ use hash_enum::HashEnum;
 
 pub mod errors;
 
-#[derive(Clone, Debug, Encode, Decode)]
+#[derive(Clone, Debug, Encode, Decode, PartialEq)]
 pub struct Address(pub Vec<u8>);
 
-#[derive(Clone, Debug, Encode, Decode)]
+#[derive(Clone, Debug, Encode, Decode, PartialEq)]
 /// signature for (nonce, call)
 pub struct Signature(pub Vec<u8>);
 
 pub type Nonce = u32;
 
-#[derive(Clone, Debug, Encode, Decode)]
+#[derive(Clone, Debug, Encode, Decode, PartialEq)]
 pub struct Witness {
 	address: Address,
 	signature: Signature,
@@ -36,26 +38,26 @@ pub struct Witness {
 	expire: BlockNumber,
 }
 
-#[derive(Clone, Debug, Encode, Decode)]
+#[derive(Clone, Debug, Encode, Decode, PartialEq)]
 pub struct DispatchId(pub [u8; 4]);
 
-#[derive(Clone, Debug, Encode, Decode)]
+#[derive(Clone, Debug, Encode, Decode, PartialEq)]
 pub struct Params(pub Vec<u8>);
 
-#[derive(Clone, Debug, Encode, Decode)]
+#[derive(Clone, Debug, Encode, Decode, PartialEq)]
 pub struct Call {
 	pub module_id: DispatchId,
 	pub method_id: DispatchId,
 	pub params: Params,
 }
 
-#[derive(Clone, Debug, Encode, Decode)]
+#[derive(Clone, Debug, Encode, Decode, PartialEq)]
 pub struct Transaction {
 	pub witness: Option<Witness>,
 	pub call: Call,
 }
 
-#[derive(Clone, Debug, Encode, Decode, PartialEq, Hash)]
+#[derive(Clone, Encode, Decode, PartialEq, Hash)]
 pub struct Hash(pub Vec<u8>);
 
 pub type BlockNumber = u32;
@@ -88,6 +90,9 @@ pub struct Executed {
 	pub payload_executed_state_root: Hash,
 }
 
+pub type DBKey = SmallVec<[u8; 32]>;
+pub type DBValue = Vec<u8>;
+
 impl<T: HashEnum> From<T> for DispatchId {
 	fn from(t: T) -> Self {
 		let mut dispatch_id = [0u8; 4];
@@ -106,5 +111,8 @@ impl<T: HashEnum> FromDispatchId for T {
 	}
 }
 
-pub type DBKey = SmallVec<[u8; 32]>;
-pub type DBValue = Vec<u8>;
+impl fmt::Debug for Hash {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "0x{}", hex::encode(&self.0))
+	}
+}

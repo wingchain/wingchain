@@ -54,7 +54,9 @@ pub struct Config {
 }
 
 pub struct Service {
+	#[allow(dead_code)]
 	config: Config,
+	#[allow(dead_code)]
 	chain: Arc<Chain>,
 }
 

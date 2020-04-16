@@ -16,14 +16,18 @@ use std::error::Error;
 use std::fmt::Debug;
 
 use primitives::errors::{CommonError, CommonErrorKind, Display};
+use primitives::Hash;
 
 #[derive(Debug, Display)]
 pub enum ErrorKind {
 	#[display(fmt = "Exceed capacity: {}", _0)]
 	ExceedCapacity(usize),
 
-	#[display(fmt = "Duplicated tx")]
-	Duplicated,
+	#[display(fmt = "Duplicated tx: tx_hash: {:?}", _0)]
+	Duplicated(Hash),
+
+	#[display(fmt = "Insert error: tx_hash: {:?}", _0)]
+	Insert(Hash),
 }
 
 impl Error for ErrorKind {}

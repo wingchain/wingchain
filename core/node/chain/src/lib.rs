@@ -52,7 +52,9 @@ pub struct Chain {
 
 pub struct Basic {
 	hash: Arc<HashImpl>,
+	#[allow(dead_code)]
 	dsa: Arc<DsaImpl>,
+	#[allow(dead_code)]
 	address: Arc<AddressImpl>,
 }
 
@@ -149,7 +151,7 @@ impl Chain {
 				return Err(errors::ErrorKind::Spec(format!(
 					"invalid genesis txs: missing system.init"
 				))
-				.into())
+				.into());
 			}
 		};
 
@@ -160,14 +162,14 @@ impl Chain {
 					return Err(errors::ErrorKind::Spec(format!(
 						"invalid genesis txs: invalid system.init params"
 					))
-					.into())
+					.into());
 				}
 			},
 			_ => {
 				return Err(errors::ErrorKind::Spec(format!(
 					"invalid genesis txs: invalid system.init params"
 				))
-				.into())
+				.into());
 			}
 		};
 
@@ -252,11 +254,7 @@ impl Chain {
 
 		// commit block
 		let header_encoded = Encode::encode(&block.header);
-		let block_hash = {
-			let mut out = vec![0u8; self.basic.hash.length().into()];
-			self.basic.hash.hash(&mut out, &header_encoded);
-			out
-		};
+		let block_hash = self.hash_slice(&header_encoded);
 
 		// 1. meta state
 		transaction.extend(meta_transaction);
@@ -264,19 +262,19 @@ impl Chain {
 		// 2. header
 		transaction.put_owned(
 			node_db::columns::HEADER,
-			DBKey::from_slice(&block_hash),
+			DBKey::from_slice(&block_hash.0),
 			header_encoded,
 		);
 
 		// 3. body
 		transaction.put_owned(
 			node_db::columns::META_TXS,
-			DBKey::from_slice(&block_hash),
+			DBKey::from_slice(&block_hash.0),
 			Encode::encode(&block.body.meta_txs),
 		);
 		transaction.put_owned(
 			node_db::columns::PAYLOAD_TXS,
-			DBKey::from_slice(&block_hash),
+			DBKey::from_slice(&block_hash.0),
 			Encode::encode(&block.body.payload_txs),
 		);
 
@@ -284,7 +282,7 @@ impl Chain {
 		transaction.put_owned(
 			node_db::columns::BLOCK_HASH,
 			DBKey::from_slice(&Encode::encode(&number)),
-			block_hash.clone(),
+			block_hash.0.clone(),
 		);
 
 		// 5. number
@@ -304,7 +302,7 @@ impl Chain {
 		};
 		transaction.put_owned(
 			node_db::columns::EXECUTED,
-			DBKey::from_slice(&block_hash),
+			DBKey::from_slice(&block_hash.0),
 			Encode::encode(&executed),
 		);
 
@@ -317,14 +315,23 @@ impl Chain {
 
 		self.db.write(transaction)?;
 
-		info!(
-			"Genesis block inited: block hash: {}",
-			hex::encode(block_hash)
-		);
+		info!("Genesis block inited: block hash: {:?}", block_hash);
 
 		Ok(())
 	}
 
+	#[allow(dead_code)]
+	fn hash<D: Encode>(&self, data: &D) -> Hash {
+		self.hash_slice(&data.encode())
+	}
+
+	fn hash_slice(&self, data: &[u8]) -> Hash {
+		let mut out = vec![0u8; self.basic.hash.length().into()];
+		self.basic.hash.hash(&mut out, data);
+		Hash(out)
+	}
+
+	#[allow(dead_code)]
 	fn get_best_number(&self) -> CommonResult<Option<BlockNumber>> {
 		let best_number = self
 			.db

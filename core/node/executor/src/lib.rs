@@ -37,7 +37,9 @@ pub struct Context {
 }
 
 struct ContextInner {
+	#[allow(dead_code)]
 	number: BlockNumber,
+	#[allow(dead_code)]
 	timestamp: u32,
 	trie_root: Arc<TrieRoot>,
 	meta_statedb: Arc<StateDB>,

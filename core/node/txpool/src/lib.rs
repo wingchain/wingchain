@@ -25,16 +25,17 @@ use primitives::{Hash, Transaction};
 use crate::support::TxPoolSupport;
 
 pub mod errors;
-mod support;
+pub mod support;
 
 pub struct Config {
 	pub pool_capacity: usize,
 	pub buffer_capacity: usize,
 }
 
+#[derive(Debug, PartialEq)]
 pub struct PoolTransaction {
-	tx: Arc<Transaction>,
-	tx_hash: Hash,
+	pub tx: Arc<Transaction>,
+	pub tx_hash: Hash,
 }
 
 pub struct TxPool<S>
@@ -44,7 +45,7 @@ where
 	config: Config,
 	support: S,
 	map: CHashMap<Hash, Arc<PoolTransaction>>,
-	pool: Arc<RwLock<Vec<Arc<PoolTransaction>>>>,
+	queue: Arc<RwLock<Vec<Arc<PoolTransaction>>>>,
 	buffer_tx: Sender<Arc<PoolTransaction>>,
 }
 
@@ -54,7 +55,7 @@ where
 {
 	pub fn new(config: Config, support: S) -> CommonResult<Self> {
 		let map = CHashMap::with_capacity(config.pool_capacity);
-		let pool = Arc::new(RwLock::new(Vec::with_capacity(config.pool_capacity)));
+		let queue = Arc::new(RwLock::new(Vec::with_capacity(config.pool_capacity)));
 
 		let (buffer_tx, buffer_rx) = channel(config.buffer_capacity);
 
@@ -62,13 +63,17 @@ where
 			config,
 			support,
 			map,
-			pool: pool.clone(),
+			queue: queue.clone(),
 			buffer_tx,
 		};
 
-		tokio::spawn(process_buffer(buffer_rx, pool));
+		tokio::spawn(process_buffer(buffer_rx, queue));
 
 		Ok(tx_pool)
+	}
+
+	pub fn get_queue(&self) -> &Arc<RwLock<Vec<Arc<PoolTransaction>>>> {
+		&self.queue
 	}
 
 	pub async fn insert(&self, tx: Transaction) -> CommonResult<()> {
@@ -77,6 +82,22 @@ where
 		self.check_exist(&tx_hash)?;
 
 		self.support.validate_tx(&tx)?;
+
+		let pool_tx = Arc::new(PoolTransaction {
+			tx: Arc::new(tx),
+			tx_hash: tx_hash.clone(),
+		});
+
+		if self.map.insert(tx_hash.clone(), pool_tx.clone()).is_some() {
+			return Err(errors::ErrorKind::Duplicated(tx_hash.clone()).into());
+		}
+
+		let result = self.buffer_tx.clone().send(pool_tx).await;
+
+		if let Err(_e) = result {
+			self.map.remove(&tx_hash);
+			return Err(errors::ErrorKind::Insert(tx_hash).into());
+		}
 
 		Ok(())
 	}
@@ -90,7 +111,7 @@ where
 
 	fn check_exist(&self, tx_hash: &Hash) -> CommonResult<()> {
 		if self.contain(tx_hash) {
-			return Err(errors::ErrorKind::Duplicated.into());
+			return Err(errors::ErrorKind::Duplicated(tx_hash.clone()).into());
 		}
 		Ok(())
 	}
@@ -102,13 +123,13 @@ where
 
 async fn process_buffer(
 	buffer_rx: Receiver<Arc<PoolTransaction>>,
-	pool: Arc<RwLock<Vec<Arc<PoolTransaction>>>>,
+	queue: Arc<RwLock<Vec<Arc<PoolTransaction>>>>,
 ) {
 	let mut buffer_rx = buffer_rx.fuse();
 	loop {
 		let tx = buffer_rx.next().await;
 		if let Some(tx) = tx {
-			pool.write().push(tx);
+			queue.write().push(tx);
 		}
 	}
 }
