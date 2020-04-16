@@ -18,8 +18,8 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use chrono::DateTime;
+use codec::{Decode, Encode};
 use log::info;
-use parity_codec::{Decode, Encode};
 use toml::Value;
 
 use crypto::address::AddressImpl;
@@ -30,9 +30,8 @@ use main_base::SystemInitParams;
 use node_db::{DBTransaction, DB};
 use node_executor::{module, Context, Executor, ModuleEnum};
 use node_statedb::{StateDB, TrieRoot};
-use primitives::{Block, BlockNumber, Body, DBKey, Executed, Hash, Header};
-
 use primitives::errors::CommonResult;
+use primitives::{Block, BlockNumber, Body, DBKey, Executed, Hash, Header};
 
 pub mod errors;
 

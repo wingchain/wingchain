@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use primitives::errors::{CommonError, CommonErrorKind, Display};
 use std::error::Error;
+
+use primitives::errors::{CommonError, CommonErrorKind, Display};
 
 #[derive(Debug, Display)]
 pub enum ErrorKind {
@@ -21,7 +22,7 @@ pub enum ErrorKind {
 	Spec(String),
 
 	#[display(fmt = "Codec error: {:?}", _0)]
-	Codec(parity_codec::Error),
+	Codec(codec::Error),
 }
 
 impl Error for ErrorKind {}

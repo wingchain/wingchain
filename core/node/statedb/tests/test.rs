@@ -16,9 +16,9 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
 
+use codec::Encode;
 use hash_db::Hasher;
 use mut_static::MutStatic;
-use parity_codec::Encode;
 
 use crypto::hash::Hash;
 use crypto::hash::HashImpl;

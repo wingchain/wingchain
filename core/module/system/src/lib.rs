@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use parity_codec::{Decode, Encode};
+use codec::{Decode, Encode};
 
 use hash_enum::HashEnum;
 use node_executor_primitives::{errors, Context, Module as ModuleT, StorageValue};

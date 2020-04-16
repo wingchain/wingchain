@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use parity_codec::Encode;
+use codec::Encode;
+
 use primitives::errors::CommonResult;
 use primitives::{Hash, Transaction};
 

@@ -21,7 +21,7 @@ use primitives::DispatchId;
 #[derive(Debug, Display)]
 pub enum ErrorKind {
 	#[display(fmt = "Codec error: {:?}", _0)]
-	CodecError(parity_codec::Error),
+	CodecError(codec::Error),
 
 	#[display(fmt = "Invalid dispatch id: {:?}", _0)]
 	InvalidDispatchId(DispatchId),

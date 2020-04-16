@@ -19,17 +19,17 @@ extern crate test;
 use std::sync::Arc;
 use test::{black_box, Bencher};
 
-use rand::random;
-
-use crypto::hash::{Hash as HashT, HashImpl};
+use codec::Encode;
 use futures::future::join_all;
-use node_txpool::support::TxPoolSupport;
-use node_txpool::{Config, TxPool};
-use parity_codec::Encode;
-use primitives::errors::CommonResult;
-use primitives::{Call, DispatchId, Hash, Params, Transaction};
+use rand::random;
 use tokio::runtime::Runtime;
 use tokio::time::Duration;
+
+use crypto::hash::{Hash as HashT, HashImpl};
+use node_txpool::support::TxPoolSupport;
+use node_txpool::{Config, TxPool};
+use primitives::errors::CommonResult;
+use primitives::{Call, DispatchId, Hash, Params, Transaction};
 
 const TXS_SIZE: usize = 10000;
 

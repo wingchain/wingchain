@@ -17,7 +17,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use parity_codec::Encode;
+use codec::Encode;
 
 use hash_enum::HashEnum;
 use node_db::DBTransaction;

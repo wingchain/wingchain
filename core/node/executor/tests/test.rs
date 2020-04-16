@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use chrono::Local;
-use parity_codec::alloc::collections::HashMap;
-use parity_codec::{Decode, Encode};
+use codec::{Decode, Encode};
 
 use crypto::hash::HashImpl;
 use module_system::InitParams;

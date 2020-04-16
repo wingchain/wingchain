@@ -17,10 +17,10 @@
 use std::iter::IntoIterator;
 use std::sync::Arc;
 
+use codec::Encode;
 use hash_db::{AsHashDB, HashDB, Hasher, Prefix};
 use log::warn;
 use memory_db::{KeyFunction, PrefixedKey};
-use parity_codec::Encode;
 use reference_trie::ReferenceTrieStream;
 use trie_db::{Trie, TrieMut};
 

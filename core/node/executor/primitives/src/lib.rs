@@ -14,7 +14,7 @@
 
 use std::marker::PhantomData;
 
-use parity_codec::{Decode, Encode};
+use codec::{Decode, Encode};
 
 use primitives::errors::{CommonError, CommonResult};
 use primitives::{Call, DBValue};

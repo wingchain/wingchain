@@ -14,7 +14,7 @@
 
 use std::fmt;
 
-use parity_codec::{Decode, Encode};
+use codec::{Decode, Encode};
 use smallvec::SmallVec;
 
 use hash_enum::HashEnum;

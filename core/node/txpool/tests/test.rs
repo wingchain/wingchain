@@ -15,7 +15,7 @@
 use std::error::Error;
 use std::sync::Arc;
 
-use parity_codec::Encode;
+use codec::Encode;
 use tokio::time::Duration;
 
 use crypto::hash::{Hash as HashT, HashImpl};
@@ -23,7 +23,6 @@ use node_txpool::support::TxPoolSupport;
 use node_txpool::{Config, PoolTransaction, TxPool};
 use primitives::errors::{CommonError, CommonErrorKind, CommonResult, Display};
 use primitives::{Call, DispatchId, Hash, Params, Transaction};
-use tokio::runtime::Runtime;
 
 #[derive(Clone)]
 struct TestTxPoolSupport {
