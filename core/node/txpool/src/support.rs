@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use parity_codec::Encode;
 use primitives::errors::CommonResult;
 use primitives::{Hash, Transaction};
 
 pub trait TxPoolSupport {
-	fn get_tx_hash(&self, tx: &Transaction) -> Hash;
+	fn hash<E: Encode>(&self, data: &E) -> Hash;
 	fn validate_tx(&self, tx: &Transaction) -> CommonResult<()>;
 }

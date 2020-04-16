@@ -76,9 +76,13 @@ where
 		&self.queue
 	}
 
+	pub fn get_map(&self) -> &CHashMap<Hash, Arc<PoolTransaction>> {
+		&self.map
+	}
+
 	pub async fn insert(&self, tx: Transaction) -> CommonResult<()> {
 		self.check_capacity()?;
-		let tx_hash = self.support.get_tx_hash(&tx);
+		let tx_hash = self.support.hash(&tx);
 		self.check_exist(&tx_hash)?;
 
 		self.support.validate_tx(&tx)?;

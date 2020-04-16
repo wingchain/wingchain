@@ -12,16 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::error::Error;
 use std::sync::Arc;
+
+use parity_codec::Encode;
+use tokio::time::Duration;
 
 use crypto::hash::{Hash as HashT, HashImpl};
 use node_txpool::support::TxPoolSupport;
 use node_txpool::{Config, PoolTransaction, TxPool};
-use parity_codec::Encode;
 use primitives::errors::{CommonError, CommonErrorKind, CommonResult, Display};
 use primitives::{Call, DispatchId, Hash, Params, Transaction};
-use std::error::Error;
-use tokio::time::Duration;
+use tokio::runtime::Runtime;
 
 #[derive(Clone)]
 struct TestTxPoolSupport {
@@ -43,9 +45,9 @@ impl From<ErrorKind> for CommonError {
 }
 
 impl TxPoolSupport for TestTxPoolSupport {
-	fn get_tx_hash(&self, tx: &Transaction) -> Hash {
+	fn hash<E: Encode>(&self, data: &E) -> Hash {
 		let mut out = vec![0u8; self.hash.length().into()];
-		self.hash.hash(&mut out, &tx.encode());
+		self.hash.hash(&mut out, &data.encode());
 		Hash(out)
 	}
 	fn validate_tx(&self, tx: &Transaction) -> CommonResult<()> {
@@ -76,19 +78,19 @@ async fn test_txpool() {
 
 	let expected_queue = vec![Arc::new(PoolTransaction {
 		tx: Arc::new(tx.clone()),
-		tx_hash: support.get_tx_hash(&tx.clone()),
+		tx_hash: support.hash(&tx.clone()),
 	})];
 
 	txpool.insert(tx).await.unwrap();
 
 	loop {
-		let queue = txpool.get_queue().read();
-		if queue.len() > 0 {
-			assert_eq!(*queue, expected_queue);
-			break;
+		{
+			let queue = txpool.get_queue().read();
+			if queue.len() > 0 {
+				assert_eq!(*queue, expected_queue);
+				break;
+			}
 		}
-		// must drop to release queue read lock
-		drop(queue);
 		tokio::time::delay_for(Duration::from_millis(10)).await;
 	}
 }
