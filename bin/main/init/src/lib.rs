@@ -19,7 +19,7 @@ use chrono::TimeZone;
 use log::info;
 use rand::{thread_rng, Rng};
 
-use base::{get_default_home, spec::Spec, SPEC_FILE};
+use base::{config::Config, get_default_home, spec::Spec, CONFIG_FILE, SPEC_FILE};
 use primitives::errors::CommonResult;
 
 use crate::cli::InitOpt;
@@ -40,7 +40,7 @@ pub fn run(opt: InitOpt) -> CommonResult<()> {
 	init_config(&home)?;
 	init_data(&home)?;
 
-	info!("Inited: home dir: {:?}", home);
+	info!("Inited: home path: {:?}", home);
 
 	Ok(())
 }
@@ -51,6 +51,7 @@ fn init_config(home: &PathBuf) -> CommonResult<()> {
 	fs::create_dir_all(&config_path).map_err(|e| errors::ErrorKind::IO(e))?;
 
 	init_spec_file(&config_path)?;
+	init_config_file(&config_path)?;
 
 	Ok(())
 }
@@ -66,6 +67,19 @@ fn init_spec_file(config_path: &PathBuf) -> CommonResult<()> {
 
 	// test
 	toml::from_str::<Spec>(&template).map_err(|e| errors::ErrorKind::TomlDe(e))?;
+
+	Ok(())
+}
+
+fn init_config_file(config_path: &PathBuf) -> CommonResult<()> {
+	let template = &include_bytes!("./res/config.toml")[..];
+
+	let template = String::from_utf8_lossy(template).to_string();
+
+	fs::write(config_path.join(CONFIG_FILE), &template).map_err(|e| errors::ErrorKind::IO(e))?;
+
+	// test
+	toml::from_str::<Config>(&template).map_err(|e| errors::ErrorKind::TomlDe(e))?;
 
 	Ok(())
 }

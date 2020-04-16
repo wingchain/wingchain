@@ -21,6 +21,7 @@ use structopt::StructOpt;
 
 use primitives::errors::CommonResult;
 
+pub mod config;
 pub mod errors;
 pub mod spec;
 
@@ -30,6 +31,7 @@ pub const CONFIG: &str = "config";
 pub const DATA: &str = "data";
 pub const DB: &str = "db";
 pub const SPEC_FILE: &str = "spec.toml";
+pub const CONFIG_FILE: &str = "config.toml";
 
 #[derive(Debug, StructOpt, Clone)]
 pub struct SharedParams {

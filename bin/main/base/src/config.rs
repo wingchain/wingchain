@@ -12,33 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::path::PathBuf;
+use serde::Deserialize;
 
-use primitives::errors::CommonResult;
-use service::ServiceConfig;
-
-use crate::cli::NodeOpt;
-
-pub mod cli;
-pub mod errors;
-
-pub fn run(opt: NodeOpt) -> CommonResult<()> {
-	let home = match opt.shared_params.home {
-		Some(home) => home,
-		None => base::get_default_home()?,
-	};
-
-	if !home_inited(&home) {
-		return Err(errors::ErrorKind::NotInited(home).into());
-	}
-
-	let config = ServiceConfig { home };
-
-	service::start(config)?;
-
-	Ok(())
+#[derive(Deserialize, Debug)]
+pub struct Config {
+	pub txpool: TxPoolConfig,
 }
 
-fn home_inited(home: &PathBuf) -> bool {
-	home.exists()
+#[derive(Deserialize, Debug)]
+pub struct TxPoolConfig {
+	pub pool_capacity: usize,
+	pub buffer_capacity: usize,
 }

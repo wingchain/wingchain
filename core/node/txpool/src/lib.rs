@@ -15,8 +15,8 @@
 use std::sync::Arc;
 
 use chashmap::CHashMap;
+use log::info;
 use parking_lot::RwLock;
-use tokio::stream::StreamExt;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 use primitives::errors::CommonResult;
@@ -27,7 +27,7 @@ use crate::support::TxPoolSupport;
 pub mod errors;
 pub mod support;
 
-pub struct Config {
+pub struct TxPoolConfig {
 	pub pool_capacity: usize,
 	pub buffer_capacity: usize,
 }
@@ -42,8 +42,8 @@ pub struct TxPool<S>
 where
 	S: TxPoolSupport,
 {
-	config: Config,
-	support: S,
+	config: TxPoolConfig,
+	support: Arc<S>,
 	map: CHashMap<Hash, Arc<PoolTransaction>>,
 	queue: Arc<RwLock<Vec<Arc<PoolTransaction>>>>,
 	buffer_tx: Sender<Arc<PoolTransaction>>,
@@ -53,7 +53,7 @@ impl<S> TxPool<S>
 where
 	S: TxPoolSupport,
 {
-	pub fn new(config: Config, support: S) -> CommonResult<Self> {
+	pub fn new(config: TxPoolConfig, support: Arc<S>) -> CommonResult<Self> {
 		let map = CHashMap::with_capacity(config.pool_capacity);
 		let queue = Arc::new(RwLock::new(Vec::with_capacity(config.pool_capacity)));
 
@@ -68,6 +68,8 @@ where
 		};
 
 		tokio::spawn(process_buffer(buffer_rx, queue));
+
+		info!("Initializing txpool");
 
 		Ok(tx_pool)
 	}
@@ -129,9 +131,9 @@ async fn process_buffer(
 	buffer_rx: Receiver<Arc<PoolTransaction>>,
 	queue: Arc<RwLock<Vec<Arc<PoolTransaction>>>>,
 ) {
-	let mut buffer_rx = buffer_rx.fuse();
+	let mut buffer_rx = buffer_rx;
 	loop {
-		let tx = buffer_rx.next().await;
+		let tx = buffer_rx.recv().await;
 		if let Some(tx) = tx {
 			queue.write().push(tx);
 		}

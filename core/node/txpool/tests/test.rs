@@ -20,7 +20,7 @@ use tokio::time::Duration;
 
 use crypto::hash::{Hash as HashT, HashImpl};
 use node_txpool::support::TxPoolSupport;
-use node_txpool::{Config, PoolTransaction, TxPool};
+use node_txpool::{PoolTransaction, TxPool, TxPoolConfig};
 use primitives::errors::{CommonError, CommonErrorKind, CommonResult, Display};
 use primitives::{Call, DispatchId, Hash, Params, Transaction};
 
@@ -59,8 +59,8 @@ impl TxPoolSupport for TestTxPoolSupport {
 
 #[tokio::test]
 async fn test_txpool() {
-	let support = get_support();
-	let config = Config {
+	let support = Arc::new(get_support());
+	let config = TxPoolConfig {
 		pool_capacity: 1024,
 		buffer_capacity: 256,
 	};
@@ -96,8 +96,8 @@ async fn test_txpool() {
 
 #[tokio::test]
 async fn test_txpool_dup() {
-	let support = get_support();
-	let config = Config {
+	let support = Arc::new(get_support());
+	let config = TxPoolConfig {
 		pool_capacity: 1024,
 		buffer_capacity: 256,
 	};
@@ -120,8 +120,8 @@ async fn test_txpool_dup() {
 
 #[tokio::test]
 async fn test_txpool_validate() {
-	let support = get_support();
-	let config = Config {
+	let support = Arc::new(get_support());
+	let config = TxPoolConfig {
 		pool_capacity: 1024,
 		buffer_capacity: 256,
 	};
@@ -142,8 +142,8 @@ async fn test_txpool_validate() {
 
 #[tokio::test]
 async fn test_txpool_capacity() {
-	let support = get_support();
-	let config = Config {
+	let support = Arc::new(get_support());
+	let config = TxPoolConfig {
 		pool_capacity: 2,
 		buffer_capacity: 256,
 	};

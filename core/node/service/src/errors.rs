@@ -13,11 +13,18 @@
 // limitations under the License.
 
 use std::error::Error;
+use std::io;
 
 use primitives::errors::{CommonError, CommonErrorKind, Display};
 
 #[derive(Debug, Display)]
-pub enum ErrorKind {}
+pub enum ErrorKind {
+	#[display(fmt = "Config error: {:?}", _0)]
+	Config(String),
+
+	#[display(fmt = "Runtime error: {:?}", _0)]
+	Runtime(io::Error),
+}
 
 impl Error for ErrorKind {}
 

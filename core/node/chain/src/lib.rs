@@ -35,13 +35,13 @@ use primitives::{Block, BlockNumber, Body, DBKey, Executed, Hash, Header, Transa
 
 pub mod errors;
 
-pub struct Config {
+pub struct ChainConfig {
 	pub home: PathBuf,
 }
 
 pub struct Chain {
 	db: Arc<DB>,
-	config: Config,
+	config: ChainConfig,
 	meta_statedb: Arc<StateDB>,
 	payload_statedb: Arc<StateDB>,
 	trie_root: Arc<TrieRoot>,
@@ -58,7 +58,7 @@ pub struct Basic {
 }
 
 impl Chain {
-	pub fn new(config: Config) -> CommonResult<Self> {
+	pub fn new(config: ChainConfig) -> CommonResult<Self> {
 		let (genesis_inited, db, spec) = Self::get_spec(&config)?;
 
 		let db = Arc::new(db);
@@ -131,7 +131,7 @@ impl Chain {
 		Ok(best_number)
 	}
 
-	fn get_spec(config: &Config) -> CommonResult<(bool, DB, Spec)> {
+	fn get_spec(config: &ChainConfig) -> CommonResult<(bool, DB, Spec)> {
 		let db_path = config.home.join(main_base::DATA).join(main_base::DB);
 		let db = DB::open(&db_path)?;
 		let genesis_inited = db
