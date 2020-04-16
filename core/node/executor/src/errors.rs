@@ -25,6 +25,9 @@ pub enum ErrorKind {
 
 	#[display(fmt = "Invalid txs: {:?}", _0)]
 	InvalidTxs(String),
+
+	#[display(fmt = "Invalid tx call")]
+	InvalidTxCall,
 }
 
 impl Error for ErrorKind {}

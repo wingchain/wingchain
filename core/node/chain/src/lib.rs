@@ -31,7 +31,7 @@ use node_db::{DBTransaction, DB};
 use node_executor::{module, Context, Executor, ModuleEnum};
 use node_statedb::{StateDB, TrieRoot};
 use primitives::errors::CommonResult;
-use primitives::{Block, BlockNumber, Body, DBKey, Executed, Hash, Header};
+use primitives::{Block, BlockNumber, Body, DBKey, Executed, Hash, Header, Transaction};
 
 pub mod errors;
 
@@ -99,6 +99,36 @@ impl Chain {
 		}
 
 		Ok(chain)
+	}
+
+	#[allow(dead_code)]
+	pub fn hash<D: Encode>(&self, data: &D) -> Hash {
+		self.hash_slice(&data.encode())
+	}
+
+	pub fn hash_slice(&self, data: &[u8]) -> Hash {
+		let mut out = vec![0u8; self.basic.hash.length().into()];
+		self.basic.hash.hash(&mut out, data);
+		Hash(out)
+	}
+
+	pub fn validate_tx(&self, tx: &Transaction) -> CommonResult<()> {
+		self.executor.validate_tx(tx)
+	}
+
+	#[allow(dead_code)]
+	pub fn get_best_number(&self) -> CommonResult<Option<BlockNumber>> {
+		let best_number = self
+			.db
+			.get(node_db::columns::GLOBAL, node_db::global_key::BEST_NUMBER)?;
+
+		let best_number = match best_number {
+			Some(best_number) => {
+				Decode::decode(&mut &best_number[..]).map_err(|e| errors::ErrorKind::Codec(e))?
+			}
+			None => None,
+		};
+		Ok(best_number)
 	}
 
 	fn get_spec(config: &Config) -> CommonResult<(bool, DB, Spec)> {
@@ -317,31 +347,5 @@ impl Chain {
 		info!("Genesis block inited: block hash: {:?}", block_hash);
 
 		Ok(())
-	}
-
-	#[allow(dead_code)]
-	fn hash<D: Encode>(&self, data: &D) -> Hash {
-		self.hash_slice(&data.encode())
-	}
-
-	fn hash_slice(&self, data: &[u8]) -> Hash {
-		let mut out = vec![0u8; self.basic.hash.length().into()];
-		self.basic.hash.hash(&mut out, data);
-		Hash(out)
-	}
-
-	#[allow(dead_code)]
-	fn get_best_number(&self) -> CommonResult<Option<BlockNumber>> {
-		let best_number = self
-			.db
-			.get(node_db::columns::GLOBAL, node_db::global_key::BEST_NUMBER)?;
-
-		let best_number = match best_number {
-			Some(best_number) => {
-				Decode::decode(&mut &best_number[..]).map_err(|e| errors::ErrorKind::Codec(e))?
-			}
-			None => None,
-		};
-		Ok(best_number)
 	}
 }

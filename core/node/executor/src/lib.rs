@@ -24,7 +24,9 @@ use node_db::DBTransaction;
 use node_executor_primitives::{Context as ContextT, Module as ModuleT};
 use node_statedb::{StateDB, StateDBGetter, StateDBStmt, TrieRoot};
 use primitives::errors::CommonResult;
-use primitives::{BlockNumber, Call, DBKey, DBValue, FromDispatchId, Hash, Params, Transaction};
+use primitives::{
+	BlockNumber, Call, DBKey, DBValue, DispatchId, FromDispatchId, Hash, Params, Transaction,
+};
 
 pub mod errors;
 
@@ -208,21 +210,27 @@ impl Executor {
 		}
 	}
 
+	pub fn validate_tx(&self, tx: &Transaction) -> CommonResult<()> {
+		// TODO validate witness
+
+		let module_enum = get_module_enum(&tx.call.module_id)?;
+		let valid = match module_enum {
+			ModuleEnum::System => module_validate_call::<module::system::Module<Context>>(&tx),
+		};
+		if !valid {
+			return Err(errors::ErrorKind::InvalidTxCall.into());
+		}
+		Ok(())
+	}
+
 	pub fn execute_txs(&self, context: &Context, txs: Vec<Arc<Transaction>>) -> CommonResult<()> {
 		let mut txs_is_meta: Option<bool> = None;
 		for tx in &txs {
-			let module_id = &tx.call.module_id;
-			let module_enum = ModuleEnum::from_dispatch_id(module_id).ok_or(
-				errors::ErrorKind::InvalidDispatchId(tx.call.module_id.clone()),
-			)?;
+			let module_enum = get_module_enum(&tx.call.module_id)?;
 			let call = &tx.call;
 			let (_result, is_meta) = match module_enum {
 				ModuleEnum::System => {
-					let is_meta =
-						<module::system::Module<Context> as ModuleT<Context>>::META_MODULE;
-					let module = module::system::Module::new(context.clone());
-					let result = module.execute_call(call);
-					(result, is_meta)
+					module_execute_call::<module::system::Module<Context>>(context, call)
 				}
 			};
 			match txs_is_meta {
@@ -256,6 +264,27 @@ impl Executor {
 
 		Ok(())
 	}
+}
+
+fn get_module_enum(module_id: &DispatchId) -> CommonResult<ModuleEnum> {
+	let module_enum = ModuleEnum::from_dispatch_id(module_id)
+		.ok_or(errors::ErrorKind::InvalidDispatchId(module_id.clone()))?;
+	Ok(module_enum)
+}
+
+fn module_execute_call<M: ModuleT<Context>>(
+	context: &Context,
+	call: &Call,
+) -> (CommonResult<()>, bool) {
+	let is_meta = M::META_MODULE;
+	let module = M::new(context.clone());
+	let result = module.execute_call(call);
+	(result, is_meta)
+}
+
+fn module_validate_call<M: ModuleT<Context>>(tx: &Transaction) -> bool {
+	let call = &tx.call;
+	M::validate_call(call)
 }
 
 #[derive(HashEnum, Clone)]

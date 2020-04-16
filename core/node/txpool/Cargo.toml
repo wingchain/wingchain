@@ -13,6 +13,7 @@ parking_lot = "0.10"
 codec = { package = "parity-scale-codec", version = "1.3", features = ["derive"] }
 
 primitives = { path = "../../primitives" }
+node-chain = { path = "../chain" }
 
 [dev-dependencies]
 crypto = { path = "../../crypto" }
