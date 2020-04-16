@@ -139,6 +139,42 @@ async fn test_txpool_validate() {
 	assert!(format!("{:?}", result).contains("error: InvalidDispatchId"));
 }
 
+#[tokio::test]
+async fn test_txpool_capacity() {
+	let support = get_support();
+	let config = Config {
+		pool_capacity: 2,
+		buffer_capacity: 256,
+	};
+	let txpool = TxPool::new(config, support.clone()).unwrap();
+
+	let tx = Transaction {
+		witness: None,
+		call: Call {
+			module_id: DispatchId([1u8, 0, 0, 0]),
+			method_id: DispatchId([1u8, 0, 0, 0]),
+			params: Params(vec![1u8; 32]),
+		},
+	};
+
+	let tx2 = {
+		let mut tx = tx.clone();
+		tx.call.module_id = DispatchId([1u8, 1, 0, 0]);
+		tx
+	};
+
+	let tx3 = {
+		let mut tx = tx.clone();
+		tx.call.module_id = DispatchId([1u8, 2, 0, 0]);
+		tx
+	};
+
+	txpool.insert(tx).await.unwrap();
+	txpool.insert(tx2).await.unwrap();
+	let result = txpool.insert(tx3).await;
+	assert!(format!("{:?}", result).contains("error: ExceedCapacity"));
+}
+
 fn get_support() -> TestTxPoolSupport {
 	let hash = Arc::new(HashImpl::Blake2b256);
 	let support = TestTxPoolSupport { hash };
