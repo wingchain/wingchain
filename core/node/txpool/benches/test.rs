@@ -19,17 +19,16 @@ extern crate test;
 use std::sync::Arc;
 use test::{black_box, Bencher};
 
-use codec::Encode;
 use futures::future::join_all;
 use rand::random;
+use serde::Serialize;
 use tokio::runtime::Runtime;
-use tokio::time::Duration;
 
 use crypto::hash::{Hash as HashT, HashImpl};
 use node_txpool::support::TxPoolSupport;
-use node_txpool::{Config, TxPool};
+use node_txpool::{TxPool, TxPoolConfig};
 use primitives::errors::CommonResult;
-use primitives::{Call, DispatchId, Hash, Params, Transaction};
+use primitives::{codec, Call, DispatchId, Hash, Params, Transaction};
 
 const TXS_SIZE: usize = 10000;
 
@@ -51,12 +50,10 @@ fn bench_txpool_insert_512(b: &mut Bencher) {
 fn bench_txpool_insert_with_params_size(b: &mut Bencher, params_size: usize) {
 	let txs = gen_txs(TXS_SIZE, params_size);
 
-	let run = move || {};
-
 	b.iter(|| {
 		black_box({
-			let support = get_support();
-			let config = Config {
+			let support = Arc::new(get_support());
+			let config = TxPoolConfig {
 				pool_capacity: 10240,
 				buffer_capacity: 10240,
 			};
@@ -80,12 +77,13 @@ struct TestTxPoolSupport {
 }
 
 impl TxPoolSupport for TestTxPoolSupport {
-	fn hash<E: Encode>(&self, data: &E) -> Hash {
+	fn hash<E: Serialize>(&self, data: &E) -> Hash {
 		let mut out = vec![0u8; self.hash.length().into()];
-		self.hash.hash(&mut out, &data.encode());
+		self.hash
+			.hash(&mut out, &codec::encode(&data).expect("qed"));
 		Hash(out)
 	}
-	fn validate_tx(&self, tx: &Transaction) -> CommonResult<()> {
+	fn validate_tx(&self, _tx: &Transaction) -> CommonResult<()> {
 		Ok(())
 	}
 }

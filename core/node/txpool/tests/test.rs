@@ -15,14 +15,14 @@
 use std::error::Error;
 use std::sync::Arc;
 
-use codec::Encode;
+use serde::Serialize;
 use tokio::time::Duration;
 
 use crypto::hash::{Hash as HashT, HashImpl};
 use node_txpool::support::TxPoolSupport;
 use node_txpool::{PoolTransaction, TxPool, TxPoolConfig};
 use primitives::errors::{CommonError, CommonErrorKind, CommonResult, Display};
-use primitives::{Call, DispatchId, Hash, Params, Transaction};
+use primitives::{codec, Call, DispatchId, Hash, Params, Transaction};
 
 #[derive(Clone)]
 struct TestTxPoolSupport {
@@ -44,9 +44,9 @@ impl From<ErrorKind> for CommonError {
 }
 
 impl TxPoolSupport for TestTxPoolSupport {
-	fn hash<E: Encode>(&self, data: &E) -> Hash {
+	fn hash<E: Serialize>(&self, data: &E) -> Hash {
 		let mut out = vec![0u8; self.hash.length().into()];
-		self.hash.hash(&mut out, &data.encode());
+		self.hash.hash(&mut out, &codec::encode(data).expect("qed"));
 		Hash(out)
 	}
 	fn validate_tx(&self, tx: &Transaction) -> CommonResult<()> {

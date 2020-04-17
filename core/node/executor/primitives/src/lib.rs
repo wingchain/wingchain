@@ -14,18 +14,19 @@
 
 use std::marker::PhantomData;
 
-use codec::{Decode, Encode};
+use serde::de::DeserializeOwned;
+use serde::Serialize;
 
 use primitives::errors::{CommonError, CommonResult};
-use primitives::{Call, DBValue};
+use primitives::{codec, Call, DBValue};
 
 pub mod errors;
 
 const SEPARATOR: &[u8] = b"_";
 
 pub trait Module<C>
-	where
-		C: Context,
+where
+	C: Context,
 {
 	const META_MODULE: bool = false;
 	const STORAGE_KEY: &'static [u8];
@@ -50,9 +51,9 @@ pub trait Context: Clone {
 }
 
 pub struct StorageValue<T, C>
-	where
-		T: Encode + Decode,
-		C: Context,
+where
+	T: Serialize + DeserializeOwned,
+	C: Context,
 {
 	context: C,
 	meta_module: bool,
@@ -61,9 +62,9 @@ pub struct StorageValue<T, C>
 }
 
 impl<T, C> StorageValue<T, C>
-	where
-		T: Encode + Decode,
-		C: Context,
+where
+	T: Serialize + DeserializeOwned,
+	C: Context,
 {
 	pub fn new<M: Module<C>>(context: C, storage_key: &'static [u8]) -> Self {
 		let key = [M::STORAGE_KEY, SEPARATOR, storage_key].concat();
@@ -90,10 +91,10 @@ impl<T, C> StorageValue<T, C>
 }
 
 pub struct StorageMap<K, V, C>
-	where
-		K: Encode + Decode,
-		V: Encode + Decode,
-		C: Context,
+where
+	K: Serialize + DeserializeOwned,
+	V: Serialize + DeserializeOwned,
+	C: Context,
 {
 	context: C,
 	meta_module: bool,
@@ -102,10 +103,10 @@ pub struct StorageMap<K, V, C>
 }
 
 impl<K, V, C> StorageMap<K, V, C>
-	where
-		K: Encode + Decode,
-		V: Encode + Decode,
-		C: Context,
+where
+	K: Serialize + DeserializeOwned,
+	V: Serialize + DeserializeOwned,
+	C: Context,
 {
 	pub fn new(
 		context: C,
@@ -123,22 +124,25 @@ impl<K, V, C> StorageMap<K, V, C>
 	}
 
 	pub fn get(&self, key: K) -> CommonResult<Option<V>> {
-		let key = &[&self.key, SEPARATOR, &key.encode()].concat();
+		let key = codec::encode(&key)?;
+		let key = &[&self.key, SEPARATOR, &key].concat();
 		context_get(&self.context, self.meta_module, key)
 	}
 
 	pub fn set(&self, key: K, value: &V) -> CommonResult<()> {
-		let key = &[&self.key, SEPARATOR, &key.encode()].concat();
+		let key = codec::encode(&key)?;
+		let key = &[&self.key, SEPARATOR, &key].concat();
 		context_set(&self.context, self.meta_module, key, value)
 	}
 
 	pub fn delete(&self, key: K) -> CommonResult<()> {
-		let key = &[&self.key, SEPARATOR, &key.encode()].concat();
+		let key = codec::encode(&key)?;
+		let key = &[&self.key, SEPARATOR, &key].concat();
 		context_delete(&self.context, self.meta_module, key)
 	}
 }
 
-fn context_get<C: Context, V: Decode>(
+fn context_get<C: Context, V: DeserializeOwned>(
 	context: &C,
 	meta_module: bool,
 	key: &[u8],
@@ -150,8 +154,7 @@ fn context_get<C: Context, V: Decode>(
 	match value {
 		Ok(value) => match value {
 			Some(value) => {
-				let value = Decode::decode(&mut &value[..])
-					.map_err(|e| errors::ErrorKind::CodecError(e))?;
+				let value = codec::decode(&value[..])?;
 				Ok(Some(value))
 			}
 			None => Ok(None),
@@ -160,13 +163,14 @@ fn context_get<C: Context, V: Decode>(
 	}
 }
 
-fn context_set<C: Context, V: Encode>(
+fn context_set<C: Context, V: Serialize>(
 	context: &C,
 	meta_module: bool,
 	key: &[u8],
 	value: &V,
 ) -> CommonResult<()> {
-	let value = Some(value.encode());
+	let value = codec::encode(value)?;
+	let value = Some(value);
 	match meta_module {
 		true => context.meta_set(&key, value),
 		false => context.payload_set(&key, value),

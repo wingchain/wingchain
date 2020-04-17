@@ -17,16 +17,15 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use codec::Encode;
-
 use hash_enum::HashEnum;
 use node_db::DBTransaction;
 use node_executor_primitives::{Context as ContextT, Module as ModuleT};
 use node_statedb::{StateDB, StateDBGetter, StateDBStmt, TrieRoot};
-use primitives::errors::CommonResult;
+use primitives::{codec, errors::CommonResult};
 use primitives::{
 	BlockNumber, Call, DBKey, DBValue, DispatchId, FromDispatchId, Hash, Params, Transaction,
 };
+use serde::Serialize;
 
 pub mod errors;
 
@@ -99,7 +98,10 @@ impl Context {
 	pub fn get_meta_txs(&self) -> CommonResult<(Hash, Vec<Arc<Transaction>>)> {
 		let txs = self.inner.meta_txs.borrow().clone();
 
-		let input = txs.iter().map(|x| Encode::encode(&x));
+		let input = txs
+			.iter()
+			.map(|x| codec::encode(&**x))
+			.collect::<Result<Vec<Vec<u8>>, _>>()?;
 		let txs_root = self.inner.trie_root.calc_ordered_trie_root(input);
 
 		Ok((Hash(txs_root), txs))
@@ -117,7 +119,10 @@ impl Context {
 	pub fn get_payload_txs(&self) -> CommonResult<(Hash, Vec<Arc<Transaction>>)> {
 		let txs = self.inner.payload_txs.borrow().clone();
 
-		let input = txs.iter().map(|x| Encode::encode(&x));
+		let input = txs
+			.iter()
+			.map(|x| codec::encode(&**x))
+			.collect::<Result<Vec<Vec<u8>>, _>>()?;
 		let txs_root = self.inner.trie_root.calc_ordered_trie_root(input);
 
 		Ok((Hash(txs_root), txs))
@@ -185,29 +190,32 @@ impl Executor {
 		Self
 	}
 
-	pub fn build_tx<M: HashEnum, P: Encode>(
+	pub fn build_tx<M: HashEnum, P: Serialize>(
 		&self,
 		module: ModuleEnum,
 		method: M,
 		params: P,
-	) -> Option<Transaction> {
+	) -> CommonResult<Transaction> {
+		let params = Params(codec::encode(&params)?);
+
 		let call = Call {
 			module_id: module.clone().into(),
 			method_id: method.into(),
-			params: Params(params.encode()),
+			params,
 		};
 
 		let valid = match module {
 			ModuleEnum::System => module::system::Module::<Context>::is_valid_call(&call),
 		};
 
-		match valid {
-			true => Some(Transaction {
-				witness: None,
-				call,
-			}),
-			false => None,
+		if !valid {
+			return Err(errors::ErrorKind::InvalidTxCall.into());
 		}
+
+		Ok(Transaction {
+			witness: None,
+			call,
+		})
 	}
 
 	pub fn validate_tx(&self, tx: &Transaction) -> CommonResult<()> {
@@ -242,7 +250,7 @@ impl Executor {
 						return Err(errors::ErrorKind::InvalidTxs(
 							"mixed meta and payload in one txs batch".to_string(),
 						)
-							.into());
+						.into());
 					}
 				}
 			}
@@ -252,7 +260,7 @@ impl Executor {
 			return Err(errors::ErrorKind::InvalidTxs(
 				"meta after payload not allowed".to_string(),
 			)
-				.into());
+			.into());
 		}
 
 		let mut txs = txs;

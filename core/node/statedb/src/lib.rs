@@ -17,7 +17,6 @@
 use std::iter::IntoIterator;
 use std::sync::Arc;
 
-use codec::Encode;
 use hash_db::{AsHashDB, HashDB, Hasher, Prefix};
 use log::warn;
 use memory_db::{KeyFunction, PrefixedKey};
@@ -27,6 +26,7 @@ use trie_db::{Trie, TrieMut};
 use crypto::hash::{Hash as HashT, HashImpl};
 use crypto::HashLength;
 use node_db::{DBTransaction, DB};
+use primitives::codec;
 use primitives::errors::CommonResult;
 use primitives::{DBKey, DBValue};
 pub use trie::{
@@ -453,7 +453,12 @@ impl TrieRoot {
 		let input = input
 			.into_iter()
 			.enumerate()
-			.map(|(k, v)| (Encode::encode(&(k as u32)), v))
+			.map(|(k, v)| {
+				(
+					codec::encode(&(k as u32)).expect("u32 can be serialized"),
+					v,
+				)
+			})
 			.collect::<Vec<_>>();
 
 		self.calc_trie_root(input)

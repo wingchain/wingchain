@@ -12,25 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::error::Error;
-use std::fmt::Debug;
+use crate::errors::{CommonError, CommonErrorKind, CommonResult};
+use serde::de::DeserializeOwned;
+use serde::Serialize;
 
-use primitives::errors::{CommonError, CommonErrorKind, Display};
-use primitives::DispatchId;
-
-#[derive(Debug, Display)]
-pub enum ErrorKind {
-	#[display(fmt = "Invalid dispatch id: {:?}", _0)]
-	InvalidDispatchId(DispatchId),
-
-	#[display(fmt = "Invalid params")]
-	InvalidParams,
+pub fn encode<S: Serialize>(value: &S) -> CommonResult<Vec<u8>> {
+	bincode::serialize(value).map_err(|e| CommonError::new(CommonErrorKind::Codec, Box::new(e)))
 }
 
-impl Error for ErrorKind {}
-
-impl From<ErrorKind> for CommonError {
-	fn from(error: ErrorKind) -> Self {
-		CommonError::new(CommonErrorKind::Executor, Box::new(error))
-	}
+pub fn decode<D: DeserializeOwned>(bytes: &[u8]) -> CommonResult<D> {
+	bincode::deserialize(bytes).map_err(|e| CommonError::new(CommonErrorKind::Codec, Box::new(e)))
 }

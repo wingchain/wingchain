@@ -25,6 +25,7 @@ pub enum CommonErrorKind {
 	Executor,
 	TxPool,
 	Chain,
+	Codec,
 }
 
 #[derive(Debug, Constructor, Display)]

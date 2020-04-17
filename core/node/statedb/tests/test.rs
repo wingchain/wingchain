@@ -16,7 +16,6 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use codec::Encode;
 use hash_db::Hasher;
 use mut_static::MutStatic;
 
@@ -25,7 +24,7 @@ use crypto::hash::HashImpl;
 use lazy_static::lazy_static;
 use node_db::DB;
 use node_statedb::{StateDB, TrieRoot};
-use primitives::DBKey;
+use primitives::{codec, DBKey};
 
 #[test]
 fn test_static_hash() {
@@ -248,7 +247,7 @@ fn test_calc_trie_root() {
 		input
 			.iter()
 			.enumerate()
-			.map(|(k, v)| (Encode::encode(&(k as u32)), v))
+			.map(|(k, v)| (codec::encode(&(k as u32)).unwrap(), v))
 			.collect::<Vec<_>>(),
 	);
 

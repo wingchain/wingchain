@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use codec::{Decode, Encode};
+use serde::{Deserialize, Serialize};
 
 use hash_enum::HashEnum;
 use node_executor_primitives::{errors, Context, Module as ModuleT, StorageValue};
 use primitives::errors::CommonResult;
-use primitives::{Call, FromDispatchId};
+use primitives::{codec, Call, FromDispatchId};
 
 #[derive(HashEnum, PartialEq)]
 pub enum MethodEnum {
@@ -25,16 +25,16 @@ pub enum MethodEnum {
 }
 
 pub struct Module<C>
-	where
-		C: Context,
+where
+	C: Context,
 {
 	chain_id: StorageValue<String, C>,
 	timestamp: StorageValue<u32, C>,
 }
 
 impl<C> ModuleT<C> for Module<C>
-	where
-		C: Context,
+where
+	C: Context,
 {
 	const META_MODULE: bool = true;
 	const STORAGE_KEY: &'static [u8] = b"system";
@@ -51,9 +51,9 @@ impl<C> ModuleT<C> for Module<C>
 			Some(call_enum) => call_enum,
 			None => return false,
 		};
-		let mut params = &call.params.0[..];
+		let params = &call.params.0[..];
 		match method_enum {
-			MethodEnum::Init => <InitParams as Decode>::decode(&mut params).is_ok(),
+			MethodEnum::Init => codec::decode::<InitParams>(&params).is_ok(),
 		}
 	}
 
@@ -71,16 +71,16 @@ impl<C> ModuleT<C> for Module<C>
 			Some(method_enum) => method_enum,
 			None => return Err(errors::ErrorKind::InvalidDispatchId(call.module_id.clone()).into()),
 		};
-		let mut params = &call.params.0[..];
+		let params = &call.params.0[..];
 		match method_enum {
 			MethodEnum::Init => {
-				self.init(&Decode::decode(&mut params).map_err(|_| errors::ErrorKind::InvalidParams)?)
+				self.init(&codec::decode(&params).map_err(|_| errors::ErrorKind::InvalidParams)?)
 			}
 		}
 	}
 }
 
-#[derive(Encode, Decode)]
+#[derive(Serialize, Deserialize)]
 pub struct InitParams {
 	pub chain_id: String,
 	pub timestamp: u32,

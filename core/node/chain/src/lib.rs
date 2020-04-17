@@ -18,8 +18,8 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use chrono::DateTime;
-use codec::{Decode, Encode};
 use log::info;
+use serde::Serialize;
 use toml::Value;
 
 use crypto::address::AddressImpl;
@@ -31,7 +31,7 @@ use node_db::{DBTransaction, DB};
 use node_executor::{module, Context, Executor, ModuleEnum};
 use node_statedb::{StateDB, TrieRoot};
 use primitives::errors::CommonResult;
-use primitives::{Block, BlockNumber, Body, DBKey, Executed, Hash, Header, Transaction};
+use primitives::{codec, Block, BlockNumber, Body, DBKey, Executed, Hash, Header, Transaction};
 
 pub mod errors;
 
@@ -102,8 +102,8 @@ impl Chain {
 	}
 
 	#[allow(dead_code)]
-	pub fn hash<D: Encode>(&self, data: &D) -> Hash {
-		self.hash_slice(&data.encode())
+	pub fn hash<D: Serialize>(&self, data: &D) -> Hash {
+		self.hash_slice(&codec::encode(data).expect("qed"))
 	}
 
 	pub fn hash_slice(&self, data: &[u8]) -> Hash {
@@ -123,9 +123,7 @@ impl Chain {
 			.get(node_db::columns::GLOBAL, node_db::global_key::BEST_NUMBER)?;
 
 		let best_number = match best_number {
-			Some(best_number) => {
-				Decode::decode(&mut &best_number[..]).map_err(|e| errors::ErrorKind::Codec(e))?
-			}
+			Some(best_number) => codec::decode(&mut &best_number[..])?,
 			None => None,
 		};
 		Ok(best_number)
@@ -141,8 +139,8 @@ impl Chain {
 			true => {
 				let spec = db.get(node_db::columns::GLOBAL, node_db::global_key::SPEC)?;
 				let spec = spec.ok_or(errors::ErrorKind::Spec("missing spec in db".to_string()))?;
-				let spec: String = Decode::decode(&mut &spec[..])
-					.map_err(|_| errors::ErrorKind::Spec("codec error".to_string()))?;
+				let spec: String = codec::decode(&mut &spec[..])
+					.map_err(|_| errors::ErrorKind::Spec("serde error".to_string()))?;
 				spec
 			}
 			false => {
@@ -282,8 +280,8 @@ impl Chain {
 		let mut transaction = DBTransaction::new();
 
 		// commit block
-		let header_encoded = Encode::encode(&block.header);
-		let block_hash = self.hash_slice(&header_encoded);
+		let header_serialized = codec::encode(&block.header).expect("qed");
+		let block_hash = self.hash_slice(&header_serialized);
 
 		// 1. meta state
 		transaction.extend(meta_transaction);
@@ -292,25 +290,25 @@ impl Chain {
 		transaction.put_owned(
 			node_db::columns::HEADER,
 			DBKey::from_slice(&block_hash.0),
-			header_encoded,
+			header_serialized,
 		);
 
 		// 3. body
 		transaction.put_owned(
 			node_db::columns::META_TXS,
 			DBKey::from_slice(&block_hash.0),
-			Encode::encode(&block.body.meta_txs),
+			codec::encode(&block.body.meta_txs).expect("qed"),
 		);
 		transaction.put_owned(
 			node_db::columns::PAYLOAD_TXS,
 			DBKey::from_slice(&block_hash.0),
-			Encode::encode(&block.body.payload_txs),
+			codec::encode(&block.body.payload_txs).expect("qed"),
 		);
 
 		// 4. block hash
 		transaction.put_owned(
 			node_db::columns::BLOCK_HASH,
-			DBKey::from_slice(&Encode::encode(&number)),
+			DBKey::from_slice(&codec::encode(&number).expect("qed")),
 			block_hash.0.clone(),
 		);
 
@@ -318,7 +316,7 @@ impl Chain {
 		transaction.put_owned(
 			node_db::columns::GLOBAL,
 			DBKey::from_slice(node_db::global_key::BEST_NUMBER),
-			Encode::encode(&number),
+			codec::encode(&number).expect("qed"),
 		);
 
 		// commit executed
@@ -332,14 +330,14 @@ impl Chain {
 		transaction.put_owned(
 			node_db::columns::EXECUTED,
 			DBKey::from_slice(&block_hash.0),
-			Encode::encode(&executed),
+			codec::encode(&executed).expect("qed"),
 		);
 
 		// commit spec
 		transaction.put_owned(
 			node_db::columns::GLOBAL,
 			DBKey::from_slice(node_db::global_key::SPEC),
-			Encode::encode(&spec_str),
+			codec::encode(&spec_str).expect("qed"),
 		);
 
 		self.db.write(transaction)?;

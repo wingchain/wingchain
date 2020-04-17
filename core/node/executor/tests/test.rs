@@ -16,14 +16,13 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use chrono::Local;
-use codec::{Decode, Encode};
 
 use crypto::hash::HashImpl;
 use module_system::InitParams;
 use node_db::DB;
 use node_executor::{module, Context, Executor, ModuleEnum};
 use node_statedb::{StateDB, TrieRoot};
-use primitives::{DBKey, Hash, Transaction};
+use primitives::{codec, DBKey, Hash, Transaction};
 
 #[test]
 fn test_executor() {
@@ -159,22 +158,22 @@ fn test_executor() {
 
 fn expected_txs_root(txs: Vec<Arc<Transaction>>) -> Hash {
 	let trie_root = TrieRoot::new(Arc::new(HashImpl::Blake2b160)).unwrap();
-	let txs = txs.into_iter().map(|x| Encode::encode(&x));
+	let txs = txs.into_iter().map(|x| codec::encode(&*x).unwrap());
 	Hash(trie_root.calc_ordered_trie_root(txs))
 }
 
 fn expected_state_root_0(txs: Vec<Arc<Transaction>>) -> Hash {
 	let tx = &txs[1]; // use the last tx
-	let params: InitParams = Decode::decode(&mut &tx.call.params.0[..]).unwrap();
+	let params: InitParams = codec::decode(&tx.call.params.0[..]).unwrap();
 
 	let data = vec![
 		(
 			DBKey::from_slice(b"system_chain_id"),
-			Some(params.chain_id.encode()),
+			Some(codec::encode(&params.chain_id).unwrap()),
 		),
 		(
 			DBKey::from_slice(b"system_timestamp"),
-			Some(params.timestamp.encode()),
+			Some(codec::encode(&params.timestamp).unwrap()),
 		),
 	]
 	.into_iter()
@@ -199,16 +198,16 @@ fn expected_state_root_0(txs: Vec<Arc<Transaction>>) -> Hash {
 
 fn expected_state_root_1(txs_0: Vec<Arc<Transaction>>, txs_1: Vec<Arc<Transaction>>) -> Hash {
 	let tx = &txs_0[1]; // use the last tx
-	let params: InitParams = Decode::decode(&mut &tx.call.params.0[..]).unwrap();
+	let params: InitParams = codec::decode(&tx.call.params.0[..]).unwrap();
 
 	let data = vec![
 		(
 			DBKey::from_slice(b"system_chain_id"),
-			Some(params.chain_id.encode()),
+			Some(codec::encode(&params.chain_id).unwrap()),
 		),
 		(
 			DBKey::from_slice(b"system_timestamp"),
-			Some(params.timestamp.encode()),
+			Some(codec::encode(&params.timestamp).unwrap()),
 		),
 	]
 	.into_iter()
@@ -232,16 +231,16 @@ fn expected_state_root_1(txs_0: Vec<Arc<Transaction>>, txs_1: Vec<Arc<Transactio
 	db.write(transcation).unwrap();
 
 	let tx = &txs_1[1]; // use the last tx
-	let params: InitParams = Decode::decode(&mut &tx.call.params.0[..]).unwrap();
+	let params: InitParams = codec::decode(&tx.call.params.0[..]).unwrap();
 
 	let data = vec![
 		(
 			DBKey::from_slice(b"system_chain_id"),
-			Some(params.chain_id.encode()),
+			Some(codec::encode(&params.chain_id).unwrap()),
 		),
 		(
 			DBKey::from_slice(b"system_timestamp"),
-			Some(params.timestamp.encode()),
+			Some(codec::encode(&params.timestamp).unwrap()),
 		),
 	]
 	.into_iter()

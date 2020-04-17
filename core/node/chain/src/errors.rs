@@ -20,9 +20,6 @@ use primitives::errors::{CommonError, CommonErrorKind, Display};
 pub enum ErrorKind {
 	#[display(fmt = "Spec error: {:?}", _0)]
 	Spec(String),
-
-	#[display(fmt = "Codec error: {:?}", _0)]
-	Codec(codec::Error),
 }
 
 impl Error for ErrorKind {}
