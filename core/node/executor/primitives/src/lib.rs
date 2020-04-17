@@ -24,16 +24,21 @@ pub mod errors;
 const SEPARATOR: &[u8] = b"_";
 
 pub trait Module<C>
-where
-	C: Context,
+	where
+		C: Context,
 {
 	const META_MODULE: bool = false;
 	const STORAGE_KEY: &'static [u8];
 
 	fn new(context: C) -> Self;
 
-	fn validate_call(call: &Call) -> bool;
+	/// check if the call has the right method_id and decodable params
+	fn is_valid_call(call: &Call) -> bool;
 
+	/// check if the call is a write call, a transaction should be built by a write call
+	fn is_write_call(call: &Call) -> Option<bool>;
+
+	/// execute the call
 	fn execute_call(&self, call: &Call) -> Result<(), CommonError>;
 }
 
@@ -45,9 +50,9 @@ pub trait Context: Clone {
 }
 
 pub struct StorageValue<T, C>
-where
-	T: Encode + Decode,
-	C: Context,
+	where
+		T: Encode + Decode,
+		C: Context,
 {
 	context: C,
 	meta_module: bool,
@@ -56,9 +61,9 @@ where
 }
 
 impl<T, C> StorageValue<T, C>
-where
-	T: Encode + Decode,
-	C: Context,
+	where
+		T: Encode + Decode,
+		C: Context,
 {
 	pub fn new<M: Module<C>>(context: C, storage_key: &'static [u8]) -> Self {
 		let key = [M::STORAGE_KEY, SEPARATOR, storage_key].concat();
@@ -85,10 +90,10 @@ where
 }
 
 pub struct StorageMap<K, V, C>
-where
-	K: Encode + Decode,
-	V: Encode + Decode,
-	C: Context,
+	where
+		K: Encode + Decode,
+		V: Encode + Decode,
+		C: Context,
 {
 	context: C,
 	meta_module: bool,
@@ -97,10 +102,10 @@ where
 }
 
 impl<K, V, C> StorageMap<K, V, C>
-where
-	K: Encode + Decode,
-	V: Encode + Decode,
-	C: Context,
+	where
+		K: Encode + Decode,
+		V: Encode + Decode,
+		C: Context,
 {
 	pub fn new(
 		context: C,

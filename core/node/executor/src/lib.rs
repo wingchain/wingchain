@@ -198,7 +198,7 @@ impl Executor {
 		};
 
 		let valid = match module {
-			ModuleEnum::System => module::system::Module::<Context>::validate_call(&call),
+			ModuleEnum::System => module::system::Module::<Context>::is_valid_call(&call),
 		};
 
 		match valid {
@@ -215,7 +215,7 @@ impl Executor {
 
 		let module_enum = get_module_enum(&tx.call.module_id)?;
 		let valid = match module_enum {
-			ModuleEnum::System => module_validate_call::<module::system::Module<Context>>(&tx),
+			ModuleEnum::System => validate_call_for_module::<module::system::Module<Context>>(&tx),
 		};
 		if !valid {
 			return Err(errors::ErrorKind::InvalidTxCall.into());
@@ -230,7 +230,7 @@ impl Executor {
 			let call = &tx.call;
 			let (_result, is_meta) = match module_enum {
 				ModuleEnum::System => {
-					module_execute_call::<module::system::Module<Context>>(context, call)
+					execute_call_for_module::<module::system::Module<Context>>(context, call)
 				}
 			};
 			match txs_is_meta {
@@ -242,7 +242,7 @@ impl Executor {
 						return Err(errors::ErrorKind::InvalidTxs(
 							"mixed meta and payload in one txs batch".to_string(),
 						)
-						.into());
+							.into());
 					}
 				}
 			}
@@ -252,7 +252,7 @@ impl Executor {
 			return Err(errors::ErrorKind::InvalidTxs(
 				"meta after payload not allowed".to_string(),
 			)
-			.into());
+				.into());
 		}
 
 		let mut txs = txs;
@@ -272,7 +272,7 @@ fn get_module_enum(module_id: &DispatchId) -> CommonResult<ModuleEnum> {
 	Ok(module_enum)
 }
 
-fn module_execute_call<M: ModuleT<Context>>(
+fn execute_call_for_module<M: ModuleT<Context>>(
 	context: &Context,
 	call: &Call,
 ) -> (CommonResult<()>, bool) {
@@ -282,9 +282,9 @@ fn module_execute_call<M: ModuleT<Context>>(
 	(result, is_meta)
 }
 
-fn module_validate_call<M: ModuleT<Context>>(tx: &Transaction) -> bool {
+fn validate_call_for_module<M: ModuleT<Context>>(tx: &Transaction) -> bool {
 	let call = &tx.call;
-	M::validate_call(call)
+	M::is_valid_call(call) && M::is_write_call(call) == Some(true)
 }
 
 #[derive(HashEnum, Clone)]
