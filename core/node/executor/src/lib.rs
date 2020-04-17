@@ -17,14 +17,11 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use hash_enum::HashEnum;
 use node_db::DBTransaction;
 use node_executor_primitives::{Context as ContextT, Module as ModuleT};
 use node_statedb::{StateDB, StateDBGetter, StateDBStmt, TrieRoot};
 use primitives::{codec, errors::CommonResult};
-use primitives::{
-	BlockNumber, Call, DBKey, DBValue, DispatchId, FromDispatchId, Hash, Params, Transaction,
-};
+use primitives::{BlockNumber, Call, DBKey, DBValue, Hash, Params, Transaction};
 use serde::Serialize;
 
 pub mod errors;
@@ -190,22 +187,23 @@ impl Executor {
 		Self
 	}
 
-	pub fn build_tx<M: HashEnum, P: Serialize>(
+	pub fn build_tx<P: Serialize>(
 		&self,
-		module: ModuleEnum,
-		method: M,
+		module: String,
+		method: String,
 		params: P,
 	) -> CommonResult<Transaction> {
 		let params = Params(codec::encode(&params)?);
 
 		let call = Call {
-			module_id: module.clone().into(),
-			method_id: method.into(),
+			module: module.clone(),
+			method: method,
 			params,
 		};
 
-		let valid = match module {
-			ModuleEnum::System => module::system::Module::<Context>::is_valid_call(&call),
+		let valid = match module.as_str() {
+			"system" => module::system::Module::<Context>::is_valid_call(&call),
+			other => return Err(errors::ErrorKind::InvalidModule(other.to_string()).into()),
 		};
 
 		if !valid {
@@ -221,9 +219,9 @@ impl Executor {
 	pub fn validate_tx(&self, tx: &Transaction) -> CommonResult<()> {
 		// TODO validate witness
 
-		let module_enum = get_module_enum(&tx.call.module_id)?;
-		let valid = match module_enum {
-			ModuleEnum::System => validate_call_for_module::<module::system::Module<Context>>(&tx),
+		let valid = match tx.call.module.as_str() {
+			"system" => validate_call_for_module::<module::system::Module<Context>>(&tx),
+			other => return Err(errors::ErrorKind::InvalidModule(other.to_string()).into()),
 		};
 		if !valid {
 			return Err(errors::ErrorKind::InvalidTxCall.into());
@@ -234,12 +232,12 @@ impl Executor {
 	pub fn execute_txs(&self, context: &Context, txs: Vec<Arc<Transaction>>) -> CommonResult<()> {
 		let mut txs_is_meta: Option<bool> = None;
 		for tx in &txs {
-			let module_enum = get_module_enum(&tx.call.module_id)?;
 			let call = &tx.call;
-			let (_result, is_meta) = match module_enum {
-				ModuleEnum::System => {
+			let (_result, is_meta) = match call.module.as_str() {
+				"system" => {
 					execute_call_for_module::<module::system::Module<Context>>(context, call)
 				}
+				other => return Err(errors::ErrorKind::InvalidModule(other.to_string()).into()),
 			};
 			match txs_is_meta {
 				None => {
@@ -274,12 +272,6 @@ impl Executor {
 	}
 }
 
-fn get_module_enum(module_id: &DispatchId) -> CommonResult<ModuleEnum> {
-	let module_enum = ModuleEnum::from_dispatch_id(module_id)
-		.ok_or(errors::ErrorKind::InvalidDispatchId(module_id.clone()))?;
-	Ok(module_enum)
-}
-
 fn execute_call_for_module<M: ModuleT<Context>>(
 	context: &Context,
 	call: &Call,
@@ -293,11 +285,6 @@ fn execute_call_for_module<M: ModuleT<Context>>(
 fn validate_call_for_module<M: ModuleT<Context>>(tx: &Transaction) -> bool {
 	let call = &tx.call;
 	M::is_valid_call(call) && M::is_write_call(call) == Some(true)
-}
-
-#[derive(HashEnum, Clone)]
-pub enum ModuleEnum {
-	System,
 }
 
 /// re-import modules

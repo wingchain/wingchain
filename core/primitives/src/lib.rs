@@ -17,8 +17,6 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 
-use hash_enum::HashEnum;
-
 pub mod codec;
 pub mod errors;
 
@@ -40,15 +38,12 @@ pub struct Witness {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub struct DispatchId(pub [u8; 4]);
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Params(pub Vec<u8>);
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Call {
-	pub module_id: DispatchId,
-	pub method_id: DispatchId,
+	pub module: String,
+	pub method: String,
 	pub params: Params,
 }
 
@@ -93,24 +88,6 @@ pub struct Executed {
 
 pub type DBKey = SmallVec<[u8; 32]>;
 pub type DBValue = Vec<u8>;
-
-impl<T: HashEnum> From<T> for DispatchId {
-	fn from(t: T) -> Self {
-		let mut dispatch_id = [0u8; 4];
-		dispatch_id.copy_from_slice(t.hash());
-		DispatchId(dispatch_id)
-	}
-}
-
-pub trait FromDispatchId: Sized {
-	fn from_dispatch_id(dispatch_id: &DispatchId) -> Option<Self>;
-}
-
-impl<T: HashEnum> FromDispatchId for T {
-	fn from_dispatch_id(dispatch_id: &DispatchId) -> Option<Self> {
-		T::from_hash(&dispatch_id.0)
-	}
-}
 
 impl fmt::Debug for Hash {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

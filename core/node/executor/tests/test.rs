@@ -20,7 +20,7 @@ use chrono::Local;
 use crypto::hash::HashImpl;
 use module_system::InitParams;
 use node_db::DB;
-use node_executor::{module, Context, Executor, ModuleEnum};
+use node_executor::{module, Context, Executor};
 use node_statedb::{StateDB, TrieRoot};
 use primitives::{codec, DBKey, Hash, Transaction};
 
@@ -51,8 +51,8 @@ fn test_executor() {
 		Arc::new(
 			executor
 				.build_tx(
-					ModuleEnum::System,
-					module::system::MethodEnum::Init,
+					"system".to_string(),
+					"init".to_string(),
 					module::system::InitParams {
 						chain_id: "chain-001".to_string(),
 						timestamp,
@@ -63,8 +63,8 @@ fn test_executor() {
 		Arc::new(
 			executor
 				.build_tx(
-					ModuleEnum::System,
-					module::system::MethodEnum::Init,
+					"system".to_string(),
+					"init".to_string(),
 					module::system::InitParams {
 						chain_id: "chain-002".to_string(),
 						timestamp: timestamp + 1,
@@ -106,8 +106,8 @@ fn test_executor() {
 		Arc::new(
 			executor
 				.build_tx(
-					ModuleEnum::System,
-					module::system::MethodEnum::Init,
+					"system".to_string(),
+					"init".to_string(),
 					module::system::InitParams {
 						chain_id: "chain-003".to_string(),
 						timestamp: timestamp + 2,
@@ -118,8 +118,8 @@ fn test_executor() {
 		Arc::new(
 			executor
 				.build_tx(
-					ModuleEnum::System,
-					module::system::MethodEnum::Init,
+					"system".to_string(),
+					"init".to_string(),
 					module::system::InitParams {
 						chain_id: "chain-004".to_string(),
 						timestamp: timestamp + 3,

@@ -16,12 +16,11 @@ use std::error::Error;
 use std::fmt::Debug;
 
 use primitives::errors::{CommonError, CommonErrorKind, Display};
-use primitives::DispatchId;
 
 #[derive(Debug, Display)]
 pub enum ErrorKind {
-	#[display(fmt = "Invalid dispatch id: {:?}", _0)]
-	InvalidDispatchId(DispatchId),
+	#[display(fmt = "Invalid module: {}", _0)]
+	InvalidModule(String),
 
 	#[display(fmt = "Invalid txs: {:?}", _0)]
 	InvalidTxs(String),

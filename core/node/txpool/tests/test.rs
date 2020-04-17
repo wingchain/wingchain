@@ -22,7 +22,7 @@ use crypto::hash::{Hash as HashT, HashImpl};
 use node_txpool::support::TxPoolSupport;
 use node_txpool::{PoolTransaction, TxPool, TxPoolConfig};
 use primitives::errors::{CommonError, CommonErrorKind, CommonResult, Display};
-use primitives::{codec, Call, DispatchId, Hash, Params, Transaction};
+use primitives::{codec, Call, Hash, Params, Transaction};
 
 #[derive(Clone)]
 struct TestTxPoolSupport {
@@ -31,8 +31,8 @@ struct TestTxPoolSupport {
 
 #[derive(Debug, Display)]
 enum ErrorKind {
-	#[display(fmt = "Invalid dispatch id: {:?}", _0)]
-	InvalidDispatchId(DispatchId),
+	#[display(fmt = "Invalid module: {}", _0)]
+	InvalidModule(String),
 }
 
 impl Error for ErrorKind {}
@@ -50,8 +50,8 @@ impl TxPoolSupport for TestTxPoolSupport {
 		Hash(out)
 	}
 	fn validate_tx(&self, tx: &Transaction) -> CommonResult<()> {
-		if tx.call.module_id == DispatchId([2, 0, 0, 0]) {
-			return Err(ErrorKind::InvalidDispatchId(tx.call.module_id.clone()).into());
+		if tx.call.module.as_str() == "b" {
+			return Err(ErrorKind::InvalidModule(tx.call.module.clone()).into());
 		}
 		Ok(())
 	}
@@ -69,8 +69,8 @@ async fn test_txpool() {
 	let tx = Transaction {
 		witness: None,
 		call: Call {
-			module_id: DispatchId([1u8, 0, 0, 0]),
-			method_id: DispatchId([1u8, 0, 0, 0]),
+			module: "a".to_string(),
+			method: "a".to_string(),
 			params: Params(vec![1u8; 32]),
 		},
 	};
@@ -106,8 +106,8 @@ async fn test_txpool_dup() {
 	let tx = Transaction {
 		witness: None,
 		call: Call {
-			module_id: DispatchId([1u8, 0, 0, 0]),
-			method_id: DispatchId([1u8, 0, 0, 0]),
+			module: "a".to_string(),
+			method: "a".to_string(),
 			params: Params(vec![1u8; 32]),
 		},
 	};
@@ -130,14 +130,14 @@ async fn test_txpool_validate() {
 	let tx = Transaction {
 		witness: None,
 		call: Call {
-			module_id: DispatchId([2u8, 0, 0, 0]),
-			method_id: DispatchId([1u8, 0, 0, 0]),
+			module: "b".to_string(),
+			method: "a".to_string(),
 			params: Params(vec![1u8; 32]),
 		},
 	};
 
 	let result = txpool.insert(tx.clone()).await;
-	assert!(format!("{:?}", result).contains("error: InvalidDispatchId"));
+	assert!(format!("{:?}", result).contains("error: InvalidModule"));
 }
 
 #[tokio::test]
@@ -152,21 +152,21 @@ async fn test_txpool_capacity() {
 	let tx = Transaction {
 		witness: None,
 		call: Call {
-			module_id: DispatchId([1u8, 0, 0, 0]),
-			method_id: DispatchId([1u8, 0, 0, 0]),
+			module: "a".to_string(),
+			method: "a".to_string(),
 			params: Params(vec![1u8; 32]),
 		},
 	};
 
 	let tx2 = {
 		let mut tx = tx.clone();
-		tx.call.module_id = DispatchId([1u8, 1, 0, 0]);
+		tx.call.module = "c".to_string();
 		tx
 	};
 
 	let tx3 = {
 		let mut tx = tx.clone();
-		tx.call.module_id = DispatchId([1u8, 2, 0, 0]);
+		tx.call.module = "d".to_string();
 		tx
 	};
 

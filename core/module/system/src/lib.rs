@@ -14,15 +14,9 @@
 
 use serde::{Deserialize, Serialize};
 
-use hash_enum::HashEnum;
 use node_executor_primitives::{errors, Context, Module as ModuleT, StorageValue};
 use primitives::errors::CommonResult;
-use primitives::{codec, Call, FromDispatchId};
-
-#[derive(HashEnum, PartialEq)]
-pub enum MethodEnum {
-	Init,
-}
+use primitives::{codec, Call};
 
 pub struct Module<C>
 where
@@ -47,35 +41,25 @@ where
 	}
 
 	fn is_valid_call(call: &Call) -> bool {
-		let method_enum = match MethodEnum::from_dispatch_id(&call.method_id) {
-			Some(call_enum) => call_enum,
-			None => return false,
-		};
 		let params = &call.params.0[..];
-		match method_enum {
-			MethodEnum::Init => codec::decode::<InitParams>(&params).is_ok(),
+		match call.method.as_str() {
+			"init" => codec::decode::<InitParams>(&params).is_ok(),
+			_ => false,
 		}
 	}
 
 	fn is_write_call(call: &Call) -> Option<bool> {
-		let method_enum = match MethodEnum::from_dispatch_id(&call.method_id) {
-			Some(call_enum) => call_enum,
-			None => return None,
-		};
-		let write_methods = vec![MethodEnum::Init];
-		Some(write_methods.contains(&method_enum))
+		let write_methods = vec!["init"];
+		Some(write_methods.contains(&call.method.as_str()))
 	}
 
 	fn execute_call(&self, call: &Call) -> CommonResult<()> {
-		let method_enum = match MethodEnum::from_dispatch_id(&call.method_id) {
-			Some(method_enum) => method_enum,
-			None => return Err(errors::ErrorKind::InvalidDispatchId(call.module_id.clone()).into()),
-		};
 		let params = &call.params.0[..];
-		match method_enum {
-			MethodEnum::Init => {
+		match call.method.as_str() {
+			"init" => {
 				self.init(&codec::decode(&params).map_err(|_| errors::ErrorKind::InvalidParams)?)
 			}
+			other => Err(errors::ErrorKind::InvalidMethod(other.to_string()).into()),
 		}
 	}
 }

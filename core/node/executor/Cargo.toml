@@ -13,7 +13,6 @@ node-db = { path = "../db" }
 node-statedb = { path = "../statedb" }
 primitives = { path = "../../primitives" }
 module-system = { path = "../../module/system" }
-hash_enum = { path = "../../../utils/hash_enum" }
 node-executor-primitives = { path = "primitives" }
 
 [dev-dependencies]

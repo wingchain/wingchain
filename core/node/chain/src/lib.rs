@@ -28,7 +28,7 @@ use crypto::hash::{Hash as HashT, HashImpl};
 use main_base::spec::Spec;
 use main_base::SystemInitParams;
 use node_db::{DBTransaction, DB};
-use node_executor::{module, Context, Executor, ModuleEnum};
+use node_executor::{module, Context, Executor};
 use node_statedb::{StateDB, TrieRoot};
 use primitives::errors::CommonResult;
 use primitives::{codec, Block, BlockNumber, Body, DBKey, Executed, Hash, Header, Transaction};
@@ -212,8 +212,8 @@ impl Chain {
 		let tx = Arc::new(
 			self.executor
 				.build_tx(
-					ModuleEnum::System,
-					module::system::MethodEnum::Init,
+					"system".to_string(),
+					"init".to_string(),
 					module::system::InitParams {
 						chain_id,
 						timestamp,

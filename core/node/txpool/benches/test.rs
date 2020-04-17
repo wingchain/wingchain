@@ -28,7 +28,7 @@ use crypto::hash::{Hash as HashT, HashImpl};
 use node_txpool::support::TxPoolSupport;
 use node_txpool::{TxPool, TxPoolConfig};
 use primitives::errors::CommonResult;
-use primitives::{codec, Call, DispatchId, Hash, Params, Transaction};
+use primitives::{codec, Call, Hash, Params, Transaction};
 
 const TXS_SIZE: usize = 10000;
 
@@ -101,8 +101,8 @@ fn gen_txs(size: usize, params_size: usize) -> Vec<Transaction> {
 		let tx = Transaction {
 			witness: None,
 			call: Call {
-				module_id: DispatchId([1u8, 0, 0, 0]),
-				method_id: DispatchId([1u8, 0, 0, 0]),
+				module: "abcd".to_string(),
+				method: "abcd".to_string(),
 				params,
 			},
 		};
