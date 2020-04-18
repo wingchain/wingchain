@@ -14,7 +14,8 @@
 
 use serde::{Deserialize, Serialize};
 
-use node_executor_primitives::{errors, Context, Module as ModuleT, StorageValue};
+use executor_macro::{call, module};
+use executor_primitives::{errors, Context, Module as ModuleT, StorageValue};
 use primitives::errors::CommonResult;
 use primitives::{codec, Call};
 
@@ -26,10 +27,8 @@ where
 	timestamp: StorageValue<u32, C>,
 }
 
-impl<C> ModuleT<C> for Module<C>
-where
-	C: Context,
-{
+#[module]
+impl<C: Context> Module<C> {
 	const META_MODULE: bool = true;
 	const STORAGE_KEY: &'static [u8] = b"system";
 
@@ -40,27 +39,11 @@ where
 		}
 	}
 
-	fn is_valid_call(call: &Call) -> bool {
-		let params = &call.params.0[..];
-		match call.method.as_str() {
-			"init" => codec::decode::<InitParams>(&params).is_ok(),
-			_ => false,
-		}
-	}
-
-	fn is_write_call(call: &Call) -> Option<bool> {
-		let write_methods = vec!["init"];
-		Some(write_methods.contains(&call.method.as_str()))
-	}
-
-	fn execute_call(&self, call: &Call) -> CommonResult<()> {
-		let params = &call.params.0[..];
-		match call.method.as_str() {
-			"init" => {
-				self.init(&codec::decode(&params).map_err(|_| errors::ErrorKind::InvalidParams)?)
-			}
-			other => Err(errors::ErrorKind::InvalidMethod(other.to_string()).into()),
-		}
+	#[call(write = true)]
+	fn init(&self, params: InitParams) -> CommonResult<()> {
+		self.chain_id.set(&params.chain_id)?;
+		self.timestamp.set(&params.timestamp)?;
+		Ok(())
 	}
 }
 
@@ -68,12 +51,4 @@ where
 pub struct InitParams {
 	pub chain_id: String,
 	pub timestamp: u32,
-}
-
-impl<C: Context> Module<C> {
-	fn init(&self, params: &InitParams) -> CommonResult<()> {
-		self.chain_id.set(&params.chain_id)?;
-		self.timestamp.set(&params.timestamp)?;
-		Ok(())
-	}
 }

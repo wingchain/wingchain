@@ -14,6 +14,9 @@
 
 use proc_macro::TokenStream;
 use quote::quote;
+use syn::{
+	parse_macro_input, FnArg, Ident, ImplItem, ImplItemMethod, ItemImpl, Meta, NestedMeta, Type,
+};
 
 #[proc_macro_attribute]
 pub fn dispatcher(_attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -91,4 +94,184 @@ pub fn dispatcher(_attr: TokenStream, item: TokenStream) -> TokenStream {
 		}
 	};
 	gen.into()
+}
+
+#[proc_macro_attribute]
+pub fn call(_attr: TokenStream, item: TokenStream) -> TokenStream {
+	item
+}
+
+#[proc_macro_attribute]
+pub fn module(_attr: TokenStream, item: TokenStream) -> TokenStream {
+	let impl_item = parse_macro_input!(item as ItemImpl);
+
+	let type_name = get_module_ident(&impl_item);
+
+	let methods = get_module_call_methods(&impl_item);
+
+	// let methods_ts_vec = methods.iter().map(|x|{
+	// 	let method = x.method.clone();
+	// 	quote! { #method }
+	// }).collect::<Vec<_>>();
+
+	let is_valid_call_ts_vec = methods
+		.iter()
+		.map(|x| {
+			let method_ident = &x.method_ident;
+			let params_ident = x.params_ident.clone();
+			quote! { stringify!(#method_ident) => codec::decode::<#params_ident>(&params).is_ok() }
+		})
+		.collect::<Vec<_>>();
+
+	let is_write_call_ts_vec = methods
+		.iter()
+		.map(|x| {
+			let method_ident = &x.method_ident;
+			let is_write = x.write;
+			quote! { stringify!(#method_ident) => Some(#is_write) }
+		})
+		.collect::<Vec<_>>();
+
+	let execute_call_ts_vec = methods
+		.iter()
+		.map(|x| {
+			let method_ident = &x.method_ident;
+			quote! { stringify!(#method_ident) => self.#method_ident(codec::decode(&params).map_err(|_| errors::ErrorKind::InvalidParams)?) }
+		})
+		.collect::<Vec<_>>();
+
+	let gen = quote! {
+
+		#impl_item
+
+		impl<C> ModuleT<C> for #type_name<C> where C: Context {
+
+			const META_MODULE: bool = Self::META_MODULE;
+			const STORAGE_KEY: &'static [u8] = Self::STORAGE_KEY;
+
+			fn new(context: C) -> Self {
+				Self::new(context)
+			}
+
+			fn is_valid_call(call: &Call) -> bool {
+				let params = &call.params.0[..];
+				match call.method.as_str() {
+					#(#is_valid_call_ts_vec),*,
+					_ => false,
+				}
+			}
+
+			fn is_write_call(call: &Call) -> Option<bool> {
+				let method = call.method.as_str();
+				match method {
+					#(#is_write_call_ts_vec),*,
+					other => None,
+				}
+			}
+
+			fn execute_call(&self, call: &Call) -> CommonResult<()> {
+				let params = &call.params.0[..];
+				let method = call.method.as_str();
+				match method {
+					#(#execute_call_ts_vec),*,
+					other => Err(errors::ErrorKind::InvalidMethod(other.to_string()).into()),
+				}
+			}
+
+		}
+
+	};
+	gen.into()
+}
+
+fn get_module_ident(impl_item: &ItemImpl) -> Ident {
+	match &*impl_item.self_ty {
+		Type::Path(type_path) => type_path.path.segments[0].ident.clone(),
+		_ => panic!("module ident not found"),
+	}
+}
+
+fn get_module_call_methods(impl_item: &ItemImpl) -> Vec<ModuleMethod> {
+	impl_item
+		.items
+		.iter()
+		.filter_map(|item| {
+			if let ImplItem::Method(method) = item {
+				let call_method = method.attrs.iter().find_map(|attr| {
+					let meta = attr.parse_meta().unwrap();
+					match meta {
+						Meta::Path(word) => {
+							if word.segments[0].ident == "call" {
+								Some(ModuleMethod {
+									write: false,
+									method_ident: method.sig.ident.clone(),
+									params_ident: get_method_params_ident(&method),
+									method: method.clone(),
+								})
+							} else {
+								None
+							}
+						}
+						Meta::List(list) => {
+							if list.path.segments[0].ident == "call" {
+								let write = list.nested.iter().find_map(|nm| match nm {
+									NestedMeta::Meta(Meta::NameValue(nv))
+										if nv.path.segments[0].ident == "write" =>
+									{
+										match &nv.lit {
+											syn::Lit::Bool(value) => Some(value.value),
+											_ => panic!("write should have a bool value"),
+										}
+									}
+									_ => None,
+								});
+								let write = write.unwrap_or(false);
+								Some(ModuleMethod {
+									write,
+									method_ident: method.sig.ident.clone(),
+									params_ident: get_method_params_ident(&method),
+									method: method.clone(),
+								})
+							} else {
+								None
+							}
+						}
+						_ => None,
+					}
+				});
+				call_method
+			} else {
+				None
+			}
+		})
+		.collect()
+}
+
+fn get_method_params_ident(method: &ImplItemMethod) -> Ident {
+	if method.sig.inputs.len() == 2 {
+		let params = &method.sig.inputs[1];
+		let pat_type = match params {
+			FnArg::Typed(pat_type) => pat_type,
+			_ => unreachable!(),
+		};
+		let params_ident = if let Type::Path(path) = &*pat_type.ty {
+			path.path
+				.get_ident()
+				.expect("no params ident found")
+				.clone()
+		} else {
+			panic!("no params type found")
+		};
+		params_ident
+	} else {
+		panic!("call method input should be (&self, params: Type)");
+	}
+}
+
+struct ModuleMethod {
+	#[allow(dead_code)]
+	method: ImplItemMethod,
+	method_ident: Ident,
+	params_ident: Ident,
+	write: bool,
 }

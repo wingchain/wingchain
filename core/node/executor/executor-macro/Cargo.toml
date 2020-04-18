@@ -10,8 +10,8 @@ edition = "2018"
 proc-macro = true
 
 [dependencies]
-syn = "0.15"
-quote = "0.6"
+syn = { version = "1.0", features = ["full"] }
+quote = "1.0"
 
 primitives = { path = "../../../primitives" }
 executor-primitives = { package = "node-executor-primitives", path = "../primitives" }
