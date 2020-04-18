@@ -18,6 +18,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use node_db::DBTransaction;
+use node_executor_macro::dispatcher;
 use node_executor_primitives::{Context as ContextT, Module as ModuleT};
 use node_statedb::{StateDB, StateDBGetter, StateDBStmt, TrieRoot};
 use primitives::{codec, errors::CommonResult};
@@ -201,10 +202,7 @@ impl Executor {
 			params,
 		};
 
-		let valid = match module.as_str() {
-			"system" => module::system::Module::<Context>::is_valid_call(&call),
-			other => return Err(errors::ErrorKind::InvalidModule(other.to_string()).into()),
-		};
+		let valid = Dispatcher::is_valid_call::<Context>(&module, &call)?;
 
 		if !valid {
 			return Err(errors::ErrorKind::InvalidTxCall.into());
@@ -219,13 +217,17 @@ impl Executor {
 	pub fn validate_tx(&self, tx: &Transaction) -> CommonResult<()> {
 		// TODO validate witness
 
-		let valid = match tx.call.module.as_str() {
-			"system" => validate_call_for_module::<module::system::Module<Context>>(&tx),
-			other => return Err(errors::ErrorKind::InvalidModule(other.to_string()).into()),
-		};
-		if !valid {
+		let module = &tx.call.module;
+		let call = &tx.call;
+
+		let valid = Dispatcher::is_valid_call::<Context>(module, &call)?;
+
+		let write = Dispatcher::is_write_call::<Context>(module, &call)?;
+
+		if !(valid && write == Some(true)) {
 			return Err(errors::ErrorKind::InvalidTxCall.into());
 		}
+
 		Ok(())
 	}
 
@@ -233,12 +235,9 @@ impl Executor {
 		let mut txs_is_meta: Option<bool> = None;
 		for tx in &txs {
 			let call = &tx.call;
-			let (_result, is_meta) = match call.module.as_str() {
-				"system" => {
-					execute_call_for_module::<module::system::Module<Context>>(context, call)
-				}
-				other => return Err(errors::ErrorKind::InvalidModule(other.to_string()).into()),
-			};
+			let module = &call.module;
+
+			let is_meta = Dispatcher::is_meta::<Context>(module)?;
 			match txs_is_meta {
 				None => {
 					txs_is_meta = Some(is_meta);
@@ -252,6 +251,8 @@ impl Executor {
 					}
 				}
 			}
+
+			let _result = Dispatcher::execute_call::<Context>(module, context, &call)?;
 		}
 
 		if context.inner.payload_phase.get() && txs_is_meta == Some(true) {
@@ -272,19 +273,10 @@ impl Executor {
 	}
 }
 
-fn execute_call_for_module<M: ModuleT<Context>>(
-	context: &Context,
-	call: &Call,
-) -> (CommonResult<()>, bool) {
-	let is_meta = M::META_MODULE;
-	let module = M::new(context.clone());
-	let result = module.execute_call(call);
-	(result, is_meta)
-}
-
-fn validate_call_for_module<M: ModuleT<Context>>(tx: &Transaction) -> bool {
-	let call = &tx.call;
-	M::is_valid_call(call) && M::is_write_call(call) == Some(true)
+#[allow(non_camel_case_types)]
+#[dispatcher]
+enum Dispatcher {
+	system,
 }
 
 /// re-import modules

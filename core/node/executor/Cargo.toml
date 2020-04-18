@@ -14,6 +14,7 @@ node-statedb = { path = "../statedb" }
 primitives = { path = "../../primitives" }
 module-system = { path = "../../module/system" }
 node-executor-primitives = { path = "primitives" }
+node-executor-macro = { path = "executor-macro" }
 
 [dev-dependencies]
 chrono = "0.4.11"
