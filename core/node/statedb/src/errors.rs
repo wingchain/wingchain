@@ -12,30 +12,37 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::error::Error;
 use std::fmt::Debug;
 
-use error_chain::*;
 use trie_db::TrieError;
 
-error_chain! {
-	foreign_links {
-		MutStatic(mut_static::error::Error) #[doc="Mut static error"];
-	}
-	links {
-		DB(node_db::errors::Error, node_db::errors::ErrorKind) #[doc="DB error"];
-	}
-	errors {
-		LoadHasherConflict(old: String, new: String) {
-			description(""),
-			display("Load hasher conflict: {}, {}", old, new),
-		}
+use primitives::errors::{CommonError, CommonErrorKind, Display};
+
+#[derive(Debug, Display)]
+pub enum ErrorKind {
+	#[display(fmt = "Load hasher conflict: {}, {}", _0, _1)]
+	LoadHasherConflict(String, String),
+
+	#[display(fmt = "Load hasher fail")]
+	LoadHasherFail,
+
+	#[display(fmt = "Trie error: {}", _0)]
+	Trie(String),
+}
+
+impl Error for ErrorKind {}
+
+impl From<ErrorKind> for CommonError {
+	fn from(error: ErrorKind) -> Self {
+		CommonError::new(CommonErrorKind::StateDB, Box::new(error))
 	}
 }
 
-pub fn parse_trie_error<T, E>(e: Box<TrieError<T, E>>) -> String
+pub fn parse_trie_error<T, E>(e: Box<TrieError<T, E>>) -> CommonError
 where
 	T: Debug,
 	E: Debug,
 {
-	format!("{}", e)
+	ErrorKind::Trie(format!("{}", e)).into()
 }

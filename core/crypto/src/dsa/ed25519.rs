@@ -19,8 +19,9 @@ use rand::Rng;
 use ring::signature::{Ed25519KeyPair, KeyPair, VerificationAlgorithm, ED25519};
 use untrusted::Input;
 
+use primitives::errors::{CommonError, CommonResult};
+
 use crate::dsa::{Dsa, KeyPair as KeyPairT, Verifier as VerifierT};
-use crate::errors::ResultExt;
 use crate::{errors, DsaLength};
 
 pub struct Ed25519;
@@ -28,7 +29,7 @@ pub struct Ed25519;
 pub struct Verifier([u8; 32]);
 
 impl Dsa for Ed25519 {
-	type Error = errors::Error;
+	type Error = CommonError;
 
 	type KeyPair = (Ed25519KeyPair, [u8; 32]);
 
@@ -42,29 +43,29 @@ impl Dsa for Ed25519 {
 		DsaLength::DsaLength32_32_64
 	}
 
-	fn generate_key_pair(&self) -> errors::Result<Self::KeyPair> {
+	fn generate_key_pair(&self) -> CommonResult<Self::KeyPair> {
 		let seed = random_32_bytes(&mut thread_rng());
 
 		let key_pair = Ed25519KeyPair::from_seed_unchecked(&seed)
-			.chain_err(|| errors::ErrorKind::InvalidSecretKey)?;
+			.map_err(|_| errors::ErrorKind::InvalidSecretKey)?;
 		let key_pair = (key_pair, seed);
 
 		Ok(key_pair)
 	}
 
-	fn key_pair_from_secret_key(&self, secret_key: &[u8]) -> errors::Result<Self::KeyPair> {
+	fn key_pair_from_secret_key(&self, secret_key: &[u8]) -> CommonResult<Self::KeyPair> {
 		let key_pair = Ed25519KeyPair::from_seed_unchecked(&secret_key)
-			.chain_err(|| errors::ErrorKind::InvalidSecretKey)?;
+			.map_err(|_| errors::ErrorKind::InvalidSecretKey)?;
 		let seed = secret_key.try_into().expect("qed");
 		let key_pair = (key_pair, seed);
 		Ok(key_pair)
 	}
 
-	fn verifier_from_public_key(&self, public_key: &[u8]) -> errors::Result<Self::Verifier> {
+	fn verifier_from_public_key(&self, public_key: &[u8]) -> CommonResult<Self::Verifier> {
 		let verifier = Verifier(
 			public_key
 				.try_into()
-				.chain_err(|| errors::ErrorKind::InvalidPublicKey)?,
+				.map_err(|_| errors::ErrorKind::InvalidPublicKey)?,
 		);
 		Ok(verifier)
 	}
@@ -84,16 +85,16 @@ impl KeyPairT for (Ed25519KeyPair, [u8; 32]) {
 }
 
 impl VerifierT for Verifier {
-	type Error = errors::Error;
+	type Error = CommonError;
 
-	fn verify(&self, message: &[u8], signature: &[u8]) -> errors::Result<()> {
+	fn verify(&self, message: &[u8], signature: &[u8]) -> CommonResult<()> {
 		let result = ED25519
 			.verify(
 				Input::from(&self.0[..]),
 				Input::from(&message),
 				Input::from(&signature),
 			)
-			.chain_err(|| errors::ErrorKind::VerificationFailed)?;
+			.map_err(|_| errors::ErrorKind::VerificationFailed)?;
 
 		Ok(result)
 	}
@@ -121,20 +122,6 @@ mod tests {
 			148, 3, 77, 47, 187, 230, 8, 5, 152, 173, 190, 21, 178, 152,
 		];
 		assert!(Ed25519.key_pair_from_secret_key(&secret).is_ok());
-	}
-
-	#[test]
-	fn test_ed25519_key_pair_from_secret_key_chain_err() {
-		use error_chain::ChainedError;
-		let secret: [u8; 31] = [
-			184, 80, 22, 77, 31, 238, 200, 105, 138, 204, 163, 41, 148, 124, 152, 133, 189, 29,
-			148, 3, 77, 47, 187, 230, 8, 5, 152, 173, 190, 21, 178,
-		];
-		let err: errors::Error = Ed25519.key_pair_from_secret_key(&secret).unwrap_err();
-		assert_eq!(
-			err.display_chain().to_string(),
-			"Error: Invalid public key\nCaused by: InvalidEncoding\n"
-		);
 	}
 
 	#[test]

@@ -12,20 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use error_chain::*;
+use std::error::Error;
+use std::io;
+use std::path::PathBuf;
 
-error_chain! {
-	foreign_links {
-		IO(std::io::Error) #[doc="IO error"];
-		Toml(toml::de::Error) #[doc="Toml error"];
-	}
-	links {
-		Base(base::errors::Error, base::errors::ErrorKind) #[doc="Base error"];
-	}
-	errors {
-		HomeDirExists(path: String) {
-			description(""),
-			display("Home dir already exists: {}", path),
-		}
+use primitives::errors::{CommonError, CommonErrorKind, Display};
+
+#[derive(Debug, Display)]
+pub enum ErrorKind {
+	#[display(fmt = "Home path already exists: {:?}", _0)]
+	HomePathExists(PathBuf),
+
+	#[display(fmt = "IO error: {:?}", _0)]
+	IO(io::Error),
+
+	#[display(fmt = "Toml deserialize error: {:?}", _0)]
+	TomlDe(toml::de::Error),
+}
+
+impl Error for ErrorKind {}
+
+impl From<ErrorKind> for CommonError {
+	fn from(error: ErrorKind) -> Self {
+		CommonError::new(CommonErrorKind::Main, Box::new(error))
 	}
 }

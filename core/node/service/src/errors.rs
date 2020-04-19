@@ -12,28 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use error_chain::*;
+use std::error::Error;
+use std::io;
 
-error_chain! {
-	foreign_links {
-		IO(std::io::Error) #[doc="IO error"];
-		Toml(toml::de::Error) #[doc="Toml error"];
-		Codec(parity_codec::Error) #[doc="Codec error"];
-	}
-	links {
-		Crypto(crypto::errors::Error, crypto::errors::ErrorKind) #[doc="Crypto error"];
-		DB(node_db::errors::Error, node_db::errors::ErrorKind) #[doc="DB error"];
-		StateDB(node_statedb::errors::Error, node_statedb::errors::ErrorKind) #[doc="StateDB error"];
-		Executor(node_executor::errors::Error, node_executor::errors::ErrorKind) #[doc="Executor error"];
-	}
-	errors {
-		InvalidSpec {
-			description(""),
-			display("Invalid spec"),
-		}
-		DBIntegrityLess(reason: String) {
-			description(""),
-			display("DB integrity less: {:?}", reason),
-		}
+use primitives::errors::{CommonError, CommonErrorKind, Display};
+
+#[derive(Debug, Display)]
+pub enum ErrorKind {
+	#[display(fmt = "Config error: {:?}", _0)]
+	Config(String),
+
+	#[display(fmt = "Runtime error: {:?}", _0)]
+	Runtime(io::Error),
+}
+
+impl Error for ErrorKind {}
+
+impl From<ErrorKind> for CommonError {
+	fn from(error: ErrorKind) -> Self {
+		CommonError::new(CommonErrorKind::Service, Box::new(error))
 	}
 }

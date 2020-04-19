@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -21,10 +22,9 @@ use mut_static::MutStatic;
 use crypto::hash::Hash;
 use crypto::hash::HashImpl;
 use lazy_static::lazy_static;
-use node_db::{DBKey, DB};
+use node_db::DB;
 use node_statedb::{StateDB, TrieRoot};
-use parity_codec::Encode;
-use std::collections::HashMap;
+use primitives::{codec, DBKey};
 
 #[test]
 fn test_static_hash() {
@@ -247,7 +247,7 @@ fn test_calc_trie_root() {
 		input
 			.iter()
 			.enumerate()
-			.map(|(k, v)| (Encode::encode(&(k as u32)), v))
+			.map(|(k, v)| (codec::encode(&(k as u32)).unwrap(), v))
 			.collect::<Vec<_>>(),
 	);
 

@@ -23,9 +23,12 @@ use memory_db::{KeyFunction, PrefixedKey};
 use reference_trie::ReferenceTrieStream;
 use trie_db::{Trie, TrieMut};
 
-use crypto::hash::{Hash, HashImpl};
+use crypto::hash::{Hash as HashT, HashImpl};
 use crypto::HashLength;
-use node_db::{DBKey, DBTransaction, DBValue, DB};
+use node_db::{DBTransaction, DB};
+use primitives::codec;
+use primitives::errors::CommonResult;
+use primitives::{DBKey, DBValue};
 pub use trie::{
 	DefaultMemoryDB, DefaultTrieDB, DefaultTrieDBMut, TrieHasher20, TrieHasher32, TrieHasher64,
 	H512,
@@ -33,7 +36,6 @@ pub use trie::{
 
 use crate::errors::parse_trie_error;
 use crate::trie::load_hasher;
-use parity_codec::Encode;
 
 pub mod errors;
 mod trie;
@@ -47,7 +49,7 @@ pub struct StateDB {
 }
 
 impl StateDB {
-	pub fn new(db: Arc<DB>, db_column: u32, hasher: Arc<HashImpl>) -> errors::Result<Self> {
+	pub fn new(db: Arc<DB>, db_column: u32, hasher: Arc<HashImpl>) -> CommonResult<Self> {
 		load_hasher(hasher.clone())?;
 
 		let hash_length = hasher.length();
@@ -70,7 +72,7 @@ impl StateDB {
 		}
 	}
 
-	pub fn get(&self, root: &[u8], key: &[u8]) -> errors::Result<Option<DBValue>> {
+	pub fn get(&self, root: &[u8], key: &[u8]) -> CommonResult<Option<DBValue>> {
 		let result = match self.hash_length {
 			HashLength::HashLength20 => {
 				let mut typed_root = [0u8; 20];
@@ -92,7 +94,7 @@ impl StateDB {
 		result
 	}
 
-	pub fn prepare_stmt(&self, root: &[u8]) -> errors::Result<StateDBStmt> {
+	pub fn prepare_stmt(&self, root: &[u8]) -> CommonResult<StateDBStmt> {
 		let new = self.default_root() == root;
 		Ok(StateDBStmt::new(
 			self.db.clone(),
@@ -103,7 +105,7 @@ impl StateDB {
 		))
 	}
 
-	pub fn prepare_get(stmt: &StateDBStmt) -> errors::Result<StateDBGetter> {
+	pub fn prepare_get(stmt: &StateDBStmt) -> CommonResult<StateDBGetter> {
 		let result = match stmt {
 			StateDBStmt::Hasher20(stmt) => {
 				StateDBGetter::Hasher20(Self::prepare_get_for_hasher(&stmt)?)
@@ -124,7 +126,7 @@ impl StateDB {
 		&self,
 		root: &[u8],
 		data: I,
-	) -> errors::Result<(Vec<u8>, DBTransaction)>
+	) -> CommonResult<(Vec<u8>, DBTransaction)>
 	where
 		I: Iterator<Item = (&'a DBKey, &'a Option<DBValue>)>,
 	{
@@ -165,7 +167,7 @@ impl StateDB {
 		H::Out::default()
 	}
 
-	fn get_for_hasher<H>(&self, root: H::Out, key: &[u8]) -> errors::Result<Option<DBValue>>
+	fn get_for_hasher<H>(&self, root: H::Out, key: &[u8]) -> CommonResult<Option<DBValue>>
 	where
 		H: Hasher,
 	{
@@ -185,7 +187,7 @@ impl StateDB {
 
 	fn prepare_get_for_hasher<H>(
 		stmt: &StateDBStmtForHasher<H>,
-	) -> errors::Result<StateDBGetterForHasher<H>>
+	) -> CommonResult<StateDBGetterForHasher<H>>
 	where
 		H: Hasher,
 	{
@@ -203,7 +205,7 @@ impl StateDB {
 		&self,
 		mut root: H::Out,
 		data: I,
-	) -> errors::Result<(H::Out, DBTransaction)>
+	) -> CommonResult<(H::Out, DBTransaction)>
 	where
 		I: Iterator<Item = (&'a DBKey, &'a Option<DBValue>)>,
 		H: Hasher,
@@ -329,7 +331,7 @@ where
 }
 
 impl<'a> StateDBGetter<'a> {
-	pub fn get(&self, key: &[u8]) -> errors::Result<Option<DBValue>> {
+	pub fn get(&self, key: &[u8]) -> CommonResult<Option<DBValue>> {
 		let result = match self {
 			Self::Hasher20(g) => match &g.triedb {
 				Some(triedb) => triedb.get(key).map_err(parse_trie_error)?,
@@ -411,7 +413,7 @@ pub struct TrieRoot {
 }
 
 impl TrieRoot {
-	pub fn new(hasher: Arc<HashImpl>) -> errors::Result<Self> {
+	pub fn new(hasher: Arc<HashImpl>) -> CommonResult<Self> {
 		let hash_length = hasher.length();
 		load_hasher(hasher)?;
 
@@ -451,7 +453,12 @@ impl TrieRoot {
 		let input = input
 			.into_iter()
 			.enumerate()
-			.map(|(k, v)| (Encode::encode(&(k as u32)), v))
+			.map(|(k, v)| {
+				(
+					codec::encode(&(k as u32)).expect("u32 can be serialized"),
+					v,
+				)
+			})
 			.collect::<Vec<_>>();
 
 		self.calc_trie_root(input)

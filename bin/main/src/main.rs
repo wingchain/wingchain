@@ -15,14 +15,21 @@
 use structopt::clap::{App, AppSettings};
 use structopt::StructOpt;
 
+use primitives::errors::CommonResult;
+
 use crate::cli::{Opt, Subcommand};
 
 mod cli;
 mod errors;
 
-error_chain::quick_main!(run_main);
+fn main() {
+	match run_main() {
+		Ok(_) => (),
+		Err(e) => eprintln!("Error: {:?}", e),
+	}
+}
 
-fn run_main() -> errors::Result<()> {
+fn run_main() -> CommonResult<()> {
 	let app = get_app();
 
 	let opt = Opt::from_clap(&app.get_matches_from(std::env::args()));
@@ -32,11 +39,11 @@ fn run_main() -> errors::Result<()> {
 			print_help();
 			Ok(())
 		}
-		Some(subcommand) => run(subcommand),
+		Some(subcommand) => run_subcommand(subcommand),
 	}
 }
 
-fn run(subcommand: Subcommand) -> errors::Result<()> {
+fn run_subcommand(subcommand: Subcommand) -> CommonResult<()> {
 	match subcommand {
 		Subcommand::Init(opt) => {
 			init_logger(&opt.shared_params.log)?;
@@ -73,7 +80,7 @@ fn print_help() {
 	println!()
 }
 
-fn init_logger(log: &Option<String>) -> errors::Result<()> {
+fn init_logger(log: &Option<String>) -> CommonResult<()> {
 	let mut builder = env_logger::Builder::new();
 
 	builder.filter(None, log::LevelFilter::Info);
@@ -86,7 +93,9 @@ fn init_logger(log: &Option<String>) -> errors::Result<()> {
 		builder.parse_filters(&log);
 	}
 
-	builder.try_init()?;
+	builder
+		.try_init()
+		.map_err(|e| errors::ErrorKind::InitLogger(e))?;
 
 	Ok(())
 }

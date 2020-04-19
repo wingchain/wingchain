@@ -12,30 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use error_chain::*;
-use primitives::DispatchId;
+use std::error::Error;
+use std::fmt::Debug;
 
-error_chain! {
-	foreign_links {
-	}
-	links {
-	}
-	errors {
-		CodecError {
-			description(""),
-			display("Codec error"),
-		}
-		TrieError {
-			description(""),
-			display("Trie error"),
-		}
-		InvalidDispatchId(dispatch_id: DispatchId) {
-			description(""),
-			display("Invalid dispatch id: {:?}", dispatch_id),
-		}
-		InvalidParams {
-			description(""),
-			display("Invalid params"),
-		}
+use primitives::errors::{CommonError, CommonErrorKind, Display};
+
+#[derive(Debug, Display)]
+pub enum ErrorKind {
+	#[display(fmt = "Invalid method: {}", _0)]
+	InvalidMethod(String),
+
+	#[display(fmt = "Invalid params")]
+	InvalidParams,
+}
+
+impl Error for ErrorKind {}
+
+impl From<ErrorKind> for CommonError {
+	fn from(error: ErrorKind) -> Self {
+		CommonError::new(CommonErrorKind::Executor, Box::new(error))
 	}
 }

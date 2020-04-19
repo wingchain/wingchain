@@ -12,13 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use error_chain::bail;
 use std::iter::{empty, once};
+
 use yogcrypt::basic::cell::u64x4::U64x4;
 use yogcrypt::basic::field::field_p::FieldElement;
 use yogcrypt::sm2::{
 	get_pub_key, get_sec_key, sm2_gen_sign, sm2_ver_sign, PubKey, SecKey, Signature,
 };
+
+use primitives::errors::{CommonError, CommonResult};
 
 use crate::dsa::{Dsa, KeyPair, Verifier};
 use crate::{errors, DsaLength};
@@ -26,7 +28,7 @@ use crate::{errors, DsaLength};
 pub struct SM2;
 
 impl Dsa for SM2 {
-	type Error = errors::Error;
+	type Error = CommonError;
 
 	type KeyPair = (SecKey, PubKey);
 	type Verifier = PubKey;
@@ -39,19 +41,19 @@ impl Dsa for SM2 {
 		DsaLength::DsaLength32_65_64
 	}
 
-	fn generate_key_pair(&self) -> errors::Result<Self::KeyPair> {
+	fn generate_key_pair(&self) -> CommonResult<Self::KeyPair> {
 		let secret_key = get_sec_key();
 		let public_key = get_pub_key(secret_key);
 		Ok((secret_key, public_key))
 	}
 
-	fn key_pair_from_secret_key(&self, secret_key: &[u8]) -> errors::Result<Self::KeyPair> {
+	fn key_pair_from_secret_key(&self, secret_key: &[u8]) -> CommonResult<Self::KeyPair> {
 		let secret_key = slice_to_secret_key(secret_key)?;
 		let public_key = get_pub_key(secret_key);
 		Ok((secret_key, public_key))
 	}
 
-	fn verifier_from_public_key(&self, public_key: &[u8]) -> errors::Result<Self::Verifier> {
+	fn verifier_from_public_key(&self, public_key: &[u8]) -> CommonResult<Self::Verifier> {
 		let public_key = slice_to_public_key(public_key)?;
 		Ok(public_key)
 	}
@@ -73,9 +75,9 @@ impl KeyPair for (SecKey, PubKey) {
 }
 
 impl Verifier for PubKey {
-	type Error = errors::Error;
+	type Error = CommonError;
 
-	fn verify(&self, message: &[u8], signature: &[u8]) -> errors::Result<()> {
+	fn verify(&self, message: &[u8], signature: &[u8]) -> CommonResult<()> {
 		let signature = slice_to_signature(signature)?;
 
 		let verified = sm2_ver_sign(message, self.to_owned(), &signature);
@@ -87,9 +89,9 @@ impl Verifier for PubKey {
 	}
 }
 
-fn slice_to_secret_key(slice: &[u8]) -> errors::Result<SecKey> {
+fn slice_to_secret_key(slice: &[u8]) -> CommonResult<SecKey> {
 	if slice.len() != 32 {
-		bail!(errors::ErrorKind::InvalidSecretKey);
+		return Err(errors::ErrorKind::InvalidSecretKey.into());
 	}
 
 	let secret_key = slice_to_u64x4(&slice);
@@ -97,9 +99,9 @@ fn slice_to_secret_key(slice: &[u8]) -> errors::Result<SecKey> {
 	Ok(secret_key)
 }
 
-fn slice_to_public_key(slice: &[u8]) -> errors::Result<PubKey> {
+fn slice_to_public_key(slice: &[u8]) -> CommonResult<PubKey> {
 	if slice.len() != 65 || slice[0] != 4 {
-		bail!(errors::ErrorKind::InvalidPublicKey);
+		return Err(errors::ErrorKind::InvalidPublicKey.into());
 	}
 
 	let x_slice = &slice[1..33];
@@ -193,9 +195,9 @@ fn signature_to_vec(sig: Signature) -> Vec<u8> {
 	result
 }
 
-fn slice_to_signature(slice: &[u8]) -> errors::Result<Signature> {
+fn slice_to_signature(slice: &[u8]) -> CommonResult<Signature> {
 	if slice.len() != 64 {
-		bail!(errors::ErrorKind::VerificationFailed);
+		return Err(errors::ErrorKind::VerificationFailed.into());
 	}
 
 	let r_slice = &slice[0..32];

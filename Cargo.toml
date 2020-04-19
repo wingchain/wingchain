@@ -4,8 +4,6 @@ members = [
 	"bin/main/init",
 	"bin/main/node",
 	"utils/test",
-	"utils/hash_enum",
-	"utils/hash_enum_derive",
 	"core/crypto",
 	"core/crypto/dylib-samples/hash",
 	"core/crypto/dylib-samples/dsa",
@@ -16,6 +14,9 @@ members = [
 	"core/node/service",
 	"core/node/executor",
 	"core/node/executor/primitives",
+	"core/node/executor/executor-macro",
+	"core/node/txpool",
+	"core/node/chain",
 	"core/module/system",
 ]
 

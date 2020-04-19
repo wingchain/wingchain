@@ -8,13 +8,13 @@ edition = "2018"
 
 [dependencies]
 structopt = "0.3.11"
-error-chain = "0.12.2"
 rand = "0.7.3"
 chrono = "0.4.11"
 toml = "0.5.6"
 log = "0.4.0"
 
 base = { package = "main-base", path = "../base" }
+primitives = { path = "../../../core/primitives" }
 
 [dev-dependencies]
 assert_cmd = "0.12.0"

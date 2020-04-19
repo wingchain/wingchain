@@ -12,20 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use error_chain::*;
+use std::error::Error;
+use std::path::PathBuf;
 
-error_chain! {
-	foreign_links {
-		IO(std::io::Error) #[doc="IO error"];
-	}
-	links {
-		Base(base::errors::Error, base::errors::ErrorKind) #[doc="Base error"];
-		Service(service::errors::Error, service::errors::ErrorKind) #[doc="Service error"];
-	}
-	errors {
-		HomeDirNotInited(path: String) {
-			description(""),
-			display("Home dir not inited: {}", path),
-		}
+use primitives::errors::{CommonError, CommonErrorKind, Display};
+
+#[derive(Debug, Display)]
+pub enum ErrorKind {
+	#[display(fmt = "Not inited: home path: {:?}", _0)]
+	NotInited(PathBuf),
+}
+
+impl Error for ErrorKind {}
+
+impl From<ErrorKind> for CommonError {
+	fn from(error: ErrorKind) -> Self {
+		CommonError::new(CommonErrorKind::Main, Box::new(error))
 	}
 }

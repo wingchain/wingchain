@@ -12,8 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::convert::TryInto;
+use std::ffi::CStr;
 use std::os::raw::{c_char, c_uchar, c_uint};
 use std::path::PathBuf;
+use std::rc::Rc;
 
 #[cfg(unix)]
 use libloading::os::unix as imp;
@@ -21,11 +24,10 @@ use libloading::os::unix as imp;
 use libloading::os::windows as imp;
 use libloading::{Library, Symbol};
 
+use primitives::errors::{CommonError, CommonResult};
+
 use crate::dsa::{Dsa, KeyPair, Verifier};
 use crate::{errors, DsaLength};
-use std::convert::TryInto;
-use std::ffi::CStr;
-use std::rc::Rc;
 
 #[repr(C)]
 pub struct TKeyPair {
@@ -111,8 +113,8 @@ struct CallVerifier {
 }
 
 impl CustomLib {
-	pub fn new(path: &PathBuf) -> errors::Result<Self> {
-		let err = |_| errors::ErrorKind::CustomLibLoadFailed(format!("{:?}", path));
+	pub fn new(path: &PathBuf) -> CommonResult<Self> {
+		let err = |_| errors::ErrorKind::CustomLibLoadFailed(path.to_owned());
 
 		let lib = Library::new(path).map_err(err)?;
 
@@ -223,7 +225,7 @@ impl CustomLib {
 		call_name: &imp::Symbol<CallName>,
 		call_name_free: &imp::Symbol<CallNameFree>,
 		path: &PathBuf,
-	) -> errors::Result<String> {
+	) -> CommonResult<String> {
 		let err = |_| errors::ErrorKind::InvalidName(format!("{:?}", path));
 
 		let name: String = unsafe {
@@ -236,7 +238,7 @@ impl CustomLib {
 		Ok(name)
 	}
 
-	fn length(call_length: &imp::Symbol<CallLength>) -> errors::Result<CLength> {
+	fn length(call_length: &imp::Symbol<CallLength>) -> CommonResult<CLength> {
 		let length: CLength = unsafe {
 			let length = call_length();
 			length
@@ -275,7 +277,7 @@ impl Drop for CustomVerifier {
 }
 
 impl Dsa for CustomLib {
-	type Error = errors::Error;
+	type Error = CommonError;
 	type KeyPair = CustomKeyPair;
 	type Verifier = CustomVerifier;
 
@@ -374,7 +376,7 @@ impl KeyPair for CustomKeyPair {
 }
 
 impl Verifier for CustomVerifier {
-	type Error = errors::Error;
+	type Error = CommonError;
 	fn verify(&self, message: &[u8], signature: &[u8]) -> Result<(), Self::Error> {
 		let mut err = 0u32 as c_uint;
 		unsafe {

@@ -12,11 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub use hash_enum_derive::*;
+use std::error::Error;
+use std::fmt::Debug;
 
-pub trait HashEnum: Sized {
-	fn from_hash(hash: &[u8]) -> Option<Self>;
-	fn from_name(name: &str) -> Option<Self>;
-	fn hash(&self) -> &[u8];
-	fn name(&self) -> &str;
+use primitives::errors::{CommonError, CommonErrorKind, Display};
+use primitives::Hash;
+
+#[derive(Debug, Display)]
+pub enum ErrorKind {
+	#[display(fmt = "Exceed capacity: {}", _0)]
+	ExceedCapacity(usize),
+
+	#[display(fmt = "Duplicated tx: tx_hash: {:?}", _0)]
+	Duplicated(Hash),
+
+	#[display(fmt = "Insert error: tx_hash: {:?}", _0)]
+	Insert(Hash),
+}
+
+impl Error for ErrorKind {}
+
+impl From<ErrorKind> for CommonError {
+	fn from(error: ErrorKind) -> Self {
+		CommonError::new(CommonErrorKind::TxPool, Box::new(error))
+	}
 }

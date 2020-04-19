@@ -12,53 +12,42 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use error_chain::*;
+use std::error::Error;
+use std::path::PathBuf;
 
-error_chain! {
-	foreign_links {
-	}
-	links {
-	}
-	errors {
-		HashNameNotFound(name: String) {
-			description(""),
-			display("Hash name not found: {}", name),
-		}
-		CustomLibNotFound(path: String) {
-			description(""),
-			display("Custom lib not found: {}", path),
-		}
-		CustomLibLoadFailed(path: String) {
-			description(""),
-			display("Custom lib load failed: {}", path),
-		}
-		InvalidHashLength(length: usize) {
-			description(""),
-			display("Invalid hash length: {}", length),
-		}
-		InvalidName(path: String) {
-			description(""),
-			display("Invalid name: {}", path),
-		}
-		InvalidDsaLength(length: (usize, usize, usize)) {
-			description(""),
-			display("Invalid dsa length: {:?}", length),
-		}
-		InvalidSecretKey {
-			description(""),
-			display("Invalid public key"),
-		}
-		InvalidPublicKey {
-			description(""),
-			display("Invalid public key"),
-		}
-		VerificationFailed {
-			description(""),
-			display("Verification failed"),
-		}
-		InvalidAddressLength(length: usize) {
-			description(""),
-			display("Invalid address length: {}", length),
-		}
+use primitives::errors::{CommonError, CommonErrorKind, Display};
+
+#[derive(Debug, Display)]
+pub enum ErrorKind {
+	#[display(fmt = "Invalid secret key")]
+	InvalidSecretKey,
+
+	#[display(fmt = "Invalid public key")]
+	InvalidPublicKey,
+
+	#[display(fmt = "Verification failed")]
+	VerificationFailed,
+
+	#[display(fmt = "Custom lib load failed: {:?}", _0)]
+	CustomLibLoadFailed(PathBuf),
+
+	#[display(fmt = "Invalid hash length: {}", _0)]
+	InvalidHashLength(usize),
+
+	#[display(fmt = "Invalid dsa length: {:?}", _0)]
+	InvalidDsaLength((usize, usize, usize)),
+
+	#[display(fmt = "Invalid address length: {}", _0)]
+	InvalidAddressLength(usize),
+
+	#[display(fmt = "Invalid name: {}", _0)]
+	InvalidName(String),
+}
+
+impl Error for ErrorKind {}
+
+impl From<ErrorKind> for CommonError {
+	fn from(error: ErrorKind) -> Self {
+		CommonError::new(CommonErrorKind::Crypto, Box::new(error))
 	}
 }

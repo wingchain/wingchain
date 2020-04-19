@@ -14,6 +14,8 @@
 
 use std::convert::TryFrom;
 
+use primitives::errors::CommonError;
+
 pub mod address;
 pub mod dsa;
 pub mod errors;
@@ -42,7 +44,7 @@ impl Into<usize> for HashLength {
 }
 
 impl TryFrom<usize> for HashLength {
-	type Error = errors::Error;
+	type Error = CommonError;
 
 	#[inline]
 	fn try_from(i: usize) -> Result<Self, Self::Error> {
@@ -74,7 +76,7 @@ impl Into<(usize, usize, usize)> for DsaLength {
 }
 
 impl TryFrom<(usize, usize, usize)> for DsaLength {
-	type Error = errors::Error;
+	type Error = CommonError;
 
 	#[inline]
 	fn try_from(i: (usize, usize, usize)) -> Result<Self, Self::Error> {
@@ -105,7 +107,7 @@ impl Into<usize> for AddressLength {
 }
 
 impl TryFrom<usize> for AddressLength {
-	type Error = errors::Error;
+	type Error = CommonError;
 
 	#[inline]
 	fn try_from(i: usize) -> Result<Self, Self::Error> {

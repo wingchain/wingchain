@@ -8,10 +8,10 @@ edition = "2018"
 
 [dependencies]
 structopt = "0.3.11"
-error-chain = "0.12.2"
 
 base = { package = "main-base", path = "../base" }
 service = { package = "node-service", path = "../../../core/node/service" }
+primitives = { path = "../../../core/primitives" }
 
 [dev-dependencies]
 assert_cmd = "0.12.0"

@@ -12,28 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crypto::blake2b;
-use hash_enum::HashEnum;
+use serde::Serialize;
 
-#[test]
-fn test_hash_enum_derive() {
-	#[derive(HashEnum, PartialEq, Debug)]
-	enum Test {
-		Foo,
-		Bar,
-	}
+use node_chain::Chain;
+use primitives::errors::CommonResult;
+use primitives::{Hash, Transaction};
 
-	let test = Test::Bar;
-	assert_eq!(test.name(), "bar");
-	assert_eq!(test.hash(), &blake2b256(b"bar")[0..4]);
-	assert_eq!(Test::from_name("bar"), Some(Test::Bar));
-
-	let hash = &blake2b256(b"bar")[0..4];
-	assert_eq!(Test::from_hash(hash), Some(Test::Bar));
+pub trait TxPoolSupport {
+	fn hash<E: Serialize>(&self, data: &E) -> Hash;
+	fn validate_tx(&self, tx: &Transaction) -> CommonResult<()>;
 }
 
-fn blake2b256(data: &[u8]) -> [u8; 32] {
-	let mut out = [0u8; 32];
-	blake2b::Blake2b::blake2b(&mut out, &data, &[]);
-	out
+impl TxPoolSupport for Chain {
+	fn hash<E: Serialize>(&self, data: &E) -> Hash {
+		self.hash(data)
+	}
+	fn validate_tx(&self, tx: &Transaction) -> CommonResult<()> {
+		self.validate_tx(tx)
+	}
 }

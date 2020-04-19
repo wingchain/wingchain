@@ -9,8 +9,9 @@ edition = "2018"
 [dependencies]
 rust_crypto = { version = "0.2.36", package = "rust-crypto" }
 yogcrypt = "0.0.0"
-error-chain = "0.12.2"
 libloading = "0.5.2"
 ring = { version = "0.16.11", features = ["std"] }
 rand = "0.7.3"
 untrusted = "0.7.0"
+
+primitives = { path = "../primitives" }

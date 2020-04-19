@@ -16,56 +16,70 @@ use std::fs;
 use std::path::PathBuf;
 
 use chrono::TimeZone;
-use error_chain::bail;
 use log::info;
 use rand::{thread_rng, Rng};
 
-use base::{get_default_home, spec::Spec, SPEC_FILE};
+use base::{config::Config, get_default_home, spec::Spec, CONFIG_FILE, SPEC_FILE};
+use primitives::errors::CommonResult;
 
 use crate::cli::InitOpt;
 
 pub mod cli;
 pub mod errors;
 
-pub fn run(opt: InitOpt) -> errors::Result<()> {
+pub fn run(opt: InitOpt) -> CommonResult<()> {
 	let home = match opt.shared_params.home {
 		Some(home) => home,
 		None => get_default_home()?,
 	};
 
 	if home.exists() {
-		bail!(errors::ErrorKind::HomeDirExists(format!("{:?}", home)));
+		return Err(errors::ErrorKind::HomePathExists(home).into());
 	}
 
 	init_config(&home)?;
 	init_data(&home)?;
 
-	info!("Inited: home dir: {:?}", home);
+	info!("Inited: home path: {:?}", home);
 
 	Ok(())
 }
 
-fn init_config(home: &PathBuf) -> errors::Result<()> {
+fn init_config(home: &PathBuf) -> CommonResult<()> {
 	let config_path = base::get_config_path(home);
 
-	fs::create_dir_all(&config_path)?;
+	fs::create_dir_all(&config_path).map_err(|e| errors::ErrorKind::IO(e))?;
 
 	init_spec_file(&config_path)?;
+	init_config_file(&config_path)?;
 
 	Ok(())
 }
 
-fn init_spec_file(config_path: &PathBuf) -> errors::Result<()> {
+fn init_spec_file(config_path: &PathBuf) -> CommonResult<()> {
 	let template = &include_bytes!("./res/spec.toml")[..];
 
 	let template = String::from_utf8_lossy(template);
 	let template = template.replace("${CHAIN_ID}", &gen_chain_id());
 	let template = template.replace("${TIME}", &gen_time());
 
-	fs::write(config_path.join(SPEC_FILE), &template)?;
+	fs::write(config_path.join(SPEC_FILE), &template).map_err(|e| errors::ErrorKind::IO(e))?;
 
 	// test
-	toml::from_str::<Spec>(&template)?;
+	toml::from_str::<Spec>(&template).map_err(|e| errors::ErrorKind::TomlDe(e))?;
+
+	Ok(())
+}
+
+fn init_config_file(config_path: &PathBuf) -> CommonResult<()> {
+	let template = &include_bytes!("./res/config.toml")[..];
+
+	let template = String::from_utf8_lossy(template).to_string();
+
+	fs::write(config_path.join(CONFIG_FILE), &template).map_err(|e| errors::ErrorKind::IO(e))?;
+
+	// test
+	toml::from_str::<Config>(&template).map_err(|e| errors::ErrorKind::TomlDe(e))?;
 
 	Ok(())
 }
@@ -83,10 +97,10 @@ fn gen_time() -> String {
 	chrono::Local.timestamp_millis(millis).to_rfc3339()
 }
 
-fn init_data(home: &PathBuf) -> errors::Result<()> {
+fn init_data(home: &PathBuf) -> CommonResult<()> {
 	let data_path = base::get_data_path(home);
 
-	fs::create_dir_all(data_path)?;
+	fs::create_dir_all(data_path).map_err(|e| errors::ErrorKind::IO(e))?;
 
 	Ok(())
 }

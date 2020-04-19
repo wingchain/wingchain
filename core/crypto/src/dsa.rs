@@ -12,16 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::fmt::Debug;
 use std::path::PathBuf;
 use std::str::FromStr;
 
+use primitives::errors::{CommonError, CommonResult};
+
+pub use crate::dsa::custom_lib::CLength;
 use crate::dsa::custom_lib::CustomLib;
 use crate::dsa::ed25519::Ed25519;
 use crate::dsa::sm2::SM2;
-use crate::{errors, DsaLength};
-
-pub use crate::dsa::custom_lib::CLength;
-use std::fmt::Debug;
+use crate::DsaLength;
 
 mod custom_lib;
 mod ed25519;
@@ -77,7 +78,7 @@ pub enum VerifierImpl {
 }
 
 impl Dsa for DsaImpl {
-	type Error = errors::Error;
+	type Error = CommonError;
 	type KeyPair = KeyPairImpl;
 	type Verifier = VerifierImpl;
 
@@ -100,7 +101,7 @@ impl Dsa for DsaImpl {
 	}
 
 	#[inline]
-	fn generate_key_pair(&self) -> errors::Result<Self::KeyPair> {
+	fn generate_key_pair(&self) -> CommonResult<Self::KeyPair> {
 		match self {
 			Self::Ed25519 => Ok(KeyPairImpl::Ed25519(Ed25519.generate_key_pair()?)),
 			Self::SM2 => Ok(KeyPairImpl::SM2(SM2.generate_key_pair()?)),
@@ -109,7 +110,7 @@ impl Dsa for DsaImpl {
 	}
 
 	#[inline]
-	fn key_pair_from_secret_key(&self, secret_key: &[u8]) -> errors::Result<Self::KeyPair> {
+	fn key_pair_from_secret_key(&self, secret_key: &[u8]) -> CommonResult<Self::KeyPair> {
 		match self {
 			Self::Ed25519 => Ok(KeyPairImpl::Ed25519(
 				Ed25519.key_pair_from_secret_key(secret_key)?,
@@ -122,7 +123,7 @@ impl Dsa for DsaImpl {
 	}
 
 	#[inline]
-	fn verifier_from_public_key(&self, public_key: &[u8]) -> errors::Result<Self::Verifier> {
+	fn verifier_from_public_key(&self, public_key: &[u8]) -> CommonResult<Self::Verifier> {
 		match self {
 			Self::Ed25519 => Ok(VerifierImpl::Ed25519(
 				Ed25519.verifier_from_public_key(public_key)?,
@@ -136,7 +137,7 @@ impl Dsa for DsaImpl {
 }
 
 impl FromStr for DsaImpl {
-	type Err = errors::Error;
+	type Err = CommonError;
 	#[inline]
 	fn from_str(s: &str) -> Result<DsaImpl, Self::Err> {
 		match s {
@@ -176,8 +177,8 @@ impl KeyPair for KeyPairImpl {
 }
 
 impl Verifier for VerifierImpl {
-	type Error = errors::Error;
-	fn verify(&self, message: &[u8], signature: &[u8]) -> errors::Result<()> {
+	type Error = CommonError;
+	fn verify(&self, message: &[u8], signature: &[u8]) -> CommonResult<()> {
 		match self {
 			VerifierImpl::Ed25519(p) => p.verify(message, signature),
 			VerifierImpl::SM2(p) => p.verify(message, signature),
