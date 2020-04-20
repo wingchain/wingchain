@@ -1,0 +1,16 @@
+[package]
+name = "node-api"
+version = "0.1.0"
+authors = ["developer <developer@wingchain.cn>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+node-chain = { path = "../chain" }
+tokio ={ version = "0.2.17", features = ["rt-core", "time", "sync", "stream", "macros"] }
+actix-web = "2.0.0"
+actix-rt = "1.1.0"
+jsonrpc-v2 = "0.5.2"
+
+primitives = { path = "../../primitives" }

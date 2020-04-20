@@ -12,22 +12,37 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use serde::Deserialize;
+use crate::support::ApiSupport;
+use std::sync::Arc;
 
-#[derive(Deserialize, Debug)]
-pub struct Config {
-	pub txpool: TxPoolConfig,
-}
+pub mod errors;
+mod rpc;
+pub mod support;
 
-#[derive(Deserialize, Debug)]
-pub struct TxPoolConfig {
-	pub pool_capacity: usize,
-	pub buffer_capacity: usize,
-}
-
-#[derive(Deserialize, Debug)]
+#[derive(Clone)]
 pub struct ApiConfig {
 	pub rpc_addr: String,
 	pub rpc_workers: usize,
-	pub rpc_maxconns: usize,
+	pub rpc_maxconn: usize,
+}
+
+pub struct Api<S>
+where
+	S: ApiSupport,
+{
+	support: Arc<S>,
+}
+
+impl<S> Api<S>
+where
+	S: ApiSupport,
+{
+	pub fn new(config: ApiConfig, support: Arc<S>) -> Self {
+		let api = Api { support };
+
+		// start rpc in new thread
+		rpc::start_rpc(&config);
+
+		api
+	}
 }

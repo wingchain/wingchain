@@ -14,6 +14,7 @@
 
 use std::fmt;
 
+use crate::errors::{CommonError, CommonErrorKind, CommonResult};
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 
@@ -58,7 +59,7 @@ pub struct Hash(pub Vec<u8>);
 
 pub type BlockNumber = u32;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Header {
 	pub number: BlockNumber,
 	pub timestamp: u32,
@@ -70,18 +71,27 @@ pub struct Header {
 	pub payload_executed_state_root: Hash,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Body {
-	pub meta_txs: Vec<Transaction>,
-	pub payload_txs: Vec<Transaction>,
+	pub meta_txs: Vec<Hash>,
+	pub payload_txs: Vec<Hash>,
 }
 
+#[derive(Debug, PartialEq)]
 pub struct Block {
 	pub header: Header,
 	pub body: Body,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct FullBlock {
+	pub number: BlockNumber,
+	pub block_hash: Hash,
+	pub header: Header,
+	pub body: Body,
+	pub txs: Vec<(Hash, Transaction)>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Executed {
 	pub payload_executed_state_root: Hash,
 }
@@ -91,6 +101,14 @@ pub type DBValue = Vec<u8>;
 
 impl fmt::Debug for Hash {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		write!(f, "0x{}", hex::encode(&self.0))
+		write!(f, "{}", hex::encode(&self.0))
+	}
+}
+
+impl Hash {
+	pub fn from_hex(hex: &str) -> CommonResult<Self> {
+		let hex =
+			hex::decode(hex).map_err(|e| CommonError::new(CommonErrorKind::Codec, Box::new(e)))?;
+		Ok(Hash(hex))
 	}
 }

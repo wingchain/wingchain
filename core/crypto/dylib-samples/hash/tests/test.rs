@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![cfg(feature = "build-dep-test")]
+#![cfg(feature = "build-dep-tests")]
 
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_uchar, c_uint};
@@ -130,10 +130,10 @@ fn test_c_string_raw_pointer() {
 	free_str(raw);
 
 	// known value, copied before freeing
-	assert_eq!(str1, "test");
+	assert_eq!(str1, "tests");
 
 	// unknown value, freed
-	assert_ne!(str2, "test");
+	assert_ne!(str2, "tests");
 }
 
 #[test]
@@ -142,7 +142,7 @@ fn test_c_string_raw_pointer2() {
 
 	let string = get_string(raw);
 
-	assert_eq!(string, "test".to_string());
+	assert_eq!(string, "tests".to_string());
 
 	move_string(string);
 
@@ -161,7 +161,7 @@ fn get_string(raw: *mut i8) -> String {
 }
 
 fn get_str() -> *mut c_char {
-	let s = CString::new("test").unwrap();
+	let s = CString::new("tests").unwrap();
 	let s = s.into_raw();
 	s
 }

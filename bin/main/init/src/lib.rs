@@ -65,7 +65,7 @@ fn init_spec_file(config_path: &PathBuf) -> CommonResult<()> {
 
 	fs::write(config_path.join(SPEC_FILE), &template).map_err(|e| errors::ErrorKind::IO(e))?;
 
-	// test
+	// tests
 	toml::from_str::<Spec>(&template).map_err(|e| errors::ErrorKind::TomlDe(e))?;
 
 	Ok(())
@@ -78,7 +78,7 @@ fn init_config_file(config_path: &PathBuf) -> CommonResult<()> {
 
 	fs::write(config_path.join(CONFIG_FILE), &template).map_err(|e| errors::ErrorKind::IO(e))?;
 
-	// test
+	// tests
 	toml::from_str::<Config>(&template).map_err(|e| errors::ErrorKind::TomlDe(e))?;
 
 	Ok(())

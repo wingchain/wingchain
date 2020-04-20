@@ -98,7 +98,7 @@ fn bench_key_length_dylib(b: &mut Bencher) {
 
 #[bench]
 fn bench_string(b: &mut Bencher) {
-	let get_name = || "test".to_string();
+	let get_name = || "tests".to_string();
 
 	b.iter(|| black_box(get_name()));
 }
@@ -107,7 +107,7 @@ fn bench_string(b: &mut Bencher) {
 #[bench]
 fn bench_string_ffi(b: &mut Bencher) {
 	let get_name = || {
-		let s = CString::new("test").unwrap().into_raw();
+		let s = CString::new("tests").unwrap().into_raw();
 		unsafe { CString::from_raw(s).into_string().unwrap() }
 	};
 

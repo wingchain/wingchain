@@ -31,7 +31,9 @@ use node_db::{DBTransaction, DB};
 use node_executor::{module, Context, Executor};
 use node_statedb::{StateDB, TrieRoot};
 use primitives::errors::CommonResult;
-use primitives::{codec, Block, BlockNumber, Body, DBKey, Executed, Hash, Header, Transaction};
+use primitives::{
+	codec, Block, BlockNumber, Body, DBKey, Executed, FullBlock, Hash, Header, Transaction,
+};
 
 pub mod errors;
 
@@ -102,8 +104,9 @@ impl Chain {
 	}
 
 	#[allow(dead_code)]
-	pub fn hash<D: Serialize>(&self, data: &D) -> Hash {
-		self.hash_slice(&codec::encode(data).expect("qed"))
+	pub fn hash<D: Serialize>(&self, data: &D) -> CommonResult<Hash> {
+		let encoded = codec::encode(data)?;
+		Ok(self.hash_slice(&encoded))
 	}
 
 	pub fn hash_slice(&self, data: &[u8]) -> Hash {
@@ -116,17 +119,74 @@ impl Chain {
 		self.executor.validate_tx(tx)
 	}
 
-	#[allow(dead_code)]
 	pub fn get_best_number(&self) -> CommonResult<Option<BlockNumber>> {
-		let best_number = self
-			.db
-			.get(node_db::columns::GLOBAL, node_db::global_key::BEST_NUMBER)?;
+		self.db.get_with(
+			node_db::columns::GLOBAL,
+			node_db::global_key::BEST_NUMBER,
+			|x| codec::decode(&x[..]),
+		)
+	}
 
-		let best_number = match best_number {
-			Some(best_number) => codec::decode(&mut &best_number[..])?,
-			None => None,
+	pub fn get_block_hash(&self, number: &BlockNumber) -> CommonResult<Option<Hash>> {
+		self.db.get_with(
+			node_db::columns::BLOCK_HASH,
+			&DBKey::from_slice(&codec::encode(&number)?),
+			|x| codec::decode(&x[..]),
+		)
+	}
+
+	pub fn get_header(&self, block_hash: &Hash) -> CommonResult<Option<Header>> {
+		self.db.get_with(
+			node_db::columns::HEADER,
+			&DBKey::from_slice(&block_hash.0),
+			|x| codec::decode(&x[..]),
+		)
+	}
+
+	pub fn get_block(&self, block_hash: &Hash) -> CommonResult<Option<Block>> {
+		let header = match self.get_header(block_hash)? {
+			Some(header) => header,
+			None => return Ok(None),
 		};
-		Ok(best_number)
+		let meta_txs: Vec<Hash> = self
+			.db
+			.get_with(
+				node_db::columns::META_TXS,
+				&DBKey::from_slice(&block_hash.0),
+				|x| codec::decode(&x[..]),
+			)?
+			.ok_or(errors::ErrorKind::Data(format!(
+				"block missing meta_txs: block_hash: {:?}",
+				block_hash
+			)))?;
+
+		let payload_txs: Vec<Hash> = self
+			.db
+			.get_with(
+				node_db::columns::PAYLOAD_TXS,
+				&DBKey::from_slice(&block_hash.0),
+				|x| codec::decode(&x[..]),
+			)?
+			.ok_or(errors::ErrorKind::Data(format!(
+				"block missing meta_txs: block_hash: {:?}",
+				block_hash
+			)))?;
+
+		Ok(Some(Block {
+			header,
+			body: Body {
+				meta_txs,
+				payload_txs,
+			},
+		}))
+	}
+
+	pub fn get_executed(&self, block_hash: &Hash) -> CommonResult<Option<Executed>> {
+		self.db.get_with(
+			node_db::columns::EXECUTED,
+			&DBKey::from_slice(&block_hash.0),
+			|x| codec::decode(&x[..]),
+		)
 	}
 
 	fn get_spec(config: &ChainConfig) -> CommonResult<(bool, DB, Spec)> {
@@ -242,7 +302,7 @@ impl Chain {
 		let (meta_state_root, meta_transaction) = context.get_meta_update()?;
 		let (meta_txs_root, meta_txs) = context.get_meta_txs()?;
 
-		let (payload_state_root, payload_transaction) = context.get_meta_update()?;
+		let (payload_state_root, payload_transaction) = context.get_payload_update()?;
 		let (payload_txs_root, payload_txs) = context.get_payload_txs()?;
 
 		drop(context);
@@ -252,98 +312,164 @@ impl Chain {
 		let meta_txs = meta_txs
 			.into_iter()
 			.map(Arc::try_unwrap)
-			.collect::<Result<Vec<_>, _>>()
+			.collect::<Result<Vec<Transaction>, _>>()
 			.expect("qed");
 		let payload_txs = payload_txs
 			.into_iter()
 			.map(Arc::try_unwrap)
-			.collect::<Result<Vec<_>, _>>()
+			.collect::<Result<Vec<Transaction>, _>>()
 			.expect("qed");
 
-		let block = Block {
-			header: Header {
-				number,
-				timestamp,
-				parent_hash: zero_hash.clone(),
-				meta_txs_root,
-				meta_state_root,
-				payload_txs_root,
-				payload_executed_gap: 1,
-				payload_executed_state_root: zero_hash,
-			},
+		let meta_txs = meta_txs
+			.into_iter()
+			.map(|x| self.hash(&x).map(|hash| (hash, x)))
+			.collect::<CommonResult<Vec<_>>>()?;
+
+		let payload_txs = payload_txs
+			.into_iter()
+			.map(|x| self.hash(&x).map(|hash| (hash, x)))
+			.collect::<CommonResult<Vec<_>>>()?;
+
+		let meta_tx_hashes = meta_txs
+			.iter()
+			.map(|(tx_hash, _)| tx_hash.clone())
+			.collect::<Vec<_>>();
+		let payload_tx_hashes = payload_txs
+			.iter()
+			.map(|(tx_hash, _)| tx_hash.clone())
+			.collect::<Vec<_>>();
+
+		let header = Header {
+			number,
+			timestamp,
+			parent_hash: zero_hash.clone(),
+			meta_txs_root,
+			meta_state_root,
+			payload_txs_root,
+			payload_executed_gap: 1,
+			payload_executed_state_root: zero_hash,
+		};
+
+		let block_hash = self.hash(&header)?;
+
+		let txs = meta_txs
+			.into_iter()
+			.chain(payload_txs.into_iter())
+			.collect::<Vec<_>>();
+
+		let block = FullBlock {
+			number,
+			block_hash,
+			header,
 			body: Body {
-				meta_txs,
-				payload_txs,
+				meta_txs: meta_tx_hashes,
+				payload_txs: payload_tx_hashes,
 			},
+			txs,
+		};
+
+		let executed = Executed {
+			payload_executed_state_root: payload_state_root,
 		};
 
 		let mut transaction = DBTransaction::new();
 
-		// commit block
-		let header_serialized = codec::encode(&block.header).expect("qed");
-		let block_hash = self.hash_slice(&header_serialized);
+		commit_block(&mut transaction, &block, meta_transaction)?;
 
-		// 1. meta state
-		transaction.extend(meta_transaction);
+		commit_executed(
+			&mut transaction,
+			&block.block_hash,
+			&executed,
+			payload_transaction,
+		)?;
 
-		// 2. header
-		transaction.put_owned(
-			node_db::columns::HEADER,
-			DBKey::from_slice(&block_hash.0),
-			header_serialized,
-		);
-
-		// 3. body
-		transaction.put_owned(
-			node_db::columns::META_TXS,
-			DBKey::from_slice(&block_hash.0),
-			codec::encode(&block.body.meta_txs).expect("qed"),
-		);
-		transaction.put_owned(
-			node_db::columns::PAYLOAD_TXS,
-			DBKey::from_slice(&block_hash.0),
-			codec::encode(&block.body.payload_txs).expect("qed"),
-		);
-
-		// 4. block hash
-		transaction.put_owned(
-			node_db::columns::BLOCK_HASH,
-			DBKey::from_slice(&codec::encode(&number).expect("qed")),
-			block_hash.0.clone(),
-		);
-
-		// 5. number
-		transaction.put_owned(
-			node_db::columns::GLOBAL,
-			DBKey::from_slice(node_db::global_key::BEST_NUMBER),
-			codec::encode(&number).expect("qed"),
-		);
-
-		// commit executed
-		// 1. payload state
-		transaction.extend(payload_transaction);
-
-		// 2. executed
-		let executed = Executed {
-			payload_executed_state_root: payload_state_root,
-		};
-		transaction.put_owned(
-			node_db::columns::EXECUTED,
-			DBKey::from_slice(&block_hash.0),
-			codec::encode(&executed).expect("qed"),
-		);
-
-		// commit spec
-		transaction.put_owned(
-			node_db::columns::GLOBAL,
-			DBKey::from_slice(node_db::global_key::SPEC),
-			codec::encode(&spec_str).expect("qed"),
-		);
+		commit_spec(&mut transaction, &spec_str)?;
 
 		self.db.write(transaction)?;
 
-		info!("Genesis block inited: block hash: {:?}", block_hash);
+		info!("Genesis block inited: block hash: {:?}", block.block_hash);
 
 		Ok(())
 	}
+}
+
+fn commit_block(
+	transaction: &mut DBTransaction,
+	block: &FullBlock,
+	meta_transaction: DBTransaction,
+) -> CommonResult<()> {
+	// 1. meta state
+	transaction.extend(meta_transaction);
+
+	let block_hash = &block.block_hash;
+
+	// 2. header
+	transaction.put_owned(
+		node_db::columns::HEADER,
+		DBKey::from_slice(&block_hash.0),
+		codec::encode(&block.header)?,
+	);
+
+	// 3. body
+	transaction.put_owned(
+		node_db::columns::META_TXS,
+		DBKey::from_slice(&block_hash.0),
+		codec::encode(&block.body.meta_txs)?,
+	);
+	transaction.put_owned(
+		node_db::columns::PAYLOAD_TXS,
+		DBKey::from_slice(&block_hash.0),
+		codec::encode(&block.body.payload_txs)?,
+	);
+
+	// 4. txs
+	for (tx_hash, tx) in &block.txs {
+		transaction.put_owned(
+			node_db::columns::TX,
+			DBKey::from_slice(&tx_hash.0),
+			codec::encode(&tx)?,
+		);
+	}
+
+	// 5. block hash
+	transaction.put_owned(
+		node_db::columns::BLOCK_HASH,
+		DBKey::from_slice(&codec::encode(&block.number)?),
+		codec::encode(&block.block_hash)?,
+	);
+
+	// 6. number
+	transaction.put_owned(
+		node_db::columns::GLOBAL,
+		DBKey::from_slice(node_db::global_key::BEST_NUMBER),
+		codec::encode(&block.number)?,
+	);
+	Ok(())
+}
+
+fn commit_executed(
+	transaction: &mut DBTransaction,
+	block_hash: &Hash,
+	executed: &Executed,
+	payload_transaction: DBTransaction,
+) -> CommonResult<()> {
+	// 1. payload state
+	transaction.extend(payload_transaction);
+
+	// 2. executed
+	transaction.put_owned(
+		node_db::columns::EXECUTED,
+		DBKey::from_slice(&block_hash.0),
+		codec::encode(&executed)?,
+	);
+	Ok(())
+}
+
+fn commit_spec(transaction: &mut DBTransaction, spec_str: &str) -> CommonResult<()> {
+	transaction.put_owned(
+		node_db::columns::GLOBAL,
+		DBKey::from_slice(node_db::global_key::SPEC),
+		codec::encode(&spec_str)?,
+	);
+	Ok(())
 }

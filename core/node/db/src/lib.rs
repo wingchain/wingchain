@@ -89,6 +89,20 @@ impl DB {
 		Ok(result)
 	}
 
+	pub fn get_with<U, F: FnOnce(DBValue) -> CommonResult<U>>(
+		&self,
+		col: u32,
+		key: &[u8],
+		f: F,
+	) -> CommonResult<Option<U>> {
+		let value = self.get(col, key)?;
+		let value = match value {
+			Some(value) => Some(f(value)?),
+			None => None,
+		};
+		Ok(value)
+	}
+
 	pub fn write(&self, transaction: DBTransaction) -> CommonResult<()> {
 		let ref db = *self.db.write();
 
@@ -187,7 +201,7 @@ impl DBTransaction {
 
 pub mod columns {
 	/// column names, which should be corresponding to the following const
-	pub const COLUMN_NAMES: [&str; 8] = [
+	pub const COLUMN_NAMES: [&str; 9] = [
 		"global",
 		"block_hash",
 		"header",
@@ -195,6 +209,7 @@ pub mod columns {
 		"meta_txs",
 		"payload_state",
 		"payload_txs",
+		"tx",
 		"executed",
 	];
 
@@ -210,17 +225,20 @@ pub mod columns {
 	/// meta state trie
 	pub const META_STATE: u32 = 3;
 
-	/// block hash to meta transactions
+	/// block hash to meta transaction hashes
 	pub const META_TXS: u32 = 4;
 
 	/// payload state trie
 	pub const PAYLOAD_STATE: u32 = 5;
 
-	/// block hash to payload transactions
+	/// block hash to payload transaction hashes
 	pub const PAYLOAD_TXS: u32 = 6;
 
+	/// transaction hash to transaction
+	pub const TX: u32 = 7;
+
 	/// block hash to executed
-	pub const EXECUTED: u32 = 7;
+	pub const EXECUTED: u32 = 8;
 }
 
 pub mod global_key {

@@ -12,22 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use serde::Deserialize;
+use std::error::Error;
+use std::fmt::Debug;
 
-#[derive(Deserialize, Debug)]
-pub struct Config {
-	pub txpool: TxPoolConfig,
+use primitives::errors::{CommonError, CommonErrorKind, Display};
+
+#[derive(Debug, Display)]
+pub enum ErrorKind {
+	#[display(fmt = "IO error: {:?}", _0)]
+	IO(std::io::Error),
 }
 
-#[derive(Deserialize, Debug)]
-pub struct TxPoolConfig {
-	pub pool_capacity: usize,
-	pub buffer_capacity: usize,
-}
+impl Error for ErrorKind {}
 
-#[derive(Deserialize, Debug)]
-pub struct ApiConfig {
-	pub rpc_addr: String,
-	pub rpc_workers: usize,
-	pub rpc_maxconns: usize,
+impl From<ErrorKind> for CommonError {
+	fn from(error: ErrorKind) -> Self {
+		CommonError::new(CommonErrorKind::Api, Box::new(error))
+	}
 }

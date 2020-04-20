@@ -18,8 +18,11 @@ use primitives::errors::{CommonError, CommonErrorKind, Display};
 
 #[derive(Debug, Display)]
 pub enum ErrorKind {
-	#[display(fmt = "Spec error: {:?}", _0)]
+	#[display(fmt = "Spec error: {}", _0)]
 	Spec(String),
+
+	#[display(fmt = "Data error: {}", _0)]
+	Data(String),
 }
 
 impl Error for ErrorKind {}

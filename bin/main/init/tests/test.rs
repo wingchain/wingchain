@@ -68,7 +68,7 @@ fn test_init() {
 	assert!(DateTime::parse_from_rfc3339(&param.time).is_ok());
 }
 
-#[cfg(feature = "build-dep-test")]
+#[cfg(feature = "build-dep-tests")]
 #[test]
 fn test_init_command() {
 	use assert_cmd::Command;

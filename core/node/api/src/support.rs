@@ -12,22 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use serde::Deserialize;
-
-#[derive(Deserialize, Debug)]
-pub struct Config {
-	pub txpool: TxPoolConfig,
-}
-
-#[derive(Deserialize, Debug)]
-pub struct TxPoolConfig {
-	pub pool_capacity: usize,
-	pub buffer_capacity: usize,
-}
-
-#[derive(Deserialize, Debug)]
-pub struct ApiConfig {
-	pub rpc_addr: String,
-	pub rpc_workers: usize,
-	pub rpc_maxconns: usize,
+pub trait ApiSupport {
+	fn test(&self);
 }

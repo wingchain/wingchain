@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![cfg(feature = "build-dep-test")]
+#![cfg(feature = "build-dep-tests")]
 
 use std::os::raw::{c_char, c_uchar, c_uint};
 

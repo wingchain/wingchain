@@ -12,22 +12,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use serde::Deserialize;
+use node_api::support::ApiSupport;
+use node_api::{Api, ApiConfig};
+use std::sync::Arc;
 
-#[derive(Deserialize, Debug)]
-pub struct Config {
-	pub txpool: TxPoolConfig,
+#[tokio::test]
+async fn test_api() {
+	let config = ApiConfig {
+		rpc_addr: "0.0.0.0:3109".to_string(),
+		rpc_workers: 1,
+		rpc_maxconn: 100,
+	};
+	let support = Arc::new(get_support());
+
+	let api = Api::new(config, support);
+
+	// tokio::signal::ctrl_c().await;
 }
 
-#[derive(Deserialize, Debug)]
-pub struct TxPoolConfig {
-	pub pool_capacity: usize,
-	pub buffer_capacity: usize,
+struct TestApiSupport;
+
+impl ApiSupport for TestApiSupport {
+	fn test(&self) {}
 }
 
-#[derive(Deserialize, Debug)]
-pub struct ApiConfig {
-	pub rpc_addr: String,
-	pub rpc_workers: usize,
-	pub rpc_maxconns: usize,
+fn get_support() -> TestApiSupport {
+	TestApiSupport
 }

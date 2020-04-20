@@ -2,4 +2,4 @@ language: rust
 cache: cargo
 script:
   - cargo build --verbose --all
-  - cargo test --verbose --all --all-features
+  - cargo tests --verbose --all --all-features
