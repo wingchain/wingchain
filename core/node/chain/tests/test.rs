@@ -12,17 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::collections::HashMap;
+use std::fs;
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use serde::Serialize;
+
 use crypto::hash::{Hash as HashT, HashImpl};
 use node_chain::{Chain, ChainConfig};
 use node_db::DB;
 use node_executor::{module, Executor};
 use node_statedb::{StateDB, TrieRoot};
 use primitives::{codec, Block, Body, DBKey, Executed, Hash, Header, Transaction};
-use serde::Serialize;
-use std::collections::HashMap;
-use std::fs;
-use std::path::PathBuf;
-use std::sync::Arc;
 
 #[test]
 fn test_chain() {
@@ -43,39 +45,50 @@ fn test_chain() {
 
 	assert_eq!(best_number, Some(0));
 
-	let (expected_block_hash, expected_body, expect_executed) = expected_data();
+	let executed_number = chain.get_executed_number().unwrap();
+
+	assert_eq!(executed_number, None);
+
+	let (expected_block_hash, expected_block, expected_executed, expected_tx) = expected_data();
 
 	let block_hash = chain.get_block_hash(&0).unwrap().unwrap();
 	assert_eq!(block_hash, expected_block_hash);
 
 	let header = chain.get_header(&block_hash).unwrap().unwrap();
 
-	assert_eq!(header, expected_body.header.clone());
+	assert_eq!(header, expected_block.header.clone());
 
 	let block = chain.get_block(&block_hash).unwrap().unwrap();
 
-	assert_eq!(block, expected_body);
+	assert_eq!(block, expected_block);
 
 	let executed = chain.get_executed(&block_hash).unwrap().unwrap();
 
-	assert_eq!(executed, expect_executed);
+	assert_eq!(executed, expected_executed);
+
+	let tx = chain
+		.get_transaction(&block.body.meta_txs[0])
+		.unwrap()
+		.unwrap();
+
+	assert_eq!(tx, expected_tx);
 }
 
-fn expected_data() -> (Hash, Block, Executed) {
+fn expected_data() -> (Hash, Block, Executed, Transaction) {
 	let executor = Executor;
 
-	let txs = vec![Arc::new(
-		executor
-			.build_tx(
-				"system".to_string(),
-				"init".to_string(),
-				module::system::InitParams {
-					chain_id: "chain-test".to_string(),
-					timestamp: 1587051962,
-				},
-			)
-			.unwrap(),
-	)];
+	let tx = executor
+		.build_tx(
+			"system".to_string(),
+			"init".to_string(),
+			module::system::InitParams {
+				chain_id: "chain-test".to_string(),
+				timestamp: 1587051962,
+			},
+		)
+		.unwrap();
+
+	let txs = vec![Arc::new(tx.clone())];
 
 	let meta_txs_root = expected_txs_root(&txs);
 	let meta_state_root = expected_meta_state_root(&txs);
@@ -113,7 +126,7 @@ fn expected_data() -> (Hash, Block, Executed) {
 		payload_executed_state_root: payload_state_root,
 	};
 
-	(block_hash, block, executed)
+	(block_hash, block, executed, tx)
 }
 
 fn hash<E: Serialize>(data: E) -> Hash {

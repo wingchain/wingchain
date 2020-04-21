@@ -14,9 +14,10 @@
 
 use std::fmt;
 
-use crate::errors::{CommonError, CommonErrorKind, CommonResult};
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
+
+use crate::errors::{CommonError, CommonErrorKind, CommonResult};
 
 pub mod codec;
 pub mod errors;
@@ -32,10 +33,10 @@ pub type Nonce = u32;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Witness {
-	address: Address,
-	signature: Signature,
-	nonce: Nonce,
-	expire: BlockNumber,
+	pub address: Address,
+	pub signature: Signature,
+	pub nonce: Nonce,
+	pub expire: BlockNumber,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]

@@ -21,6 +21,9 @@ use primitives::errors::{CommonError, CommonErrorKind, Display};
 pub enum ErrorKind {
 	#[display(fmt = "IO error: {:?}", _0)]
 	IO(std::io::Error),
+
+	#[display(fmt = "Invalid params: {}", _0)]
+	InvalidParams(String),
 }
 
 impl Error for ErrorKind {}

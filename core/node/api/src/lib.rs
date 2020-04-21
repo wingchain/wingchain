@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::support::ApiSupport;
 use std::sync::Arc;
+
+use crate::support::ApiSupport;
 
 pub mod errors;
 mod rpc;
@@ -30,18 +31,21 @@ pub struct Api<S>
 where
 	S: ApiSupport,
 {
+	#[allow(dead_code)]
 	support: Arc<S>,
 }
 
 impl<S> Api<S>
 where
-	S: ApiSupport,
+	S: ApiSupport + Send + Sync + 'static,
 {
 	pub fn new(config: ApiConfig, support: Arc<S>) -> Self {
-		let api = Api { support };
+		let api = Api {
+			support: support.clone(),
+		};
 
 		// start rpc in new thread
-		rpc::start_rpc(&config);
+		rpc::start_rpc(&config, support);
 
 		api
 	}

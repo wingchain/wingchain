@@ -127,6 +127,34 @@ impl Chain {
 		)
 	}
 
+	pub fn get_executed_number(&self) -> CommonResult<Option<BlockNumber>> {
+		let best_number = match self.get_best_number()? {
+			Some(best_number) => best_number,
+			None => return Ok(None),
+		};
+
+		let block_hash = self
+			.get_block_hash(&best_number)?
+			.ok_or(errors::ErrorKind::Data(format!(
+				"missing block hash: number: {}",
+				best_number
+			)))?;
+
+		let header = self
+			.get_header(&block_hash)?
+			.ok_or(errors::ErrorKind::Data(format!(
+				"missing header: block_hash: {:?}",
+				block_hash
+			)))?;
+
+		let executed_number = match best_number {
+			0 => None,
+			_ => Some(best_number - header.payload_executed_gap as u32),
+		};
+
+		Ok(executed_number)
+	}
+
 	pub fn get_block_hash(&self, number: &BlockNumber) -> CommonResult<Option<Hash>> {
 		self.db.get_with(
 			node_db::columns::BLOCK_HASH,
@@ -187,6 +215,18 @@ impl Chain {
 			&DBKey::from_slice(&block_hash.0),
 			|x| codec::decode(&x[..]),
 		)
+	}
+
+	pub fn get_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Transaction>> {
+		self.db
+			.get_with(node_db::columns::TX, &DBKey::from_slice(&tx_hash.0), |x| {
+				codec::decode(&x[..])
+			})
+	}
+
+	pub fn get_raw_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Vec<u8>>> {
+		self.db
+			.get(node_db::columns::TX, &DBKey::from_slice(&tx_hash.0))
 	}
 
 	fn get_spec(config: &ChainConfig) -> CommonResult<(bool, DB, Spec)> {
