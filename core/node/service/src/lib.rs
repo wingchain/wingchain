@@ -17,11 +17,11 @@
 //!   +------------------------------------------------------------+
 //!   |                          Service                           |
 //!   +------------------------------------------------------------+
-//!                   |              |                 |
-//!   +--------------------------+   |   +-------------------------+
-//!   |           Txpool         |   |   |        Consensus        |
-//!   +--------------------------+   |   +-------------------------+
-//!                   |              |                 |
+//!            |                |                  |            |
+//!   +--------------+   +-------------+   +----------------+   |
+//!   |    Txpool    |   |     API     |   |    Consensus   |   |
+//!   +--------------+   +-------------+   +----------------+   |
+//!           |                 |                  |            |
 //!   +------------------------------------------------------------+
 //!   |                          Chain                             |
 //!   +------------------------------------------------------------+
@@ -48,6 +48,8 @@ use std::sync::Arc;
 use tokio::runtime::Runtime;
 
 use main_base::config::Config;
+use node_api::support::DefaultApiSupport;
+use node_api::{Api, ApiConfig};
 use node_chain::{Chain, ChainConfig};
 use node_txpool::{TxPool, TxPoolConfig};
 use primitives::errors::CommonResult;
@@ -65,6 +67,8 @@ pub struct Service {
 	chain: Arc<Chain>,
 	#[allow(dead_code)]
 	txpool: Arc<TxPool<Chain>>,
+	#[allow(dead_code)]
+	api: Arc<Api<DefaultApiSupport>>,
 }
 
 impl Service {
@@ -84,10 +88,20 @@ impl Service {
 		};
 		let txpool = Arc::new(TxPool::new(txpool_config, chain.clone())?);
 
+		// init api
+		let api_config = ApiConfig {
+			rpc_addr: file_config.api.rpc_addr,
+			rpc_workers: file_config.api.rpc_workers,
+			rpc_maxconn: file_config.api.rpc_maxconn,
+		};
+		let api_support = Arc::new(DefaultApiSupport::new(chain.clone()));
+		let api = Arc::new(Api::new(api_config, api_support));
+
 		Ok(Self {
 			config,
 			chain,
 			txpool,
+			api,
 		})
 	}
 }

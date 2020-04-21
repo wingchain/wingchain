@@ -72,6 +72,13 @@ where
 		)
 		.finish();
 
+	let workers = match config.rpc_workers {
+		0 => num_cpus::get(),
+		other => other,
+	};
+
+	log::info!("Initializing rpc: addr: {}", config.rpc_addr);
+
 	actix_web::HttpServer::new(move || {
 		let rpc = rpc.clone();
 		actix_web::App::new().service(
@@ -80,8 +87,8 @@ where
 				.finish(rpc.into_web_service()),
 		)
 	})
-	.workers(config.rpc_workers)
-	.maxconn(cmp::max(config.rpc_maxconn / config.rpc_workers, 1))
+	.workers(workers)
+	.maxconn(cmp::max(config.rpc_maxconn / workers, 1))
 	.bind(&config.rpc_addr)
 	.map_err(|e| errors::ErrorKind::IO(e))?
 	.run()

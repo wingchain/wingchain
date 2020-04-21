@@ -17,6 +17,7 @@ use serde::Deserialize;
 #[derive(Deserialize, Debug)]
 pub struct Config {
 	pub txpool: TxPoolConfig,
+	pub api: ApiConfig,
 }
 
 #[derive(Deserialize, Debug)]
@@ -29,5 +30,5 @@ pub struct TxPoolConfig {
 pub struct ApiConfig {
 	pub rpc_addr: String,
 	pub rpc_workers: usize,
-	pub rpc_maxconns: usize,
+	pub rpc_maxconn: usize,
 }
