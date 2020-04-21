@@ -22,10 +22,6 @@ use tokio::runtime::Runtime;
 use primitives::errors::CommonResult;
 
 use crate::errors;
-use crate::rpc::method::{
-	chain_get_block_by_hash, chain_get_block_by_number, chain_get_header_by_hash,
-	chain_get_header_by_number, chain_get_raw_transaction_by_hash, chain_get_transaction_by_hash,
-};
 use crate::support::ApiSupport;
 use crate::ApiConfig;
 
@@ -58,17 +54,34 @@ where
 {
 	let rpc = Server::new()
 		.with_data(Data::new(support))
-		.with_method("chain_getHeaderByNumber", chain_get_header_by_number::<S>)
-		.with_method("chain_getHeaderByHash", chain_get_header_by_hash::<S>)
-		.with_method("chain_getBlockByNumber", chain_get_block_by_number::<S>)
-		.with_method("chain_getBlockByHash", chain_get_block_by_hash::<S>)
+		.with_method(
+			"chain_getHeaderByNumber",
+			method::chain_get_header_by_number::<S>,
+		)
+		.with_method(
+			"chain_getHeaderByHash",
+			method::chain_get_header_by_hash::<S>,
+		)
+		.with_method(
+			"chain_getBlockByNumber",
+			method::chain_get_block_by_number::<S>,
+		)
+		.with_method("chain_getBlockByHash", method::chain_get_block_by_hash::<S>)
 		.with_method(
 			"chain_getTransactionByHash",
-			chain_get_transaction_by_hash::<S>,
+			method::chain_get_transaction_by_hash::<S>,
 		)
 		.with_method(
 			"chain_getRawTransactionByHash",
-			chain_get_raw_transaction_by_hash::<S>,
+			method::chain_get_raw_transaction_by_hash::<S>,
+		)
+		.with_method(
+			"chain_sendRawTransaction",
+			method::chain_send_raw_transaction::<S>,
+		)
+		.with_method(
+			"chain_getTransactionInTxPool",
+			method::chain_get_transaction_in_txpool::<S>,
 		)
 		.finish();
 

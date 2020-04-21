@@ -14,50 +14,83 @@
 
 use std::sync::Arc;
 
+use serde::Serialize;
+
+use async_trait::async_trait;
 use node_chain::Chain;
+use node_txpool::support::TxPoolSupport;
+use node_txpool::TxPool;
 use primitives::errors::CommonResult;
 use primitives::{Block, BlockNumber, Hash, Header, Transaction};
 
+#[async_trait]
 pub trait ApiSupport {
-	fn get_best_number(&self) -> CommonResult<Option<BlockNumber>>;
-	fn get_executed_number(&self) -> CommonResult<Option<BlockNumber>>;
-	fn get_block_hash(&self, number: &BlockNumber) -> CommonResult<Option<Hash>>;
-	fn get_block(&self, block_hash: &Hash) -> CommonResult<Option<Block>>;
-	fn get_header(&self, block_hash: &Hash) -> CommonResult<Option<Header>>;
-	fn get_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Transaction>>;
-	fn get_raw_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Vec<u8>>>;
+	async fn hash<E: Serialize + Sync>(&self, data: &E) -> CommonResult<Hash>;
+	async fn get_best_number(&self) -> CommonResult<Option<BlockNumber>>;
+	async fn get_executed_number(&self) -> CommonResult<Option<BlockNumber>>;
+	async fn get_block_hash(&self, number: &BlockNumber) -> CommonResult<Option<Hash>>;
+	async fn get_block(&self, block_hash: &Hash) -> CommonResult<Option<Block>>;
+	async fn get_header(&self, block_hash: &Hash) -> CommonResult<Option<Header>>;
+	async fn get_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Transaction>>;
+	async fn get_raw_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Vec<u8>>>;
+	async fn insert_transaction(&self, transaction: Transaction) -> CommonResult<()>;
+	async fn get_transaction_in_txpool(&self, tx_hash: &Hash) -> CommonResult<Option<Transaction>>;
 }
 
-pub struct DefaultApiSupport {
+pub struct DefaultApiSupport<TS>
+where
+	TS: TxPoolSupport,
+{
 	chain: Arc<Chain>,
+	txpool: Arc<TxPool<TS>>,
 }
 
-impl DefaultApiSupport {
-	pub fn new(chain: Arc<Chain>) -> Self {
-		Self { chain }
+impl<TS> DefaultApiSupport<TS>
+where
+	TS: TxPoolSupport,
+{
+	pub fn new(chain: Arc<Chain>, txpool: Arc<TxPool<TS>>) -> Self {
+		Self { chain, txpool }
 	}
 }
 
-impl ApiSupport for DefaultApiSupport {
-	fn get_best_number(&self) -> CommonResult<Option<BlockNumber>> {
+#[async_trait]
+impl<TS> ApiSupport for DefaultApiSupport<TS>
+where
+	TS: TxPoolSupport + Send + Sync,
+{
+	async fn hash<E: Serialize + Sync>(&self, data: &E) -> CommonResult<Hash> {
+		self.chain.hash(data)
+	}
+	async fn get_best_number(&self) -> CommonResult<Option<BlockNumber>> {
 		self.chain.get_best_number()
 	}
-	fn get_executed_number(&self) -> CommonResult<Option<BlockNumber>> {
+	async fn get_executed_number(&self) -> CommonResult<Option<BlockNumber>> {
 		self.chain.get_executed_number()
 	}
-	fn get_block_hash(&self, number: &BlockNumber) -> CommonResult<Option<Hash>> {
+	async fn get_block_hash(&self, number: &BlockNumber) -> CommonResult<Option<Hash>> {
 		self.chain.get_block_hash(number)
 	}
-	fn get_block(&self, block_hash: &Hash) -> CommonResult<Option<Block>> {
+	async fn get_block(&self, block_hash: &Hash) -> CommonResult<Option<Block>> {
 		self.chain.get_block(block_hash)
 	}
-	fn get_header(&self, block_hash: &Hash) -> CommonResult<Option<Header>> {
+	async fn get_header(&self, block_hash: &Hash) -> CommonResult<Option<Header>> {
 		self.chain.get_header(block_hash)
 	}
-	fn get_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Transaction>> {
+	async fn get_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Transaction>> {
 		self.chain.get_transaction(tx_hash)
 	}
-	fn get_raw_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Vec<u8>>> {
+	async fn get_raw_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Vec<u8>>> {
 		self.chain.get_raw_transaction(tx_hash)
+	}
+	async fn insert_transaction(&self, tx: Transaction) -> CommonResult<()> {
+		self.txpool.insert(tx).await
+	}
+	async fn get_transaction_in_txpool(&self, tx_hash: &Hash) -> CommonResult<Option<Transaction>> {
+		let tx = match self.txpool.get_map().get(tx_hash) {
+			Some(tx) => (*(*tx).tx).clone(),
+			None => return Ok(None),
+		};
+		Ok(Some(tx))
 	}
 }

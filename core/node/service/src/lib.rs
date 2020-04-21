@@ -68,7 +68,7 @@ pub struct Service {
 	#[allow(dead_code)]
 	txpool: Arc<TxPool<Chain>>,
 	#[allow(dead_code)]
-	api: Arc<Api<DefaultApiSupport>>,
+	api: Arc<Api<DefaultApiSupport<Chain>>>,
 }
 
 impl Service {
@@ -94,7 +94,7 @@ impl Service {
 			rpc_workers: file_config.api.rpc_workers,
 			rpc_maxconn: file_config.api.rpc_maxconn,
 		};
-		let api_support = Arc::new(DefaultApiSupport::new(chain.clone()));
+		let api_support = Arc::new(DefaultApiSupport::new(chain.clone(), txpool.clone()));
 		let api = Arc::new(Api::new(api_config, api_support));
 
 		Ok(Self {

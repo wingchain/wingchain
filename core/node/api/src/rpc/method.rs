@@ -18,8 +18,9 @@ use std::sync::Arc;
 use jsonrpc_v2::{Data, ErrorLike, Params};
 use serde::{Deserialize, Serialize};
 
-use primitives::errors::CommonError;
+use primitives::codec;
 use primitives::errors::Display;
+use primitives::errors::{CommonError, CommonResult};
 
 use crate::errors;
 use crate::support::ApiSupport;
@@ -32,8 +33,8 @@ pub async fn chain_get_header_by_number<S: ApiSupport>(
 
 	let support = data.0;
 	let number = match number_enum {
-		BlockNumberEnum::Best => support.get_best_number()?,
-		BlockNumberEnum::Executed => support.get_executed_number()?,
+		BlockNumberEnum::Best => support.get_best_number().await?,
+		BlockNumberEnum::Executed => support.get_executed_number().await?,
 		BlockNumberEnum::Number(number) => Some(number),
 	};
 
@@ -42,12 +43,12 @@ pub async fn chain_get_header_by_number<S: ApiSupport>(
 		None => return Ok(None),
 	};
 
-	let block_hash = match support.get_block_hash(&number)? {
+	let block_hash = match support.get_block_hash(&number).await? {
 		Some(block_hash) => block_hash,
 		None => return Ok(None),
 	};
 
-	let header: Option<Header> = support.get_header(&block_hash)?.map(Into::into);
+	let header: Option<Header> = support.get_header(&block_hash).await?.map(Into::into);
 
 	let header = header.map(|mut x| {
 		x.hash = Some(block_hash.into());
@@ -63,7 +64,7 @@ pub async fn chain_get_header_by_hash<S: ApiSupport>(
 ) -> CustomResult<Option<Header>> {
 	let hash = hash.try_into()?;
 	let support = data.0;
-	let header: Option<Header> = support.get_header(&hash)?.map(Into::into);
+	let header: Option<Header> = support.get_header(&hash).await?.map(Into::into);
 
 	let header = header.map(|mut x| {
 		x.hash = Some(hash.into());
@@ -81,8 +82,8 @@ pub async fn chain_get_block_by_number<S: ApiSupport>(
 
 	let support = data.0;
 	let number = match number_enum {
-		BlockNumberEnum::Best => support.get_best_number()?,
-		BlockNumberEnum::Executed => support.get_executed_number()?,
+		BlockNumberEnum::Best => support.get_best_number().await?,
+		BlockNumberEnum::Executed => support.get_executed_number().await?,
 		BlockNumberEnum::Number(number) => Some(number),
 	};
 
@@ -91,12 +92,12 @@ pub async fn chain_get_block_by_number<S: ApiSupport>(
 		None => return Ok(None),
 	};
 
-	let block_hash = match support.get_block_hash(&number)? {
+	let block_hash = match support.get_block_hash(&number).await? {
 		Some(block_hash) => block_hash,
 		None => return Ok(None),
 	};
 
-	let block: Option<Block> = support.get_block(&block_hash)?.map(Into::into);
+	let block: Option<Block> = support.get_block(&block_hash).await?.map(Into::into);
 
 	let block = block.map(|mut x| {
 		x.hash = Some(block_hash.into());
@@ -112,7 +113,7 @@ pub async fn chain_get_block_by_hash<S: ApiSupport>(
 ) -> CustomResult<Option<Block>> {
 	let hash = hash.try_into()?;
 	let support = data.0;
-	let block: Option<Block> = support.get_block(&hash)?.map(Into::into);
+	let block: Option<Block> = support.get_block(&hash).await?.map(Into::into);
 
 	let block = block.map(|mut x| {
 		x.hash = Some(hash.into());
@@ -128,7 +129,7 @@ pub async fn chain_get_transaction_by_hash<S: ApiSupport>(
 ) -> CustomResult<Option<Transaction>> {
 	let hash = hash.try_into()?;
 	let support = data.0;
-	let tx: Option<Transaction> = support.get_transaction(&hash)?.map(Into::into);
+	let tx: Option<Transaction> = support.get_transaction(&hash).await?.map(Into::into);
 
 	let tx = tx.map(|mut x| {
 		x.hash = Some(hash.into());
@@ -144,8 +145,48 @@ pub async fn chain_get_raw_transaction_by_hash<S: ApiSupport>(
 ) -> CustomResult<Option<Hex>> {
 	let hash = hash.try_into()?;
 	let support = data.0;
-	let raw_tx: Option<Hex> = support.get_raw_transaction(&hash)?.map(Into::into);
+	let raw_tx: Option<Hex> = support.get_raw_transaction(&hash).await?.map(Into::into);
 	Ok(raw_tx)
+}
+
+pub async fn chain_send_raw_transaction<S: ApiSupport>(
+	data: Data<Arc<S>>,
+	Params((raw_transaction,)): Params<(Hex,)>,
+) -> CustomResult<Hash> {
+	let raw_transaction: Vec<u8> = raw_transaction.try_into()?;
+	let transaction: CommonResult<primitives::Transaction> = codec::decode(&raw_transaction)
+		.map_err(|_| {
+			errors::ErrorKind::InvalidParams("invalid raw transaction".to_string()).into()
+		});
+	let transaction = transaction?;
+
+	let support = data.0;
+
+	let tx_hash = support.hash(&transaction).await?.into();
+
+	support.insert_transaction(transaction).await?;
+
+	Ok(tx_hash)
+}
+
+pub async fn chain_get_transaction_in_txpool<S: ApiSupport>(
+	data: Data<Arc<S>>,
+	Params((hash,)): Params<(Hash,)>,
+) -> CustomResult<Option<Transaction>> {
+	let hash = hash.try_into()?;
+	let support = data.0;
+
+	let tx: Option<Transaction> = support
+		.get_transaction_in_txpool(&hash)
+		.await?
+		.map(Into::into);
+
+	let tx = tx.map(|mut x| {
+		x.hash = Some(hash.into());
+		x
+	});
+
+	Ok(tx)
 }
 
 /// Number input: number, hex or tag (best, executed)
@@ -157,7 +198,7 @@ pub struct BlockNumber(String);
 pub struct Hash(String);
 
 /// Hex format for number
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct Hex(String);
 
 enum BlockNumberEnum {
@@ -333,6 +374,17 @@ impl TryInto<primitives::Hash> for Hash {
 		let hex = hex::decode(hex)
 			.map_err(|_| errors::ErrorKind::InvalidParams(format!("invalid hex: {}", hex)))?;
 		Ok(primitives::Hash(hex))
+	}
+}
+
+impl TryInto<Vec<u8>> for Hex {
+	type Error = CommonError;
+
+	fn try_into(self) -> Result<Vec<u8>, Self::Error> {
+		let hex = self.0.trim_start_matches("0x");
+		let hex = hex::decode(hex)
+			.map_err(|_| errors::ErrorKind::InvalidParams(format!("invalid hex: {}", hex)))?;
+		Ok(hex)
 	}
 }
 

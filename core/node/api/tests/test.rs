@@ -21,6 +21,7 @@ use tempfile::tempdir;
 use node_api::support::DefaultApiSupport;
 use node_api::{Api, ApiConfig};
 use node_chain::{Chain, ChainConfig};
+use node_txpool::{TxPool, TxPoolConfig};
 
 #[tokio::test]
 async fn test_api() {
@@ -62,21 +63,36 @@ fn get_cases() -> Vec<(String, String)> {
 		(
 			r#"{"jsonrpc": "2.0", "method": "chain_getRawTransactionByHash", "params": ["0x6f83855c8abfeff14ad9fb01f68922f4125071f8"], "id": 1}"#.to_string(),
 			r#"{"jsonrpc":"2.0","result":"0x00060000000000000073797374656d0400000000000000696e697416000000000000000a00000000000000636861696e2d74657374ba7d985e","id":1}"#.to_string(),
+		),
+		(
+			r#"{"jsonrpc": "2.0", "method": "chain_sendRawTransaction", "params": ["0x00060000000000000073797374656d0400000000000000696e69741a000000000000000e00000000000000636861696e2d6a64726a71666868a0f79e5e"], "id": 1}"#.to_string(),
+			r#"{"jsonrpc":"2.0","result":"0x3b624b93cb726681ddb8d79378783eb2b3147804","id":1}"#.to_string(),
+		),
+		(
+			r#"{"jsonrpc": "2.0", "method": "chain_getTransactionInTxPool", "params": ["0x3b624b93cb726681ddb8d79378783eb2b3147804"], "id": 1}"#.to_string(),
+			r#"{"jsonrpc":"2.0","result":{"hash":"0x3b624b93cb726681ddb8d79378783eb2b3147804","witness":null,"call":{"module":"system","method":"init","params":"0x0e00000000000000636861696e2d6a64726a71666868a0f79e5e"}},"id":1}"#.to_string(),
 		)
 	]
 }
 
-fn get_support() -> DefaultApiSupport {
+fn get_support() -> DefaultApiSupport<Chain> {
 	let path = tempdir().expect("could not create a temp dir");
 	let home = path.into_path();
 
 	init(&home);
 
-	let config = ChainConfig { home };
+	let chain_config = ChainConfig { home };
 
-	let chain = Chain::new(config).unwrap();
+	let chain = Arc::new(Chain::new(chain_config).unwrap());
 
-	DefaultApiSupport::new(Arc::new(chain))
+	let txpool_config = TxPoolConfig {
+		pool_capacity: 32,
+		buffer_capacity: 32,
+	};
+
+	let txpool = Arc::new(TxPool::new(txpool_config, chain.clone()).unwrap());
+
+	DefaultApiSupport::new(chain, txpool)
 }
 
 fn init(home: &PathBuf) {
