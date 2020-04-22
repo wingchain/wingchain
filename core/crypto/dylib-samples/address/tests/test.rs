@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![cfg(feature = "build-dep-tests")]
+#![cfg(feature = "build-dep-test")]
 
 use std::str::FromStr;
 

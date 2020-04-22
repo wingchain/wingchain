@@ -274,7 +274,7 @@ fn test_calc_trie_root() {
 	);
 }
 
-#[cfg(feature = "build-dep-tests")]
+#[cfg(feature = "build-dep-test")]
 mod build_dep_test {
 	use super::*;
 
