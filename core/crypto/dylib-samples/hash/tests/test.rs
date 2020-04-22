@@ -130,10 +130,10 @@ fn test_c_string_raw_pointer() {
 	free_str(raw);
 
 	// known value, copied before freeing
-	assert_eq!(str1, "tests");
+	assert_eq!(str1, "test");
 
 	// unknown value, freed
-	assert_ne!(str2, "tests");
+	assert_ne!(str2, "test");
 }
 
 #[test]
@@ -142,7 +142,7 @@ fn test_c_string_raw_pointer2() {
 
 	let string = get_string(raw);
 
-	assert_eq!(string, "tests".to_string());
+	assert_eq!(string, "test".to_string());
 
 	move_string(string);
 
@@ -161,7 +161,7 @@ fn get_string(raw: *mut i8) -> String {
 }
 
 fn get_str() -> *mut c_char {
-	let s = CString::new("tests").unwrap();
+	let s = CString::new("test").unwrap();
 	let s = s.into_raw();
 	s
 }
