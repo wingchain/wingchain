@@ -12,23 +12,41 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::error::Error;
+use std::sync::Arc;
 
-use primitives::errors::{CommonError, CommonErrorKind, Display};
+use crate::support::ApiSupport;
 
-#[derive(Debug, Display)]
-pub enum ErrorKind {
-	#[display(fmt = "Spec error: {}", _0)]
-	Spec(String),
+pub mod errors;
+mod rpc;
+pub mod support;
 
-	#[display(fmt = "Data error: {}", _0)]
-	Data(String),
+#[derive(Clone)]
+pub struct ApiConfig {
+	pub rpc_addr: String,
+	pub rpc_workers: usize,
+	pub rpc_maxconn: usize,
 }
 
-impl Error for ErrorKind {}
+pub struct Api<S>
+where
+	S: ApiSupport,
+{
+	#[allow(dead_code)]
+	support: Arc<S>,
+}
 
-impl From<ErrorKind> for CommonError {
-	fn from(error: ErrorKind) -> Self {
-		CommonError::new(CommonErrorKind::Chain, Box::new(error))
+impl<S> Api<S>
+where
+	S: ApiSupport + Send + Sync + 'static,
+{
+	pub fn new(config: ApiConfig, support: Arc<S>) -> Self {
+		let api = Api {
+			support: support.clone(),
+		};
+
+		// start rpc in new thread
+		rpc::start_rpc(&config, support);
+
+		api
 	}
 }

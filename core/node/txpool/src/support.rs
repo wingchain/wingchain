@@ -19,12 +19,12 @@ use primitives::errors::CommonResult;
 use primitives::{Hash, Transaction};
 
 pub trait TxPoolSupport {
-	fn hash<E: Serialize>(&self, data: &E) -> Hash;
+	fn hash<E: Serialize>(&self, data: &E) -> CommonResult<Hash>;
 	fn validate_tx(&self, tx: &Transaction) -> CommonResult<()>;
 }
 
 impl TxPoolSupport for Chain {
-	fn hash<E: Serialize>(&self, data: &E) -> Hash {
+	fn hash<E: Serialize>(&self, data: &E) -> CommonResult<Hash> {
 		self.hash(data)
 	}
 	fn validate_tx(&self, tx: &Transaction) -> CommonResult<()> {

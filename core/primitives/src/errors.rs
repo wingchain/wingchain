@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub use derive_more::{Constructor, Display};
 use std::error::Error;
+
+pub use derive_more::{Constructor, Display};
 
 #[derive(Debug, Display)]
 pub enum CommonErrorKind {
@@ -26,13 +27,14 @@ pub enum CommonErrorKind {
 	TxPool,
 	Chain,
 	Codec,
+	Api,
 }
 
 #[derive(Debug, Constructor, Display)]
 #[display(fmt = "[CommonError] Kind: {:?} Error: {:?}", kind, error)]
 pub struct CommonError {
-	kind: CommonErrorKind,
-	error: Box<dyn Error + Send>,
+	pub kind: CommonErrorKind,
+	pub error: Box<dyn Error + Send>,
 }
 
 impl Error for CommonError {}

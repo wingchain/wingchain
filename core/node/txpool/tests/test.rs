@@ -44,10 +44,10 @@ impl From<ErrorKind> for CommonError {
 }
 
 impl TxPoolSupport for TestTxPoolSupport {
-	fn hash<E: Serialize>(&self, data: &E) -> Hash {
+	fn hash<E: Serialize>(&self, data: &E) -> CommonResult<Hash> {
 		let mut out = vec![0u8; self.hash.length().into()];
-		self.hash.hash(&mut out, &codec::encode(data).expect("qed"));
-		Hash(out)
+		self.hash.hash(&mut out, &codec::encode(data)?);
+		Ok(Hash(out))
 	}
 	fn validate_tx(&self, tx: &Transaction) -> CommonResult<()> {
 		if tx.call.module.as_str() == "b" {
@@ -77,7 +77,7 @@ async fn test_txpool() {
 
 	let expected_queue = vec![Arc::new(PoolTransaction {
 		tx: Arc::new(tx.clone()),
-		tx_hash: support.hash(&tx.clone()),
+		tx_hash: support.hash(&tx.clone()).unwrap(),
 	})];
 
 	txpool.insert(tx).await.unwrap();

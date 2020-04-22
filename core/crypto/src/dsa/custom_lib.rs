@@ -16,7 +16,7 @@ use std::convert::TryInto;
 use std::ffi::CStr;
 use std::os::raw::{c_char, c_uchar, c_uint};
 use std::path::PathBuf;
-use std::rc::Rc;
+use std::sync::Arc;
 
 #[cfg(unix)]
 use libloading::os::unix as imp;
@@ -32,13 +32,13 @@ use crate::{errors, DsaLength};
 #[repr(C)]
 pub struct TKeyPair {
 	_unused: [u8; 0],
-	call: Rc<CallKeyPair>,
+	call: Arc<CallKeyPair>,
 }
 
 #[repr(C)]
 pub struct TVerifier {
 	_unused: [u8; 0],
-	call: Rc<CallVerifier>,
+	call: Arc<CallVerifier>,
 }
 
 #[repr(C)]
@@ -96,8 +96,8 @@ pub struct CustomLib {
 	call_generate_key_pair: imp::Symbol<CallGenerateKeyPair>,
 	call_key_pair_from_secret_key: imp::Symbol<CallKeyPairFromSecretKey>,
 	call_verifier_from_public_key: imp::Symbol<CallVerifierFromPublicKey>,
-	call_key_pair: Rc<CallKeyPair>,
-	call_verifier: Rc<CallVerifier>,
+	call_key_pair: Arc<CallKeyPair>,
+	call_verifier: Arc<CallVerifier>,
 }
 
 struct CallKeyPair {
@@ -195,14 +195,14 @@ impl CustomLib {
 		let name = Self::name(&call_name, &call_name_free, &path)?;
 		let length = Self::length(&call_length)?;
 
-		let call_key_pair = Rc::new(CallKeyPair {
+		let call_key_pair = Arc::new(CallKeyPair {
 			call_key_pair_secret_key,
 			call_key_pair_public_key,
 			call_key_pair_sign,
 			call_key_pair_free,
 		});
 
-		let call_verifier = Rc::new(CallVerifier {
+		let call_verifier = Arc::new(CallVerifier {
 			call_verifier_verify,
 			call_verifier_free,
 		});
@@ -249,7 +249,7 @@ impl CustomLib {
 
 pub struct CustomKeyPair {
 	inner: *mut TKeyPair,
-	call: Rc<CallKeyPair>,
+	call: Arc<CallKeyPair>,
 	public_len: usize,
 	secret_len: usize,
 	signature_len: usize,
@@ -265,7 +265,7 @@ impl Drop for CustomKeyPair {
 
 pub struct CustomVerifier {
 	inner: *mut TVerifier,
-	call: Rc<CallVerifier>,
+	call: Arc<CallVerifier>,
 }
 
 impl Drop for CustomVerifier {

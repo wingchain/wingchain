@@ -77,11 +77,11 @@ struct TestTxPoolSupport {
 }
 
 impl TxPoolSupport for TestTxPoolSupport {
-	fn hash<E: Serialize>(&self, data: &E) -> Hash {
+	fn hash<E: Serialize>(&self, data: &E) -> CommonResult<Hash> {
 		let mut out = vec![0u8; self.hash.length().into()];
 		self.hash
 			.hash(&mut out, &codec::encode(&data).expect("qed"));
-		Hash(out)
+		Ok(Hash(out))
 	}
 	fn validate_tx(&self, _tx: &Transaction) -> CommonResult<()> {
 		Ok(())

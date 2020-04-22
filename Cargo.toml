@@ -17,6 +17,7 @@ members = [
 	"core/node/executor/executor-macro",
 	"core/node/txpool",
 	"core/node/chain",
+	"core/node/api",
 	"core/module/system",
 ]
 

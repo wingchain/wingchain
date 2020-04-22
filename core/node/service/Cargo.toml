@@ -22,4 +22,5 @@ node-statedb = { path = "../statedb" }
 node-executor = { path = "../executor" }
 node-chain = { path = "../chain" }
 node-txpool = { path = "../txpool" }
+node-api = { path = "../api" }
 main-base = { path = "../../../bin/main/base" }

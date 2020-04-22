@@ -1,0 +1,27 @@
+[package]
+name = "node-api"
+version = "0.1.0"
+authors = ["developer <developer@wingchain.cn>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+tokio ={ version = "0.2.17", features = ["rt-core", "time", "sync", "stream", "macros"] }
+actix-web = "2.0.0"
+actix-rt = "1.1.0"
+jsonrpc-v2 = "0.5.2"
+hex = "0.4.2"
+serde = { version = "1.0", features = ["derive"] }
+erased-serde = "0.3.11"
+num_cpus = "1.13.0"
+log = "0.4.8"
+async-trait = "0.1.30"
+
+node-chain = { path = "../chain" }
+node-txpool = { path = "../txpool" }
+primitives = { path = "../../primitives" }
+
+[dev-dependencies]
+tempfile = "3.1.0"
+reqwest = { version = "0.10", features = ["json"] }

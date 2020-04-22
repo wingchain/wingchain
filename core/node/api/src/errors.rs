@@ -13,22 +13,23 @@
 // limitations under the License.
 
 use std::error::Error;
+use std::fmt::Debug;
 
 use primitives::errors::{CommonError, CommonErrorKind, Display};
 
 #[derive(Debug, Display)]
 pub enum ErrorKind {
-	#[display(fmt = "Spec error: {}", _0)]
-	Spec(String),
+	#[display(fmt = "IO error: {:?}", _0)]
+	IO(std::io::Error),
 
-	#[display(fmt = "Data error: {}", _0)]
-	Data(String),
+	#[display(fmt = "Invalid params: {}", _0)]
+	InvalidParams(String),
 }
 
 impl Error for ErrorKind {}
 
 impl From<ErrorKind> for CommonError {
 	fn from(error: ErrorKind) -> Self {
-		CommonError::new(CommonErrorKind::Chain, Box::new(error))
+		CommonError::new(CommonErrorKind::Api, Box::new(error))
 	}
 }
