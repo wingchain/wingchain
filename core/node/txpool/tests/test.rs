@@ -15,14 +15,13 @@
 use std::error::Error;
 use std::sync::Arc;
 
-use serde::Serialize;
 use tokio::time::Duration;
 
 use crypto::hash::{Hash as HashT, HashImpl};
 use node_txpool::support::TxPoolSupport;
 use node_txpool::{PoolTransaction, TxPool, TxPoolConfig};
 use primitives::errors::{CommonError, CommonErrorKind, CommonResult, Display};
-use primitives::{codec, Call, Hash, Params, Transaction};
+use primitives::{codec, Call, Hash, Params, Transaction, TransactionForHash};
 
 #[derive(Clone)]
 struct TestTxPoolSupport {
@@ -44,9 +43,11 @@ impl From<ErrorKind> for CommonError {
 }
 
 impl TxPoolSupport for TestTxPoolSupport {
-	fn hash<E: Serialize>(&self, data: &E) -> CommonResult<Hash> {
+	fn hash_transaction(&self, tx: &Transaction) -> CommonResult<Hash> {
 		let mut out = vec![0u8; self.hash.length().into()];
-		self.hash.hash(&mut out, &codec::encode(data)?);
+		let transaction_for_hash = TransactionForHash::new(tx);
+		self.hash
+			.hash(&mut out, &codec::encode(&transaction_for_hash)?);
 		Ok(Hash(out))
 	}
 	fn validate_tx(&self, tx: &Transaction) -> CommonResult<()> {
@@ -77,7 +78,7 @@ async fn test_txpool() {
 
 	let expected_queue = vec![Arc::new(PoolTransaction {
 		tx: Arc::new(tx.clone()),
-		tx_hash: support.hash(&tx.clone()).unwrap(),
+		tx_hash: support.hash_transaction(&tx.clone()).unwrap(),
 	})];
 
 	txpool.insert(tx).await.unwrap();

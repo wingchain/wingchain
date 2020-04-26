@@ -12,20 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use serde::Serialize;
-
 use node_chain::Chain;
 use primitives::errors::CommonResult;
 use primitives::{Hash, Transaction};
 
 pub trait TxPoolSupport {
-	fn hash<E: Serialize>(&self, data: &E) -> CommonResult<Hash>;
+	fn hash_transaction(&self, tx: &Transaction) -> CommonResult<Hash>;
 	fn validate_tx(&self, tx: &Transaction) -> CommonResult<()>;
 }
 
 impl TxPoolSupport for Chain {
-	fn hash<E: Serialize>(&self, data: &E) -> CommonResult<Hash> {
-		self.hash(data)
+	fn hash_transaction(&self, tx: &Transaction) -> CommonResult<Hash> {
+		self.hash_transaction(tx)
 	}
 	fn validate_tx(&self, tx: &Transaction) -> CommonResult<()> {
 		self.validate_tx(tx)

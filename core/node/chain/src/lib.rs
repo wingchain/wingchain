@@ -33,6 +33,7 @@ use node_statedb::{StateDB, TrieRoot};
 use primitives::errors::CommonResult;
 use primitives::{
 	codec, Block, BlockNumber, Body, DBKey, Executed, FullBlock, Hash, Header, Transaction,
+	TransactionForHash,
 };
 
 pub mod errors;
@@ -103,16 +104,14 @@ impl Chain {
 		Ok(chain)
 	}
 
-	#[allow(dead_code)]
+	pub fn hash_transaction(&self, tx: &Transaction) -> CommonResult<Hash> {
+		let transaction_for_hash = TransactionForHash::new(tx);
+		self.hash(&transaction_for_hash)
+	}
+
 	pub fn hash<D: Serialize>(&self, data: &D) -> CommonResult<Hash> {
 		let encoded = codec::encode(data)?;
 		Ok(self.hash_slice(&encoded))
-	}
-
-	pub fn hash_slice(&self, data: &[u8]) -> Hash {
-		let mut out = vec![0u8; self.basic.hash.length().into()];
-		self.basic.hash.hash(&mut out, data);
-		Hash(out)
 	}
 
 	pub fn validate_tx(&self, tx: &Transaction) -> CommonResult<()> {
@@ -227,6 +226,12 @@ impl Chain {
 	pub fn get_raw_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Vec<u8>>> {
 		self.db
 			.get(node_db::columns::TX, &DBKey::from_slice(&tx_hash.0))
+	}
+
+	fn hash_slice(&self, data: &[u8]) -> Hash {
+		let mut out = vec![0u8; self.basic.hash.length().into()];
+		self.basic.hash.hash(&mut out, data);
+		Hash(out)
 	}
 
 	fn get_spec(config: &ChainConfig) -> CommonResult<(bool, DB, Spec)> {

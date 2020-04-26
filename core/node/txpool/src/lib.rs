@@ -84,7 +84,7 @@ where
 
 	pub async fn insert(&self, tx: Transaction) -> CommonResult<()> {
 		self.check_capacity()?;
-		let tx_hash = self.support.hash(&tx)?;
+		let tx_hash = self.support.hash_transaction(&tx)?;
 		self.check_exist(&tx_hash)?;
 
 		self.support.validate_tx(&tx)?;

@@ -115,3 +115,21 @@ impl Hash {
 		Ok(Hash(hex))
 	}
 }
+
+/// exclude signature to avoid malleability
+#[derive(Serialize)]
+pub struct TransactionForHash<'a> {
+	pub witness: Option<(&'a Address, &'a Nonce, &'a BlockNumber)>,
+	pub call: &'a Call,
+}
+
+impl<'a> TransactionForHash<'a> {
+	pub fn new(tx: &'a Transaction) -> Self {
+		let witness = tx
+			.witness
+			.as_ref()
+			.map(|witness| (&witness.address, &witness.nonce, &witness.expire));
+		let call = &tx.call;
+		Self { witness, call }
+	}
+}

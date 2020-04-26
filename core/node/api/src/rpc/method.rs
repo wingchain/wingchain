@@ -162,7 +162,7 @@ pub async fn chain_send_raw_transaction<S: ApiSupport>(
 
 	let support = data.0;
 
-	let tx_hash = support.hash(&transaction).await?.into();
+	let tx_hash = support.hash_transaction(&transaction).await?.into();
 
 	support.insert_transaction(transaction).await?;
 
