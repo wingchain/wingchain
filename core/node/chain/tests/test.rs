@@ -95,16 +95,17 @@ fn expected_data() -> (Hash, Block, Executed, Transaction) {
 
 	let payload_txs_root = expected_txs_root(&vec![]);
 
+	let zero_hash = vec![0u8; 32];
+
 	let header = Header {
 		number: 0,
 		timestamp: 1587051962,
-		parent_hash: Hash::from_hex("0000000000000000000000000000000000000000").unwrap(),
+		parent_hash: Hash(zero_hash.clone()),
 		meta_txs_root,
 		meta_state_root,
 		payload_txs_root,
 		payload_executed_gap: 1,
-		payload_executed_state_root: Hash::from_hex("0000000000000000000000000000000000000000")
-			.unwrap(),
+		payload_executed_state_root: Hash(zero_hash),
 	};
 
 	let block_hash = hash(&header);
@@ -130,14 +131,14 @@ fn expected_data() -> (Hash, Block, Executed, Transaction) {
 }
 
 fn hash<E: Serialize>(data: E) -> Hash {
-	let hasher = HashImpl::Blake2b160;
+	let hasher = HashImpl::Blake2b256;
 	let mut hash = vec![0u8; hasher.length().into()];
 	hasher.hash(&mut hash, &codec::encode(&data).unwrap());
 	Hash(hash)
 }
 
 fn expected_txs_root(txs: &Vec<Arc<Transaction>>) -> Hash {
-	let trie_root = TrieRoot::new(Arc::new(HashImpl::Blake2b160)).unwrap();
+	let trie_root = TrieRoot::new(Arc::new(HashImpl::Blake2b256)).unwrap();
 	let txs = txs.iter().map(|x| codec::encode(&**x).unwrap());
 	Hash(trie_root.calc_ordered_trie_root(txs))
 }
@@ -165,7 +166,7 @@ fn expected_meta_state_root(txs: &Vec<Arc<Transaction>>) -> Hash {
 	let path = path.into_path();
 
 	let db = Arc::new(DB::open(&path).unwrap());
-	let hasher = Arc::new(HashImpl::Blake2b160);
+	let hasher = Arc::new(HashImpl::Blake2b256);
 
 	let statedb =
 		Arc::new(StateDB::new(db.clone(), node_db::columns::META_STATE, hasher.clone()).unwrap());
@@ -185,7 +186,7 @@ fn expected_payload_state_root() -> Hash {
 	let path = path.into_path();
 
 	let db = Arc::new(DB::open(&path).unwrap());
-	let hasher = Arc::new(HashImpl::Blake2b160);
+	let hasher = Arc::new(HashImpl::Blake2b256);
 
 	let statedb = Arc::new(
 		StateDB::new(db.clone(), node_db::columns::PAYLOAD_STATE, hasher.clone()).unwrap(),
@@ -204,7 +205,7 @@ fn init(home: &PathBuf) {
 
 	let spec = r#"
 [basic]
-hash = "blake2b_160"
+hash = "blake2b_256"
 dsa = "ed25519"
 address = "blake2b_160"
 

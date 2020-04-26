@@ -108,13 +108,9 @@ where
 	V: Serialize + DeserializeOwned,
 	C: Context,
 {
-	pub fn new(
-		context: C,
-		meta_module: bool,
-		module_key: &'static [u8],
-		storage_key: &'static [u8],
-	) -> Self {
-		let key = [module_key, storage_key].concat();
+	pub fn new<M: Module<C>>(context: C, storage_key: &'static [u8]) -> Self {
+		let key = [M::STORAGE_KEY, SEPARATOR, storage_key].concat();
+		let meta_module = M::META_MODULE;
 		Self {
 			context,
 			meta_module,

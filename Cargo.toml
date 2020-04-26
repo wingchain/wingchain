@@ -19,6 +19,7 @@ members = [
 	"core/node/chain",
 	"core/node/api",
 	"core/module/system",
+	"core/module/balance",
 ]
 
 [profile.release]

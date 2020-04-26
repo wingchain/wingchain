@@ -89,8 +89,8 @@ fn test_wrapped_hash() {
 }
 
 #[test]
-fn test_statedb_160() {
-	test_statedb_for_hasher(HashImpl::Blake2b160);
+fn test_statedb_256() {
+	test_statedb_for_hasher(HashImpl::Blake2b256);
 }
 
 #[test]
@@ -99,7 +99,7 @@ fn test_statedb_512() {
 }
 
 #[test]
-fn test_statedb_512_reopen() {
+fn test_statedb_256_reopen() {
 	use tempfile::tempdir;
 
 	let path = tempdir().expect("could not create a temp dir");
@@ -279,7 +279,7 @@ mod build_dep_test {
 	use super::*;
 
 	#[test]
-	fn test_statedb_256_dylib() {
+	fn test_statedb_160_dylib() {
 		let path = utils_test::get_dylib("crypto_dylib_samples_hash");
 
 		assert!(
@@ -292,7 +292,7 @@ mod build_dep_test {
 		let hasher = HashImpl::from_str(&path).unwrap();
 
 		let name = hasher.name();
-		assert_eq!(name, "blake2b_256".to_string());
+		assert_eq!(name, "blake2b_160".to_string());
 
 		test_statedb_for_hasher(hasher);
 	}

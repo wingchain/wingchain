@@ -26,7 +26,7 @@ pub mod errors;
 pub struct Address(pub Vec<u8>);
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-/// signature for (nonce, call)
+/// signature for (nonce, expire, call)
 pub struct Signature(pub Vec<u8>);
 
 pub type Nonce = u32;
@@ -59,6 +59,8 @@ pub struct Transaction {
 pub struct Hash(pub Vec<u8>);
 
 pub type BlockNumber = u32;
+
+pub type Balance = u64;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Header {

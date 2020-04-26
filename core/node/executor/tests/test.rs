@@ -32,7 +32,7 @@ fn test_executor() {
 	let path = path.into_path();
 
 	let db = Arc::new(DB::open(&path).unwrap());
-	let hasher = Arc::new(HashImpl::Blake2b160);
+	let hasher = Arc::new(HashImpl::Blake2b256);
 
 	let meta_statedb =
 		Arc::new(StateDB::new(db.clone(), node_db::columns::META_STATE, hasher.clone()).unwrap());
@@ -157,7 +157,7 @@ fn test_executor() {
 }
 
 fn expected_txs_root(txs: Vec<Arc<Transaction>>) -> Hash {
-	let trie_root = TrieRoot::new(Arc::new(HashImpl::Blake2b160)).unwrap();
+	let trie_root = TrieRoot::new(Arc::new(HashImpl::Blake2b256)).unwrap();
 	let txs = txs.into_iter().map(|x| codec::encode(&*x).unwrap());
 	Hash(trie_root.calc_ordered_trie_root(txs))
 }
@@ -185,7 +185,7 @@ fn expected_state_root_0(txs: Vec<Arc<Transaction>>) -> Hash {
 	let path = path.into_path();
 
 	let db = Arc::new(DB::open(&path).unwrap());
-	let hasher = Arc::new(HashImpl::Blake2b160);
+	let hasher = Arc::new(HashImpl::Blake2b256);
 
 	let statedb =
 		Arc::new(StateDB::new(db.clone(), node_db::columns::META_STATE, hasher.clone()).unwrap());
@@ -219,7 +219,7 @@ fn expected_state_root_1(txs_0: Vec<Arc<Transaction>>, txs_1: Vec<Arc<Transactio
 	let path = path.into_path();
 
 	let db = Arc::new(DB::open(&path).unwrap());
-	let hasher = Arc::new(HashImpl::Blake2b160);
+	let hasher = Arc::new(HashImpl::Blake2b256);
 
 	let statedb =
 		Arc::new(StateDB::new(db.clone(), node_db::columns::META_STATE, hasher.clone()).unwrap());

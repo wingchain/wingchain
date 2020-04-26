@@ -20,15 +20,15 @@ use rust_crypto::blake2b;
 use crypto::hash::Hash;
 use crypto::HashLength;
 
-pub struct Blake2b256;
+pub struct Blake2b160;
 
-/// A Blake2b256 implementation for sample
-impl Hash for Blake2b256 {
+/// A Blake2b160 implementation for sample
+impl Hash for Blake2b160 {
 	fn name(&self) -> String {
-		"blake2b_256".to_string()
+		"blake2b_160".to_string()
 	}
 	fn length(&self) -> HashLength {
-		HashLength::HashLength32
+		HashLength::HashLength20
 	}
 	fn hash(&self, out: &mut [u8], data: &[u8]) {
 		assert_eq!(out.len(), self.length().into());
@@ -36,7 +36,7 @@ impl Hash for Blake2b256 {
 	}
 }
 
-declare_hash_custom_lib!(Blake2b256);
+declare_hash_custom_lib!(Blake2b160);
 
 #[cfg(test)]
 mod tests {
@@ -45,14 +45,14 @@ mod tests {
 	#[test]
 	fn test() {
 		let data = [1u8, 2u8, 3u8];
-		let mut out = [0u8; 32];
-		Blake2b256.hash(&mut out, &data);
+		let mut out = [0u8; 20];
+		Blake2b160.hash(&mut out, &data);
 
 		assert_eq!(
 			out,
 			[
-				17, 192, 231, 155, 113, 195, 151, 108, 205, 12, 2, 209, 49, 14, 37, 22, 192, 142,
-				220, 157, 139, 111, 87, 204, 214, 128, 214, 58, 77, 142, 114, 218
+				197, 117, 145, 134, 122, 108, 242, 5, 233, 74, 212, 142, 167, 139, 236, 142, 103,
+				194, 14, 98
 			]
 		);
 	}
