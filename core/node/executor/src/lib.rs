@@ -34,6 +34,88 @@ pub mod errors;
 const META_TXS_SIZE: usize = 64;
 const PAYLOAD_TXS_SIZE: usize = 512;
 
+pub struct ContextHolder {
+	env: Rc<ContextEnv>,
+	trie_root: Arc<TrieRoot>,
+	meta_statedb: Arc<StateDB>,
+	meta_state_root: Hash,
+	meta_stmt: StateDBStmt,
+	meta_txs: Vec<Arc<Transaction>>,
+	payload_statedb: Arc<StateDB>,
+	payload_state_root: Hash,
+	payload_stmt: StateDBStmt,
+	payload_txs: Vec<Arc<Transaction>>,
+	payload_phase: Cell<bool>,
+}
+
+#[derive(Clone)]
+pub struct Context2<'a> {
+	inner: Rc<Context2Inner<'a>>,
+}
+
+struct Context2Inner<'a> {
+	env: Rc<ContextEnv>,
+	meta_state: ContextState2<'a>,
+	payload_state: ContextState2<'a>,
+}
+
+struct ContextState2<'a> {
+	statedb_getter: StateDBGetter<'a>,
+	buffer: RefCell<HashMap<DBKey, Option<DBValue>>>,
+}
+
+impl<'a> ContextState2<'a> {
+	fn new(statedb_stmt: &'a StateDBStmt) -> CommonResult<Self> {
+		let statedb_getter = StateDB::prepare_get(statedb_stmt)?;
+		let buffer = Default::default();
+
+		Ok(ContextState2 {
+			statedb_getter,
+			buffer,
+		})
+	}
+}
+
+impl ContextHolder {
+	pub fn new(
+		env: ContextEnv,
+		trie_root: Arc<TrieRoot>,
+		meta_statedb: Arc<StateDB>,
+		meta_state_root: Hash,
+		payload_statedb: Arc<StateDB>,
+		payload_state_root: Hash,
+	) -> CommonResult<Self> {
+		let meta_stmt = meta_statedb.prepare_stmt(&meta_state_root.0)?;
+		let payload_stmt = payload_statedb.prepare_stmt(&payload_state_root.0)?;
+
+		Ok(Self {
+			env: Rc::new(env),
+			trie_root,
+			meta_statedb,
+			meta_state_root,
+			meta_stmt,
+			meta_txs: Vec::with_capacity(META_TXS_SIZE),
+			payload_statedb,
+			payload_state_root,
+			payload_stmt,
+			payload_txs: Vec::with_capacity(PAYLOAD_TXS_SIZE),
+			payload_phase: Cell::new(false),
+		})
+	}
+
+	pub fn context(&self) -> CommonResult<Context2> {
+		let meta_state = ContextState2::new(&self.meta_stmt)?;
+		let payload_state = ContextState2::new(&self.payload_stmt)?;
+		Ok(Context2{
+			inner: Rc::new(Context2Inner{
+				env: self.env.clone(),
+				meta_state,
+				payload_state,
+			})
+		})
+	}
+}
+
 #[derive(Clone)]
 pub struct Context {
 	inner: Rc<ContextInner>,
@@ -279,7 +361,7 @@ impl Executor {
 						return Err(errors::ErrorKind::InvalidTxs(
 							"mixed meta and payload in one txs batch".to_string(),
 						)
-						.into());
+							.into());
 					}
 				}
 			}
@@ -299,7 +381,7 @@ impl Executor {
 			return Err(errors::ErrorKind::InvalidTxs(
 				"meta after payload not allowed".to_string(),
 			)
-			.into());
+				.into());
 		}
 
 		let mut txs = txs;
