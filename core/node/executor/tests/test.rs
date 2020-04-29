@@ -15,8 +15,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use chrono::Local;
-
 use crypto::address::{Address as AddressT, AddressImpl};
 use crypto::dsa::{Dsa, DsaImpl, KeyPair};
 use crypto::hash::HashImpl;
@@ -24,7 +22,9 @@ use node_db::DB;
 use node_executor::{module, Context, ContextEssence, Executor};
 use node_executor_primitives::ContextEnv;
 use node_statedb::{StateDB, TrieRoot};
-use primitives::{codec, Address, DBKey, Hash, PublicKey, Signature, Transaction, Witness};
+use primitives::{
+	codec, Address, DBKey, Hash, PublicKey, Signature, Transaction, TransactionForHash, Witness,
+};
 
 #[test]
 fn test_executor() {
@@ -46,7 +46,7 @@ fn test_executor() {
 
 	let trie_root = Arc::new(TrieRoot::new(hasher.clone()).unwrap());
 
-	let timestamp = Local::now().timestamp() as u32;
+	let timestamp = 1588146696;
 
 	let (secret_key_len, public_key_len, sig_len) = dsa.length().into();
 	let address_len = address.length().into();
@@ -142,18 +142,15 @@ fn test_executor() {
 	let (meta_txs_root, _txs) = context.get_meta_txs().unwrap();
 	let (payload_txs_root, _txs) = context.get_payload_txs().unwrap();
 
-	assert_eq!(meta_txs_root, expected_txs_root(block_0_meta_txs.clone()));
-	assert_eq!(
-		payload_txs_root,
-		expected_txs_root(block_0_payload_txs.clone())
-	);
+	assert_eq!(meta_txs_root, expected_txs_root(&block_0_meta_txs));
+	assert_eq!(payload_txs_root, expected_txs_root(&block_0_payload_txs));
 	assert_eq!(
 		meta_state_root,
-		expected_block_0_meta_state_root(block_0_meta_txs.clone())
+		expected_block_0_meta_state_root(&block_0_meta_txs)
 	);
 	assert_eq!(
 		payload_state_root,
-		expected_block_0_payload_state_root(block_0_payload_txs.clone())
+		expected_block_0_payload_state_root(&block_0_payload_txs)
 	);
 
 	// commit
@@ -220,14 +217,11 @@ fn test_executor() {
 	let (meta_txs_root, _txs) = context.get_meta_txs().unwrap();
 	let (payload_txs_root, _txs) = context.get_payload_txs().unwrap();
 
-	assert_eq!(meta_txs_root, expected_txs_root(block_1_meta_txs.clone()));
-	assert_eq!(
-		payload_txs_root,
-		expected_txs_root(block_1_payload_txs.clone())
-	);
+	assert_eq!(meta_txs_root, expected_txs_root(&block_1_meta_txs));
+	assert_eq!(payload_txs_root, expected_txs_root(&block_1_payload_txs));
 	assert_eq!(
 		meta_state_root,
-		expected_block_0_meta_state_root(block_0_meta_txs)
+		expected_block_0_meta_state_root(&block_0_meta_txs)
 	);
 	assert_eq!(
 		payload_state_root,
@@ -235,13 +229,15 @@ fn test_executor() {
 	);
 }
 
-fn expected_txs_root(txs: Vec<Arc<Transaction>>) -> Hash {
+fn expected_txs_root(txs: &Vec<Arc<Transaction>>) -> Hash {
 	let trie_root = TrieRoot::new(Arc::new(HashImpl::Blake2b256)).unwrap();
-	let txs = txs.into_iter().map(|x| codec::encode(&*x).unwrap());
+	let txs = txs
+		.into_iter()
+		.map(|x| codec::encode(&TransactionForHash::new(&**x)).unwrap());
 	Hash(trie_root.calc_ordered_trie_root(txs))
 }
 
-fn expected_block_0_meta_state_root(txs: Vec<Arc<Transaction>>) -> Hash {
+fn expected_block_0_meta_state_root(txs: &Vec<Arc<Transaction>>) -> Hash {
 	let tx = &txs[0]; // use the last tx
 	let params: module::system::InitParams = codec::decode(&tx.call.params.0[..]).unwrap();
 
@@ -275,7 +271,7 @@ fn expected_block_0_meta_state_root(txs: Vec<Arc<Transaction>>) -> Hash {
 	Hash(state_root)
 }
 
-fn expected_block_0_payload_state_root(txs: Vec<Arc<Transaction>>) -> Hash {
+fn expected_block_0_payload_state_root(txs: &Vec<Arc<Transaction>>) -> Hash {
 	let tx = &txs[0]; // use the last tx
 	let params: module::balance::InitParams = codec::decode(&tx.call.params.0[..]).unwrap();
 

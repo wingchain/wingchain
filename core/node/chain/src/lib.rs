@@ -325,12 +325,12 @@ impl Chain {
 
 		let meta_txs = meta_txs
 			.into_iter()
-			.map(|x| self.hash(&x).map(|hash| (hash, x)))
+			.map(|x| self.hash_transaction(&x).map(|hash| (hash, x)))
 			.collect::<CommonResult<Vec<_>>>()?;
 
 		let payload_txs = payload_txs
 			.into_iter()
-			.map(|x| self.hash(&x).map(|hash| (hash, x)))
+			.map(|x| self.hash_transaction(&x).map(|hash| (hash, x)))
 			.collect::<CommonResult<Vec<_>>>()?;
 
 		let meta_tx_hashes = meta_txs

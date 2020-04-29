@@ -26,7 +26,7 @@ use node_executor_macro::dispatcher;
 pub use node_executor_primitives::ContextEnv;
 use node_executor_primitives::{Context as ContextT, Module as ModuleT};
 use node_statedb::{StateDB, StateDBGetter, StateDBStmt, TrieRoot};
-use primitives::{codec, errors::CommonResult};
+use primitives::{codec, errors::CommonResult, TransactionForHash};
 use primitives::{Address, Call, DBKey, DBValue, Hash, Params, Transaction};
 
 pub mod errors;
@@ -173,7 +173,7 @@ impl<'a> Context<'a> {
 
 		let input = txs
 			.iter()
-			.map(|x| codec::encode(&**x))
+			.map(|x| codec::encode(&TransactionForHash::new(&**x)))
 			.collect::<Result<Vec<Vec<u8>>, _>>()?;
 		let txs_root = self.inner.trie_root.calc_ordered_trie_root(input);
 
@@ -194,7 +194,7 @@ impl<'a> Context<'a> {
 
 		let input = txs
 			.iter()
-			.map(|x| codec::encode(&**x))
+			.map(|x| codec::encode(&TransactionForHash::new(&**x)))
 			.collect::<Result<Vec<Vec<u8>>, _>>()?;
 		let txs_root = self.inner.trie_root.calc_ordered_trie_root(input);
 

@@ -22,7 +22,7 @@ use crate::errors::{CommonError, CommonErrorKind, CommonResult};
 pub mod codec;
 pub mod errors;
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Serialize, Deserialize, PartialEq)]
 pub struct Address(pub Vec<u8>);
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -89,6 +89,7 @@ pub struct Block {
 	pub body: Body,
 }
 
+#[derive(Debug, PartialEq)]
 pub struct FullBlock {
 	pub number: BlockNumber,
 	pub block_hash: Hash,
@@ -111,11 +112,37 @@ impl fmt::Debug for Hash {
 	}
 }
 
+impl fmt::Display for Hash {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "{}", hex::encode(&self.0))
+	}
+}
+
 impl Hash {
 	pub fn from_hex(hex: &str) -> CommonResult<Self> {
 		let hex =
 			hex::decode(hex).map_err(|e| CommonError::new(CommonErrorKind::Codec, Box::new(e)))?;
 		Ok(Hash(hex))
+	}
+}
+
+impl fmt::Debug for Address {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "{}", hex::encode(&self.0))
+	}
+}
+
+impl fmt::Display for Address {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "{}", hex::encode(&self.0))
+	}
+}
+
+impl Address {
+	pub fn from_hex(hex: &str) -> CommonResult<Self> {
+		let hex =
+			hex::decode(hex).map_err(|e| CommonError::new(CommonErrorKind::Codec, Box::new(e)))?;
+		Ok(Address(hex))
 	}
 }
 

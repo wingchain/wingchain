@@ -248,7 +248,7 @@ pub struct Witness {
 	public_key: Hex,
 	signature: Hex,
 	nonce: Hex,
-	expire: Hex,
+	until: Hex,
 }
 
 #[derive(Serialize)]
@@ -309,7 +309,7 @@ impl From<primitives::Witness> for Witness {
 			public_key: witness.public_key.into(),
 			signature: witness.signature.into(),
 			nonce: witness.nonce.into(),
-			expire: witness.nonce.into(),
+			until: witness.until.into(),
 		}
 	}
 }
