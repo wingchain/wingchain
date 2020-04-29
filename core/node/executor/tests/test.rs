@@ -21,11 +21,10 @@ use crypto::address::{Address as AddressT, AddressImpl};
 use crypto::dsa::{Dsa, DsaImpl, KeyPair};
 use crypto::hash::HashImpl;
 use node_db::DB;
-use node_executor::{module, Context, Executor};
+use node_executor::{module, Context, ContextEssence, Executor};
 use node_executor_primitives::ContextEnv;
 use node_statedb::{StateDB, TrieRoot};
 use primitives::{codec, Address, DBKey, Hash, PublicKey, Signature, Transaction, Witness};
-use std::rc::Rc;
 
 #[test]
 fn test_executor() {
@@ -118,9 +117,9 @@ fn test_executor() {
 	let meta_state_root = meta_statedb.default_root();
 	let payload_state_root = meta_statedb.default_root();
 
-	let env = Rc::new(ContextEnv { number, timestamp });
+	let env = ContextEnv { number, timestamp };
 
-	let context = Context::new(
+	let context_essence = ContextEssence::new(
 		env,
 		trie_root.clone(),
 		meta_statedb.clone(),
@@ -129,6 +128,7 @@ fn test_executor() {
 		Hash(payload_state_root),
 	)
 	.unwrap();
+	let context = Context::new(&context_essence).unwrap();
 
 	executor
 		.execute_txs(&context, block_0_meta_txs.clone())
@@ -195,33 +195,44 @@ fn test_executor() {
 	let number = 1;
 	let timestamp = timestamp + 1;
 
-	let env = Rc::new(ContextEnv { number, timestamp });
+	let env = ContextEnv { number, timestamp };
 
-	let context = Context::new(
+	let context_essence = ContextEssence::new(
 		env,
 		trie_root.clone(),
-		meta_statedb,
+		meta_statedb.clone(),
 		meta_state_root,
-		payload_statedb,
+		payload_statedb.clone(),
 		payload_state_root,
 	)
 	.unwrap();
+	let context = Context::new(&context_essence).unwrap();
 
 	executor
 		.execute_txs(&context, block_1_meta_txs.clone())
 		.unwrap();
-	// executor.execute_txs(&context, block_1_payload_txs.clone()).unwrap();
-	// let (meta_state_root, meta_transaction) = context.get_meta_update().unwrap();
-	// let (payload_state_root, payload_transaction) = context.get_payload_update().unwrap();
+	executor
+		.execute_txs(&context, block_1_payload_txs.clone())
+		.unwrap();
+	let (meta_state_root, _meta_transaction) = context.get_meta_update().unwrap();
+	let (payload_state_root, _payload_transaction) = context.get_payload_update().unwrap();
 
-	// let (meta_txs_root, _txs) = context.get_meta_txs().unwrap();
-	// let (payload_txs_root, _txs) = context.get_payload_txs().unwrap();
-	//
-	// assert_eq!(txs_root, expected_txs_root(txs_1.clone()));
-	// assert_eq!(
-	// 	state_root,
-	// 	expected_state_root_1(txs_0.clone(), txs_1.clone())
-	// );
+	let (meta_txs_root, _txs) = context.get_meta_txs().unwrap();
+	let (payload_txs_root, _txs) = context.get_payload_txs().unwrap();
+
+	assert_eq!(meta_txs_root, expected_txs_root(block_1_meta_txs.clone()));
+	assert_eq!(
+		payload_txs_root,
+		expected_txs_root(block_1_payload_txs.clone())
+	);
+	assert_eq!(
+		meta_state_root,
+		expected_block_0_meta_state_root(block_0_meta_txs)
+	);
+	assert_eq!(
+		payload_state_root,
+		expected_block_1_payload_state_root(block_0_payload_txs, block_1_payload_txs)
+	);
 }
 
 fn expected_txs_root(txs: Vec<Arc<Transaction>>) -> Hash {
@@ -301,20 +312,24 @@ fn expected_block_0_payload_state_root(txs: Vec<Arc<Transaction>>) -> Hash {
 	Hash(state_root)
 }
 
-fn expected_state_root_1(txs_0: Vec<Arc<Transaction>>, txs_1: Vec<Arc<Transaction>>) -> Hash {
-	let tx = &txs_0[0]; // use the last tx
-	let params: module::system::InitParams = codec::decode(&tx.call.params.0[..]).unwrap();
+fn expected_block_1_payload_state_root(
+	block_0_txs: Vec<Arc<Transaction>>,
+	block_1_txs: Vec<Arc<Transaction>>,
+) -> Hash {
+	let tx = &block_0_txs[0]; // use the last tx
+	let params: module::balance::InitParams = codec::decode(&tx.call.params.0[..]).unwrap();
+	let (account1, balance) = &params.endow[0];
 
-	let data = vec![
-		(
-			DBKey::from_slice(b"system_chain_id"),
-			Some(codec::encode(&params.chain_id).unwrap()),
+	let data = vec![(
+		DBKey::from_slice(
+			&[
+				&b"balance_balance_"[..],
+				&codec::encode(&account1.0).unwrap(),
+			]
+			.concat(),
 		),
-		(
-			DBKey::from_slice(b"system_timestamp"),
-			Some(codec::encode(&params.timestamp).unwrap()),
-		),
-	]
+		Some(codec::encode(&balance).unwrap()),
+	)]
 	.into_iter()
 	.collect::<HashMap<_, _>>();
 
@@ -326,8 +341,9 @@ fn expected_state_root_1(txs_0: Vec<Arc<Transaction>>, txs_1: Vec<Arc<Transactio
 	let db = Arc::new(DB::open(&path).unwrap());
 	let hasher = Arc::new(HashImpl::Blake2b256);
 
-	let statedb =
-		Arc::new(StateDB::new(db.clone(), node_db::columns::META_STATE, hasher.clone()).unwrap());
+	let statedb = Arc::new(
+		StateDB::new(db.clone(), node_db::columns::PAYLOAD_STATE, hasher.clone()).unwrap(),
+	);
 
 	let (state_root, transaction) = statedb
 		.prepare_update(&statedb.default_root(), data.iter())
@@ -335,17 +351,31 @@ fn expected_state_root_1(txs_0: Vec<Arc<Transaction>>, txs_1: Vec<Arc<Transactio
 
 	db.write(transaction).unwrap();
 
-	let tx = &txs_1[0]; // use the last tx
-	let params: module::system::InitParams = codec::decode(&tx.call.params.0[..]).unwrap();
+	let tx = &block_1_txs[0]; // use the last tx
+	let params: module::balance::TransferParams = codec::decode(&tx.call.params.0[..]).unwrap();
+
+	let (account2, value) = (&params.recipient, params.value);
 
 	let data = vec![
 		(
-			DBKey::from_slice(b"system_chain_id"),
-			Some(codec::encode(&params.chain_id).unwrap()),
+			DBKey::from_slice(
+				&[
+					&b"balance_balance_"[..],
+					&codec::encode(&account1.0).unwrap(),
+				]
+				.concat(),
+			),
+			Some(codec::encode(&(balance - value)).unwrap()),
 		),
 		(
-			DBKey::from_slice(b"system_timestamp"),
-			Some(codec::encode(&params.timestamp).unwrap()),
+			DBKey::from_slice(
+				&[
+					&b"balance_balance_"[..],
+					&codec::encode(&account2.0).unwrap(),
+				]
+				.concat(),
+			),
+			Some(codec::encode(&value).unwrap()),
 		),
 	]
 	.into_iter()

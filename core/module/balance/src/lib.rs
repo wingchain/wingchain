@@ -86,23 +86,23 @@ impl<C: Context> Module<C> {
 		}
 
 		let sender_balance = self.balance.get(sender)?.unwrap_or(0);
-		// if sender_balance < value {
-		// 	return execute_error_result("insufficient balance");
-		// }
-		// let recipient_balance = self.balance.get(recipient)?.unwrap_or(0);
+		if sender_balance < value {
+			return execute_error_result("insufficient balance");
+		}
+		let recipient_balance = self.balance.get(recipient)?.unwrap_or(0);
 
-		// let (sender_balance, overflow) = sender_balance.overflowing_sub(value);
-		// if overflow {
-		// 	return execute_error_result("u64 overflow");
-		// }
-		//
-		// let (recipient_balance, overflow) = recipient_balance.overflowing_add(value);
-		// if overflow {
-		// 	return execute_error_result("u64 overflow");
-		// }
-		//
-		// self.balance.set(sender, &sender_balance)?;
-		// self.balance.set(recipient, &recipient_balance)?;
+		let (sender_balance, overflow) = sender_balance.overflowing_sub(value);
+		if overflow {
+			return execute_error_result("u64 overflow");
+		}
+
+		let (recipient_balance, overflow) = recipient_balance.overflowing_add(value);
+		if overflow {
+			return execute_error_result("u64 overflow");
+		}
+
+		self.balance.set(sender, &sender_balance)?;
+		self.balance.set(recipient, &recipient_balance)?;
 
 		Ok(Ok(()))
 	}

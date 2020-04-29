@@ -14,7 +14,6 @@
 
 use std::fs;
 use std::path::PathBuf;
-use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -26,7 +25,7 @@ use crypto::dsa::DsaImpl;
 use crypto::hash::{Hash as HashT, HashImpl};
 use main_base::spec::Spec;
 use node_db::{DBTransaction, DB};
-use node_executor::{Context, ContextEnv, Executor};
+use node_executor::{Context, ContextEnv, ContextEssence, Executor};
 use node_statedb::{StateDB, TrieRoot};
 use primitives::errors::CommonResult;
 use primitives::{
@@ -287,8 +286,9 @@ impl Chain {
 		let zero_hash = Hash(vec![0u8; self.basic.hash.length().into()]);
 
 		let number = 0;
-		let env = Rc::new(ContextEnv { number, timestamp });
-		let context = Context::new(
+		let env = ContextEnv { number, timestamp };
+
+		let context_essence = ContextEssence::new(
 			env,
 			self.trie_root.clone(),
 			self.meta_statedb.clone(),
@@ -296,6 +296,8 @@ impl Chain {
 			self.payload_statedb.clone(),
 			Hash(self.payload_statedb.default_root()),
 		)?;
+
+		let context = Context::new(&context_essence)?;
 
 		self.executor.execute_txs(&context, meta_txs)?;
 		self.executor.execute_txs(&context, payload_txs)?;

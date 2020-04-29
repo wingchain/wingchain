@@ -34,49 +34,18 @@ pub mod errors;
 const META_TXS_SIZE: usize = 64;
 const PAYLOAD_TXS_SIZE: usize = 512;
 
-pub struct ContextHolder {
+pub struct ContextEssence {
 	env: Rc<ContextEnv>,
 	trie_root: Arc<TrieRoot>,
 	meta_statedb: Arc<StateDB>,
-	meta_state_root: Hash,
+	meta_state_root: Rc<Hash>,
 	meta_stmt: StateDBStmt,
-	meta_txs: Vec<Arc<Transaction>>,
 	payload_statedb: Arc<StateDB>,
-	payload_state_root: Hash,
+	payload_state_root: Rc<Hash>,
 	payload_stmt: StateDBStmt,
-	payload_txs: Vec<Arc<Transaction>>,
-	payload_phase: Cell<bool>,
 }
 
-#[derive(Clone)]
-pub struct Context2<'a> {
-	inner: Rc<Context2Inner<'a>>,
-}
-
-struct Context2Inner<'a> {
-	env: Rc<ContextEnv>,
-	meta_state: ContextState2<'a>,
-	payload_state: ContextState2<'a>,
-}
-
-struct ContextState2<'a> {
-	statedb_getter: StateDBGetter<'a>,
-	buffer: RefCell<HashMap<DBKey, Option<DBValue>>>,
-}
-
-impl<'a> ContextState2<'a> {
-	fn new(statedb_stmt: &'a StateDBStmt) -> CommonResult<Self> {
-		let statedb_getter = StateDB::prepare_get(statedb_stmt)?;
-		let buffer = Default::default();
-
-		Ok(ContextState2 {
-			statedb_getter,
-			buffer,
-		})
-	}
-}
-
-impl ContextHolder {
+impl ContextEssence {
 	pub fn new(
 		env: ContextEnv,
 		trie_root: Arc<TrieRoot>,
@@ -92,30 +61,148 @@ impl ContextHolder {
 			env: Rc::new(env),
 			trie_root,
 			meta_statedb,
-			meta_state_root,
+			meta_state_root: Rc::new(meta_state_root),
 			meta_stmt,
-			meta_txs: Vec::with_capacity(META_TXS_SIZE),
 			payload_statedb,
-			payload_state_root,
+			payload_state_root: Rc::new(payload_state_root),
 			payload_stmt,
-			payload_txs: Vec::with_capacity(PAYLOAD_TXS_SIZE),
-			payload_phase: Cell::new(false),
-		})
-	}
-
-	pub fn context(&self) -> CommonResult<Context2> {
-		let meta_state = ContextState2::new(&self.meta_stmt)?;
-		let payload_state = ContextState2::new(&self.payload_stmt)?;
-		Ok(Context2{
-			inner: Rc::new(Context2Inner{
-				env: self.env.clone(),
-				meta_state,
-				payload_state,
-			})
 		})
 	}
 }
 
+#[derive(Clone)]
+pub struct Context<'a> {
+	inner: Rc<ContextInner<'a>>,
+}
+
+struct ContextInner<'a> {
+	env: Rc<ContextEnv>,
+	trie_root: Arc<TrieRoot>,
+	meta_statedb: Arc<StateDB>,
+	meta_state_root: Rc<Hash>,
+	meta_state: ContextState<'a>,
+	meta_txs: RefCell<Vec<Arc<Transaction>>>,
+	payload_statedb: Arc<StateDB>,
+	payload_state_root: Rc<Hash>,
+	payload_state: ContextState<'a>,
+	payload_txs: RefCell<Vec<Arc<Transaction>>>,
+	// to mark the context has already started to executed payload txs
+	payload_phase: Cell<bool>,
+}
+
+struct ContextState<'a> {
+	statedb_getter: StateDBGetter<'a>,
+	buffer: RefCell<HashMap<DBKey, Option<DBValue>>>,
+}
+
+impl<'a> ContextState<'a> {
+	fn new(statedb_stmt: &'a StateDBStmt) -> CommonResult<Self> {
+		let statedb_getter = StateDB::prepare_get(statedb_stmt)?;
+		let buffer = Default::default();
+
+		Ok(ContextState {
+			statedb_getter,
+			buffer,
+		})
+	}
+}
+
+impl<'a> ContextT for Context<'a> {
+	fn env(&self) -> Rc<ContextEnv> {
+		self.inner.env.clone()
+	}
+	fn meta_get(&self, key: &[u8]) -> CommonResult<Option<DBValue>> {
+		let buffer = self.inner.meta_state.buffer.borrow();
+		match buffer.get(&DBKey::from_slice(key)) {
+			Some(value) => Ok(value.clone()),
+			None => self.inner.meta_state.statedb_getter.get(key),
+		}
+	}
+	fn meta_set(&self, key: &[u8], value: Option<DBValue>) -> CommonResult<()> {
+		let mut buffer = self.inner.meta_state.buffer.borrow_mut();
+		buffer.insert(DBKey::from_slice(key), value);
+		Ok(())
+	}
+	fn payload_get(&self, key: &[u8]) -> CommonResult<Option<DBValue>> {
+		let buffer = self.inner.payload_state.buffer.borrow();
+		match buffer.get(&DBKey::from_slice(key)) {
+			Some(value) => Ok(value.clone()),
+			None => self.inner.payload_state.statedb_getter.get(key),
+		}
+	}
+	fn payload_set(&self, key: &[u8], value: Option<DBValue>) -> CommonResult<()> {
+		let mut buffer = self.inner.payload_state.buffer.borrow_mut();
+		buffer.insert(DBKey::from_slice(key), value);
+		Ok(())
+	}
+}
+
+impl<'a> Context<'a> {
+	pub fn new(context_essence: &'a ContextEssence) -> CommonResult<Self> {
+		let meta_state = ContextState::new(&context_essence.meta_stmt)?;
+		let payload_state = ContextState::new(&context_essence.payload_stmt)?;
+
+		let inner = Rc::new(ContextInner {
+			env: context_essence.env.clone(),
+			trie_root: context_essence.trie_root.clone(),
+			meta_statedb: context_essence.meta_statedb.clone(),
+			meta_state_root: context_essence.meta_state_root.clone(),
+			meta_state,
+			meta_txs: RefCell::new(Vec::with_capacity(META_TXS_SIZE)),
+			payload_statedb: context_essence.payload_statedb.clone(),
+			payload_state_root: context_essence.payload_state_root.clone(),
+			payload_state,
+			payload_txs: RefCell::new(Vec::with_capacity(PAYLOAD_TXS_SIZE)),
+			payload_phase: Cell::new(false),
+		});
+
+		Ok(Self { inner })
+	}
+
+	pub fn get_meta_update(&self) -> CommonResult<(Hash, DBTransaction)> {
+		let buffer = self.inner.meta_state.buffer.borrow();
+		let (root, transaction) = self
+			.inner
+			.meta_statedb
+			.prepare_update(&self.inner.meta_state_root.0, buffer.iter())?;
+		Ok((Hash(root), transaction))
+	}
+
+	pub fn get_meta_txs(&self) -> CommonResult<(Hash, Vec<Arc<Transaction>>)> {
+		let txs = self.inner.meta_txs.borrow().clone();
+
+		let input = txs
+			.iter()
+			.map(|x| codec::encode(&**x))
+			.collect::<Result<Vec<Vec<u8>>, _>>()?;
+		let txs_root = self.inner.trie_root.calc_ordered_trie_root(input);
+
+		Ok((Hash(txs_root), txs))
+	}
+
+	pub fn get_payload_update(&self) -> CommonResult<(Hash, DBTransaction)> {
+		let buffer = self.inner.payload_state.buffer.borrow();
+		let (root, transaction) = self
+			.inner
+			.payload_statedb
+			.prepare_update(&self.inner.payload_state_root.0, buffer.iter())?;
+		Ok((Hash(root), transaction))
+	}
+
+	pub fn get_payload_txs(&self) -> CommonResult<(Hash, Vec<Arc<Transaction>>)> {
+		let txs = self.inner.payload_txs.borrow().clone();
+
+		let input = txs
+			.iter()
+			.map(|x| codec::encode(&**x))
+			.collect::<Result<Vec<Vec<u8>>, _>>()?;
+		let txs_root = self.inner.trie_root.calc_ordered_trie_root(input);
+
+		Ok((Hash(txs_root), txs))
+	}
+}
+
+/*
 #[derive(Clone)]
 pub struct Context {
 	inner: Rc<ContextInner>,
@@ -264,6 +351,7 @@ impl ContextT for Context {
 		Ok(())
 	}
 }
+*/
 
 pub struct Executor {
 	dsa: Arc<DsaImpl>,
@@ -361,7 +449,7 @@ impl Executor {
 						return Err(errors::ErrorKind::InvalidTxs(
 							"mixed meta and payload in one txs batch".to_string(),
 						)
-							.into());
+						.into());
 					}
 				}
 			}
@@ -381,7 +469,7 @@ impl Executor {
 			return Err(errors::ErrorKind::InvalidTxs(
 				"meta after payload not allowed".to_string(),
 			)
-				.into());
+			.into());
 		}
 
 		let mut txs = txs;
