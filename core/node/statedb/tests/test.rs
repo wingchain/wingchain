@@ -233,6 +233,9 @@ fn test_statedb_for_hasher(hasher: HashImpl) {
 
 	let result = getter.get(&b"abd"[..]).unwrap();
 	assert_eq!(Some(vec![1u8; 1024]), result);
+
+	let result = getter.get(&b"abd"[..]).unwrap();
+	assert_eq!(Some(vec![1u8; 1024]), result);
 }
 
 #[test]

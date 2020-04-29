@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use serde::Deserialize;
-use toml::Value;
 
 #[derive(Deserialize, Debug)]
 pub struct Spec {
@@ -35,6 +34,7 @@ pub struct Genesis {
 
 #[derive(Deserialize, Debug)]
 pub struct Tx {
+	pub module: String,
 	pub method: String,
-	pub params: Vec<Value>,
+	pub params: String,
 }

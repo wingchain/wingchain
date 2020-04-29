@@ -17,8 +17,11 @@ use std::marker::PhantomData;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
-use primitives::errors::{CommonError, CommonResult};
-use primitives::{codec, Call, DBValue};
+pub use chrono;
+use primitives::errors::CommonResult;
+use primitives::{codec, Address, BlockNumber, Call, DBValue};
+pub use serde_json;
+use std::rc::Rc;
 
 pub mod errors;
 
@@ -40,10 +43,17 @@ where
 	fn is_write_call(call: &Call) -> Option<bool>;
 
 	/// execute the call
-	fn execute_call(&self, call: &Call) -> Result<(), CommonError>;
+	fn execute_call(&self, sender: Option<&Address>, call: &Call)
+		-> CommonResult<CommonResult<()>>;
+}
+
+pub struct ContextEnv {
+	pub number: BlockNumber,
+	pub timestamp: u32,
 }
 
 pub trait Context: Clone {
+	fn env(&self) -> Rc<ContextEnv>;
 	fn meta_get(&self, key: &[u8]) -> CommonResult<Option<DBValue>>;
 	fn meta_set(&self, key: &[u8], value: Option<DBValue>) -> CommonResult<()>;
 	fn payload_get(&self, key: &[u8]) -> CommonResult<Option<DBValue>>;
@@ -119,19 +129,19 @@ where
 		}
 	}
 
-	pub fn get(&self, key: K) -> CommonResult<Option<V>> {
+	pub fn get(&self, key: &K) -> CommonResult<Option<V>> {
 		let key = codec::encode(&key)?;
 		let key = &[&self.key, SEPARATOR, &key].concat();
 		context_get(&self.context, self.meta_module, key)
 	}
 
-	pub fn set(&self, key: K, value: &V) -> CommonResult<()> {
+	pub fn set(&self, key: &K, value: &V) -> CommonResult<()> {
 		let key = codec::encode(&key)?;
 		let key = &[&self.key, SEPARATOR, &key].concat();
 		context_set(&self.context, self.meta_module, key, value)
 	}
 
-	pub fn delete(&self, key: K) -> CommonResult<()> {
+	pub fn delete(&self, key: &K) -> CommonResult<()> {
 		let key = codec::encode(&key)?;
 		let key = &[&self.key, SEPARATOR, &key].concat();
 		context_delete(&self.context, self.meta_module, key)

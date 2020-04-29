@@ -42,7 +42,7 @@ mod trie;
 
 pub struct StateDB {
 	db: Arc<DB>,
-	db_column: u32,
+	pub db_column: u32,
 	#[allow(dead_code)]
 	hasher: Arc<HashImpl>,
 	hash_length: HashLength,

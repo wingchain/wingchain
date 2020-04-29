@@ -15,7 +15,7 @@
 use std::error::Error;
 use std::fmt::Debug;
 
-use primitives::errors::{CommonError, CommonErrorKind, Display};
+use primitives::errors::{CommonError, CommonErrorKind, CommonResult, Display};
 
 #[derive(Debug, Display)]
 pub enum ErrorKind {
@@ -24,6 +24,12 @@ pub enum ErrorKind {
 
 	#[display(fmt = "Invalid params")]
 	InvalidParams,
+
+	#[display(fmt = "{}", _0)]
+	ExecuteError(String),
+
+	#[display(fmt = "Parse error: {}", _0)]
+	ParseError(String),
 }
 
 impl Error for ErrorKind {}
@@ -32,4 +38,8 @@ impl From<ErrorKind> for CommonError {
 	fn from(error: ErrorKind) -> Self {
 		CommonError::new(CommonErrorKind::Executor, Box::new(error))
 	}
+}
+
+pub fn execute_error_result(message: &str) -> CommonResult<CommonResult<()>> {
+	Ok(Err(ErrorKind::ExecuteError(message.to_string()).into()))
 }

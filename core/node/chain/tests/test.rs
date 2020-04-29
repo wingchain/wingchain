@@ -19,6 +19,8 @@ use std::sync::Arc;
 
 use serde::Serialize;
 
+use crypto::address::AddressImpl;
+use crypto::dsa::DsaImpl;
 use crypto::hash::{Hash as HashT, HashImpl};
 use node_chain::{Chain, ChainConfig};
 use node_db::DB;
@@ -75,7 +77,9 @@ fn test_chain() {
 }
 
 fn expected_data() -> (Hash, Block, Executed, Transaction) {
-	let executor = Executor;
+	let dsa = Arc::new(DsaImpl::Ed25519);
+	let address = Arc::new(AddressImpl::Blake2b160);
+	let executor = Executor::new(dsa, address);
 
 	let tx = executor
 		.build_tx(
@@ -213,13 +217,14 @@ address = "blake2b_160"
 
 # System module init
 [[genesis.txs]]
-method = "system.init"
-params = ['''
+module = "system"
+method = "init"
+params = '''
 {
     "chain_id": "chain-test",
-    "time": "2020-04-16T23:46:02.189+08:00"
+    "timestamp": "2020-04-16T23:46:02.189+08:00"
 }
-''']
+'''
 	"#;
 
 	fs::write(config_path.join("spec.toml"), &spec).unwrap();

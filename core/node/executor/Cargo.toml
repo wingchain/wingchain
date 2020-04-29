@@ -13,8 +13,10 @@ node-db = { path = "../db" }
 node-statedb = { path = "../statedb" }
 primitives = { path = "../../primitives" }
 module-system = { path = "../../module/system" }
+module-balance = { path = "../../module/balance" }
 node-executor-primitives = { path = "primitives" }
 node-executor-macro = { path = "executor-macro" }
+crypto = { path = "../../crypto" }
 
 [dev-dependencies]
 chrono = "0.4.11"

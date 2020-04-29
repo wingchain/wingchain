@@ -27,6 +27,12 @@ pub enum ErrorKind {
 
 	#[display(fmt = "Invalid tx call")]
 	InvalidTxCall,
+
+	#[display(fmt = "Invalid tx witness: {}", _0)]
+	InvalidTxWitness(String),
+
+	#[display(fmt = "Invalid address")]
+	InvalidAddress,
 }
 
 impl Error for ErrorKind {}

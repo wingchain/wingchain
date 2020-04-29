@@ -12,17 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::rc::Rc;
+
 use serde::{Deserialize, Serialize};
 
 use executor_macro::{call, module};
-use executor_primitives::{errors, Context, Module as ModuleT, StorageValue};
+use executor_primitives::{
+	errors::{self, execute_error_result},
+	Context, ContextEnv, Module as ModuleT, StorageValue,
+};
 use primitives::errors::CommonResult;
-use primitives::{codec, Call};
+use primitives::{codec, Address, Call};
 
 pub struct Module<C>
 where
 	C: Context,
 {
+	env: Rc<ContextEnv>,
 	chain_id: StorageValue<String, C>,
 	timestamp: StorageValue<u32, C>,
 }
@@ -34,20 +40,28 @@ impl<C: Context> Module<C> {
 
 	fn new(context: C) -> Self {
 		Self {
+			env: context.env(),
 			chain_id: StorageValue::new::<Self>(context.clone(), b"chain_id"),
 			timestamp: StorageValue::new::<Self>(context, b"timestamp"),
 		}
 	}
 
 	#[call(write = true)]
-	fn init(&self, params: InitParams) -> CommonResult<()> {
+	fn init(
+		&self,
+		_sender: Option<&Address>,
+		params: InitParams,
+	) -> CommonResult<CommonResult<()>> {
+		if self.env.number != 0 {
+			return execute_error_result("not genesis");
+		}
 		self.chain_id.set(&params.chain_id)?;
 		self.timestamp.set(&params.timestamp)?;
-		Ok(())
+		Ok(Ok(()))
 	}
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct InitParams {
 	pub chain_id: String,
 	pub timestamp: u32,

@@ -1,5 +1,5 @@
 [package]
-name = "balance"
+name = "module-balance"
 version = "0.1.0"
 authors = ["developer <developer@wingchain.cn>"]
 edition = "2018"

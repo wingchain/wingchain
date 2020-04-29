@@ -17,13 +17,17 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 
+use serde::Serialize;
+
+use crypto::address::{Address as AddressT, AddressImpl};
+use crypto::dsa::{Dsa, DsaImpl, Verifier};
 use node_db::DBTransaction;
 use node_executor_macro::dispatcher;
+pub use node_executor_primitives::ContextEnv;
 use node_executor_primitives::{Context as ContextT, Module as ModuleT};
 use node_statedb::{StateDB, StateDBGetter, StateDBStmt, TrieRoot};
 use primitives::{codec, errors::CommonResult};
-use primitives::{BlockNumber, Call, DBKey, DBValue, Hash, Params, Transaction};
-use serde::Serialize;
+use primitives::{Address, Call, DBKey, DBValue, Hash, Params, Transaction};
 
 pub mod errors;
 
@@ -36,10 +40,7 @@ pub struct Context {
 }
 
 struct ContextInner {
-	#[allow(dead_code)]
-	number: BlockNumber,
-	#[allow(dead_code)]
-	timestamp: u32,
+	env: Rc<ContextEnv>,
 	trie_root: Arc<TrieRoot>,
 	meta_statedb: Arc<StateDB>,
 	meta_state_root: Hash,
@@ -55,8 +56,7 @@ struct ContextInner {
 
 impl Context {
 	pub fn new(
-		number: BlockNumber,
-		timestamp: u32,
+		env: Rc<ContextEnv>,
 		trie_root: Arc<TrieRoot>,
 		meta_statedb: Arc<StateDB>,
 		meta_state_root: Hash,
@@ -67,8 +67,7 @@ impl Context {
 		let payload_state = ContextState::new(payload_statedb.clone(), &payload_state_root.0)?;
 
 		let inner = Rc::new(ContextInner {
-			number,
-			timestamp,
+			env,
 			trie_root,
 			meta_statedb,
 			meta_state_root,
@@ -131,7 +130,7 @@ struct ContextState {
 	#[allow(dead_code)]
 	/// statedb_stmt is referred by statedb_getter, should be kept
 	statedb_stmt: StateDBStmt,
-	/// unsafe, should never out live lib
+	/// unsafe, should never out live statedb_stmt
 	statedb_getter: StateDBGetter<'static>,
 	buffer: RefCell<HashMap<DBKey, Option<DBValue>>>,
 }
@@ -155,6 +154,9 @@ impl ContextState {
 }
 
 impl ContextT for Context {
+	fn env(&self) -> Rc<ContextEnv> {
+		self.inner.env.clone()
+	}
 	fn meta_get(&self, key: &[u8]) -> CommonResult<Option<DBValue>> {
 		let buffer = self.inner.meta_state.buffer.borrow();
 		match buffer.get(&DBKey::from_slice(key)) {
@@ -181,11 +183,14 @@ impl ContextT for Context {
 	}
 }
 
-pub struct Executor;
+pub struct Executor {
+	dsa: Arc<DsaImpl>,
+	address: Arc<AddressImpl>,
+}
 
 impl Executor {
-	pub fn new() -> Self {
-		Self
+	pub fn new(dsa: Arc<DsaImpl>, address: Arc<AddressImpl>) -> Self {
+		Self { dsa, address }
 	}
 
 	pub fn build_tx<P: Serialize>(
@@ -215,10 +220,24 @@ impl Executor {
 	}
 
 	pub fn validate_tx(&self, tx: &Transaction) -> CommonResult<()> {
-		// TODO validate witness
-
-		let module = &tx.call.module;
+		let witness = tx
+			.witness
+			.as_ref()
+			.ok_or(errors::ErrorKind::InvalidTxWitness(
+				"missing witness".to_string(),
+			))?;
 		let call = &tx.call;
+
+		let signature = &witness.signature;
+		let message = codec::encode(&(&witness.nonce, &witness.until, call))?;
+
+		let verifier = self.dsa.verifier_from_public_key(&witness.public_key.0)?;
+
+		verifier
+			.verify(&message, &signature.0)
+			.map_err(|_| errors::ErrorKind::InvalidTxWitness("invalid signature".to_string()))?;
+
+		let module = &call.module;
 
 		let valid = Dispatcher::is_valid_call::<Context>(module, &call)?;
 
@@ -229,6 +248,19 @@ impl Executor {
 		}
 
 		Ok(())
+	}
+
+	pub fn validate_address(&self, address: &Address) -> CommonResult<()> {
+		let expected_address_len: usize = self.address.length().into();
+		if address.0.len() != expected_address_len {
+			return Err(errors::ErrorKind::InvalidAddress.into());
+		}
+		Ok(())
+	}
+
+	pub fn is_meta_tx(&self, tx: &Transaction) -> CommonResult<bool> {
+		let module = &tx.call.module;
+		Dispatcher::is_meta::<Context>(module)
 	}
 
 	pub fn execute_txs(&self, context: &Context, txs: Vec<Arc<Transaction>>) -> CommonResult<()> {
@@ -252,7 +284,15 @@ impl Executor {
 				}
 			}
 
-			let _result = Dispatcher::execute_call::<Context>(module, context, &call)?;
+			let sender = tx.witness.as_ref().map(|witness| {
+				let public_key = &witness.public_key;
+				let mut address = vec![0u8; self.address.length().into()];
+				self.address.address(&mut address, &public_key.0);
+				Address(address)
+			});
+
+			let _result =
+				Dispatcher::execute_call::<Context>(module, context, sender.as_ref(), &call)?;
 		}
 
 		if context.inner.payload_phase.get() && txs_is_meta == Some(true) {
@@ -277,9 +317,11 @@ impl Executor {
 #[dispatcher]
 enum Dispatcher {
 	system,
+	balance,
 }
 
 /// re-import modules
 pub mod module {
+	pub use module_balance as balance;
 	pub use module_system as system;
 }

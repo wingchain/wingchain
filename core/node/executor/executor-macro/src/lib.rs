@@ -13,10 +13,12 @@
 // limitations under the License.
 
 use proc_macro::TokenStream;
-use quote::quote;
+
 use syn::{
 	parse_macro_input, FnArg, Ident, ImplItem, ImplItemMethod, ItemImpl, Meta, NestedMeta, Type,
 };
+
+use quote::quote;
 
 #[proc_macro_attribute]
 pub fn dispatcher(_attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -57,8 +59,8 @@ pub fn dispatcher(_attr: TokenStream, item: TokenStream) -> TokenStream {
 			let ident = &x.ident;
 			quote! { stringify!(#ident) => {
 				let module = module::#ident::Module::<_>::new(context.clone());
-				let result = module.execute_call(call);
-				Ok(result)
+				let result = module.execute_call(sender, call);
+				result
 			} }
 		})
 		.collect::<Vec<_>>();
@@ -85,7 +87,7 @@ pub fn dispatcher(_attr: TokenStream, item: TokenStream) -> TokenStream {
 					other => Err(errors::ErrorKind::InvalidModule(other.to_string()).into()),
 				}
 			}
-			fn execute_call<C: ContextT>(module: &str, context: &C, call: &Call) -> CommonResult<CommonResult<()>>{
+			fn execute_call<C: ContextT>(module: &str, context: &C, sender: Option<&Address>, call: &Call) -> CommonResult<CommonResult<()>>{
 				match module {
 					#(#execute_call_ts_vec),*,
 					other => Err(errors::ErrorKind::InvalidModule(other.to_string()).into()),
@@ -109,11 +111,6 @@ pub fn module(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
 	let methods = get_module_call_methods(&impl_item);
 
-	// let methods_ts_vec = methods.iter().map(|x|{
-	// 	let method = x.method.clone();
-	// 	quote! { #method }
-	// }).collect::<Vec<_>>();
-
 	let is_valid_call_ts_vec = methods
 		.iter()
 		.map(|x| {
@@ -136,7 +133,7 @@ pub fn module(_attr: TokenStream, item: TokenStream) -> TokenStream {
 		.iter()
 		.map(|x| {
 			let method_ident = &x.method_ident;
-			quote! { stringify!(#method_ident) => self.#method_ident(codec::decode(&params).map_err(|_| errors::ErrorKind::InvalidParams)?) }
+			quote! { stringify!(#method_ident) => self.#method_ident(sender, codec::decode(&params).map_err(|_| errors::ErrorKind::InvalidParams)?) }
 		})
 		.collect::<Vec<_>>();
 
@@ -169,7 +166,7 @@ pub fn module(_attr: TokenStream, item: TokenStream) -> TokenStream {
 				}
 			}
 
-			fn execute_call(&self, call: &Call) -> CommonResult<()> {
+			fn execute_call(&self, sender: Option<&Address>, call: &Call) -> CommonResult<CommonResult<()>> {
 				let params = &call.params.0[..];
 				let method = call.method.as_str();
 				match method {
@@ -248,8 +245,8 @@ fn get_module_call_methods(impl_item: &ItemImpl) -> Vec<ModuleMethod> {
 }
 
 fn get_method_params_ident(method: &ImplItemMethod) -> Ident {
-	if method.sig.inputs.len() == 2 {
-		let params = &method.sig.inputs[1];
+	if method.sig.inputs.len() == 3 {
+		let params = &method.sig.inputs[2];
 		let pat_type = match params {
 			FnArg::Typed(pat_type) => pat_type,
 			_ => unreachable!(),

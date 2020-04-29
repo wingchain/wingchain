@@ -26,17 +26,20 @@ pub mod errors;
 pub struct Address(pub Vec<u8>);
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-/// signature for (nonce, expire, call)
+pub struct PublicKey(pub Vec<u8>);
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+/// signature for (nonce, until, call)
 pub struct Signature(pub Vec<u8>);
 
 pub type Nonce = u32;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Witness {
-	pub address: Address,
+	pub public_key: PublicKey,
 	pub signature: Signature,
 	pub nonce: Nonce,
-	pub expire: BlockNumber,
+	pub until: BlockNumber,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -119,7 +122,7 @@ impl Hash {
 /// exclude signature to avoid malleability
 #[derive(Serialize)]
 pub struct TransactionForHash<'a> {
-	pub witness: Option<(&'a Address, &'a Nonce, &'a BlockNumber)>,
+	pub witness: Option<(&'a PublicKey, &'a Nonce, &'a BlockNumber)>,
 	pub call: &'a Call,
 }
 
@@ -128,7 +131,7 @@ impl<'a> TransactionForHash<'a> {
 		let witness = tx
 			.witness
 			.as_ref()
-			.map(|witness| (&witness.address, &witness.nonce, &witness.expire));
+			.map(|witness| (&witness.public_key, &witness.nonce, &witness.until));
 		let call = &tx.call;
 		Self { witness, call }
 	}

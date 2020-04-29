@@ -10,12 +10,21 @@ address = "blake2b_160"
 
 [genesis]
 
-# System module init
 [[genesis.txs]]
-method = "system.init"
-params = ['''
+module = "system"
+method = "init"
+params = '''
 {
     "chain_id": "${CHAIN_ID}",
-    "time": "${TIME}"
+    "timestamp": "${TIME}"
 }
-''']
+'''
+
+[[genesis.txs]]
+module = "balance"
+method = "init"
+params = '''
+{
+    "endow": []
+}
+'''

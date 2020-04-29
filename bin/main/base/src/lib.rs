@@ -16,7 +16,6 @@ use std::path::PathBuf;
 
 use app_dirs::get_app_root;
 use app_dirs::{AppDataType, AppInfo};
-use serde::{Deserialize, Serialize};
 use structopt::StructOpt;
 
 use primitives::errors::CommonResult;
@@ -40,12 +39,6 @@ pub struct SharedParams {
 
 	#[structopt(long = "log", value_name = "LOG", help = "Log pattern")]
 	pub log: Option<String>,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct SystemInitParams {
-	pub chain_id: String,
-	pub time: String,
 }
 
 pub fn get_default_home() -> CommonResult<PathBuf> {
