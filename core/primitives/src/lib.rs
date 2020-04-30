@@ -14,8 +14,9 @@
 
 use std::fmt;
 
-use codec::{Decode, Encode};
 use smallvec::SmallVec;
+
+use codec::{Decode, Encode};
 
 use crate::errors::{CommonError, CommonErrorKind, CommonResult};
 
@@ -27,6 +28,9 @@ pub struct Address(pub Vec<u8>);
 
 #[derive(Clone, Debug, Encode, Decode, PartialEq)]
 pub struct PublicKey(pub Vec<u8>);
+
+#[derive(Clone, Debug, Encode, Decode, PartialEq)]
+pub struct SecretKey(pub Vec<u8>);
 
 #[derive(Clone, Debug, Encode, Decode, PartialEq)]
 /// signature for (nonce, until, call)

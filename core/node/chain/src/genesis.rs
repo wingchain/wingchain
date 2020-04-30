@@ -15,9 +15,8 @@
 use std::convert::TryInto;
 use std::sync::Arc;
 
-use serde::Deserialize;
-
 use chrono::DateTime;
+use serde::Deserialize;
 
 use main_base::spec::{Spec, Tx};
 use node_executor::{module, Executor};
@@ -69,13 +68,13 @@ fn build_tx(
 
 	match (module.as_str(), method.as_str()) {
 		("system", "init") => {
-			let params: module::system::InitParams = JsonParams(params, &executor).try_into()?;
+			let params: module::system::InitParams = JsonParams(params).try_into()?;
 			*timestamp = Some(params.timestamp);
-			executor.build_tx(module.clone(), method.clone(), params)
+			executor.build_tx(None, module.clone(), method.clone(), params)
 		}
 		("balance", "init") => {
-			let params: module::balance::InitParams = JsonParams(params, &executor).try_into()?;
-			executor.build_tx(module.clone(), method.clone(), params)
+			let params: module::balance::InitParams = JsonParams(params).try_into()?;
+			executor.build_tx(None, module.clone(), method.clone(), params)
 		}
 		_ => Err(errors::ErrorKind::Spec(format!(
 			"unknown module or method: {}.{}",
@@ -85,7 +84,7 @@ fn build_tx(
 	}
 }
 
-struct JsonParams<'a>(&'a str, &'a Executor);
+struct JsonParams<'a>(&'a str);
 
 impl<'a> TryInto<module::system::InitParams> for JsonParams<'a> {
 	type Error = CommonError;
@@ -124,7 +123,6 @@ impl<'a> TryInto<module::balance::InitParams> for JsonParams<'a> {
 				let address = Address(hex::decode(&address).map_err(|_| {
 					errors::ErrorKind::Spec(format!("invalid address format: {}", address))
 				})?);
-				self.1.validate_address(&address)?;
 				Ok((address, balance))
 			})
 			.collect::<CommonResult<Vec<_>>>()?;
@@ -137,10 +135,11 @@ impl<'a> TryInto<module::balance::InitParams> for JsonParams<'a> {
 mod tests {
 	use crypto::address::AddressImpl;
 	use crypto::dsa::DsaImpl;
+	use main_base::spec::{Basic, Genesis};
+
+	use crate::genesis::GenesisInfo;
 
 	use super::*;
-	use crate::genesis::GenesisInfo;
-	use main_base::spec::{Basic, Genesis};
 
 	#[test]
 	fn test_into_system_init_params() {
@@ -150,12 +149,7 @@ mod tests {
 			"timestamp": "2020-04-16T23:46:02.189+08:00"
 		}
 		"#;
-
-		let executor = Executor::new(
-			Arc::new(DsaImpl::Ed25519),
-			Arc::new(AddressImpl::Blake2b160),
-		);
-		let json_params = JsonParams(&str, &executor);
+		let json_params = JsonParams(&str);
 
 		let param: module::system::InitParams = json_params.try_into().unwrap();
 
@@ -179,11 +173,7 @@ mod tests {
 		}
 		"#;
 
-		let executor = Executor::new(
-			Arc::new(DsaImpl::Ed25519),
-			Arc::new(AddressImpl::Blake2b160),
-		);
-		let json_params = JsonParams(&str, &executor);
+		let json_params = JsonParams(&str);
 
 		let param: module::balance::InitParams = json_params.try_into().unwrap();
 

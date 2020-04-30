@@ -19,17 +19,26 @@ use primitives::errors::{CommonError, CommonErrorKind, CommonResult, Display};
 
 #[derive(Debug, Display)]
 pub enum ErrorKind {
-	#[display(fmt = "Invalid method: {}", _0)]
-	InvalidMethod(String),
+	#[display(fmt = "Invalid txs: {:?}", _0)]
+	InvalidTxs(String),
 
-	#[display(fmt = "Invalid params")]
-	InvalidParams,
+	#[display(fmt = "Invalid tx witness: {}", _0)]
+	InvalidTxWitness(String),
+
+	#[display(fmt = "Invalid tx module: {}", _0)]
+	InvalidTxModule(String),
+
+	#[display(fmt = "Invalid tx method: {}", _0)]
+	InvalidTxMethod(String),
+
+	#[display(fmt = "Invalid tx params: {}", _0)]
+	InvalidTxParams(String),
+
+	#[display(fmt = "Invalid address: {}", _0)]
+	InvalidAddress(String),
 
 	#[display(fmt = "{}", _0)]
 	ExecuteError(String),
-
-	#[display(fmt = "Parse error: {}", _0)]
-	ParseError(String),
 }
 
 impl Error for ErrorKind {}

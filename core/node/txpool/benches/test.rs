@@ -19,29 +19,28 @@ extern crate test;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
-use test::{black_box, Bencher};
+use test::{Bencher, black_box};
 
 use futures::future::join_all;
 use tempfile::tempdir;
 use tokio::runtime::Runtime;
 
-use crypto::address::{Address as AddressT, AddressImpl};
-use crypto::dsa::{Dsa, DsaImpl, KeyPair, KeyPairImpl};
-use node_chain::{Chain, ChainConfig};
-use node_executor::{module, Executor};
+use crypto::dsa::KeyPairImpl;
+use node_chain::{Chain, ChainConfig, module};
 use node_txpool::{TxPool, TxPoolConfig};
-use primitives::{codec, Address, PublicKey, Signature, Transaction, Witness};
+use primitives::{Address, PublicKey, SecretKey, Transaction};
+use utils_test::test_accounts;
 
 const TXS_SIZE: usize = 2000;
 
 #[bench]
 fn bench_txpool_insert_transfer(b: &mut Bencher) {
-	let txs = gen_transfer_txs(TXS_SIZE);
-	let support = get_support();
-	bench_txpool_insert_txs(b, support, txs);
+	let chain = get_chain();
+	let txs = gen_transfer_txs(&chain, TXS_SIZE);
+	bench_txpool_insert_txs(b, chain, txs);
 }
 
-fn bench_txpool_insert_txs(b: &mut Bencher, support: Arc<Chain>, txs: Vec<Transaction>) {
+fn bench_txpool_insert_txs(b: &mut Bencher, chain: Arc<Chain>, txs: Vec<Transaction>) {
 	b.iter(|| {
 		black_box({
 			let config = TxPoolConfig {
@@ -51,18 +50,19 @@ fn bench_txpool_insert_txs(b: &mut Bencher, support: Arc<Chain>, txs: Vec<Transa
 
 			let mut rt = Runtime::new().unwrap();
 			rt.block_on(async {
-				let txpool = TxPool::new(config, support.clone()).unwrap();
+				let txpool = TxPool::new(config, chain.clone()).unwrap();
 				let futures = txs
 					.iter()
 					.map(|tx| txpool.insert(tx.clone()))
 					.collect::<Vec<_>>();
-				join_all(futures).await;
+				let r = join_all(futures).await;
+				println!("{:?}", r);
 			});
 		})
 	});
 }
 
-fn get_support() -> Arc<Chain> {
+fn get_chain() -> Arc<Chain> {
 	let path = tempdir().expect("could not create a temp dir");
 	let home = path.into_path();
 
@@ -74,66 +74,31 @@ fn get_support() -> Arc<Chain> {
 	chain
 }
 
-fn gen_transfer_txs(size: usize) -> Vec<Transaction> {
-	let dsa = Arc::new(DsaImpl::Ed25519);
-	let address = Arc::new(AddressImpl::Blake2b160);
-	let executor = Executor::new(dsa.clone(), address.clone());
+fn gen_transfer_txs(chain: &Arc<Chain>, size: usize) -> Vec<Transaction> {
 
-	let (secret_key_len, public_key_len, sig_len) = dsa.length().into();
-	let address_len = address.length().into();
-
-	let account1 = {
-		let secret_key = vec![1u8; secret_key_len];
-
-		let key_pair = dsa.key_pair_from_secret_key(&secret_key).unwrap();
-		let public_key = PublicKey({
-			let mut out = vec![0u8; public_key_len];
-			key_pair.public_key(&mut out);
-			out
-		});
-		let account = Address({
-			let mut out = vec![0u8; address_len];
-			address.address(&mut out, &public_key.0);
-			out
-		});
-		(secret_key, public_key, key_pair, account)
-	};
-
-	let account2 = {
-		let secret_key = vec![2u8; secret_key_len];
-
-		let key_pair = dsa.key_pair_from_secret_key(&secret_key).unwrap();
-		let public_key = PublicKey({
-			let mut out = vec![0u8; public_key_len];
-			key_pair.public_key(&mut out);
-			out
-		});
-		let account = Address({
-			let mut out = vec![0u8; address_len];
-			address.address(&mut out, &public_key.0);
-			out
-		});
-		(secret_key, public_key, key_pair, account)
-	};
+	let (account1, account2) = test_accounts(
+		chain.get_basic().dsa.clone(),
+		chain.get_basic().address.clone(),
+	);
 
 	let mut txs = Vec::with_capacity(size);
 	for nonce in 0..size {
-		let tx = gen_transfer_tx(nonce as u32, sig_len, &executor, &account1, &account2);
+		let tx = gen_transfer_tx(&chain, nonce as u32, &account1, &account2);
 		txs.push(tx);
 	}
 	txs
 }
 
 fn gen_transfer_tx(
+	chain: &Arc<Chain>,
 	nonce: u32,
-	sig_len: usize,
-	executor: &Executor,
-	account1: &(Vec<u8>, PublicKey, KeyPairImpl, Address),
-	account2: &(Vec<u8>, PublicKey, KeyPairImpl, Address),
+	account1: &(SecretKey, PublicKey, KeyPairImpl, Address),
+	account2: &(SecretKey, PublicKey, KeyPairImpl, Address),
 ) -> Transaction {
 	let until = 1u32;
-	let mut tx = executor
-		.build_tx(
+	let tx = chain
+		.build_transaction(
+			Some((account1.0.clone(), nonce, until)),
 			"balance".to_string(),
 			"transfer".to_string(),
 			module::balance::TransferParams {
@@ -142,19 +107,7 @@ fn gen_transfer_tx(
 			},
 		)
 		.unwrap();
-	let message = codec::encode(&(nonce, until, &tx.call)).unwrap();
-	let sig = Signature({
-		let mut out = vec![0u8; sig_len];
-		account1.2.sign(&message, &mut out);
-		out
-	});
-	tx.witness = Some(Witness {
-		public_key: account1.1.clone(),
-		signature: sig,
-		nonce,
-		until,
-	});
-	executor.validate_tx(&tx).unwrap();
+	chain.validate_transaction(&tx, true).unwrap();
 	tx
 }
 

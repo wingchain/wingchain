@@ -17,7 +17,7 @@ use std::rc::Rc;
 use executor_macro::{call, module};
 use executor_primitives::{
 	errors::{self, execute_error_result},
-	Context, ContextEnv, Module as ModuleT, StorageValue,
+	Context, ContextEnv, Module as ModuleT, StorageValue, Validator,
 };
 use primitives::codec::{Decode, Encode};
 use primitives::errors::CommonResult;

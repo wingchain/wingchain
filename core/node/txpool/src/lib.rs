@@ -87,7 +87,7 @@ where
 		let tx_hash = self.support.hash_transaction(&tx)?;
 		self.check_exist(&tx_hash)?;
 
-		self.support.validate_tx(&tx)?;
+		self.support.validate_transaction(&tx, true)?;
 
 		let pool_tx = Arc::new(PoolTransaction {
 			tx: Arc::new(tx),

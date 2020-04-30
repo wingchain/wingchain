@@ -17,7 +17,7 @@ use std::rc::Rc;
 use executor_macro::{call, module};
 use executor_primitives::{
 	errors::{self, execute_error_result},
-	Context, ContextEnv, Module as ModuleT, StorageMap,
+	Context, ContextEnv, Module as ModuleT, StorageMap, Validator,
 };
 use primitives::codec::{Decode, Encode};
 use primitives::errors::CommonResult;
@@ -56,6 +56,13 @@ impl<C: Context> Module<C> {
 			self.balance.set(address, balance)?;
 		}
 		Ok(Ok(()))
+	}
+
+	fn validate_init<V: Validator>(validator: &V, params: InitParams) -> CommonResult<()> {
+		for (address, _) in params.endow {
+			validator.validate_address(&address)?;
+		}
+		Ok(())
 	}
 
 	#[call]
@@ -104,6 +111,11 @@ impl<C: Context> Module<C> {
 		self.balance.set(recipient, &recipient_balance)?;
 
 		Ok(Ok(()))
+	}
+
+	fn validate_transfer<V: Validator>(validator: &V, params: TransferParams) -> CommonResult<()> {
+		validator.validate_address(&params.recipient)?;
+		Ok(())
 	}
 }
 

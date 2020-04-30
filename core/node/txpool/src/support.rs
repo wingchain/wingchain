@@ -18,14 +18,14 @@ use primitives::{Hash, Transaction};
 
 pub trait TxPoolSupport {
 	fn hash_transaction(&self, tx: &Transaction) -> CommonResult<Hash>;
-	fn validate_tx(&self, tx: &Transaction) -> CommonResult<()>;
+	fn validate_transaction(&self, tx: &Transaction, witness_required: bool) -> CommonResult<()>;
 }
 
 impl TxPoolSupport for Chain {
 	fn hash_transaction(&self, tx: &Transaction) -> CommonResult<Hash> {
 		self.hash_transaction(tx)
 	}
-	fn validate_tx(&self, tx: &Transaction) -> CommonResult<()> {
-		self.validate_tx(tx)
+	fn validate_transaction(&self, tx: &Transaction, witness_required: bool) -> CommonResult<()> {
+		self.validate_transaction(tx, witness_required)
 	}
 }

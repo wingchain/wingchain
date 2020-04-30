@@ -17,12 +17,9 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use crypto::address::AddressImpl;
-use crypto::dsa::DsaImpl;
 use crypto::hash::{Hash as HashT, HashImpl};
-use node_chain::{Chain, ChainConfig};
+use node_chain::{module, Chain, ChainConfig};
 use node_db::DB;
-use node_executor::{module, Executor};
 use node_statedb::{StateDB, TrieRoot};
 use primitives::codec::Encode;
 use primitives::{
@@ -32,8 +29,6 @@ use primitives::{
 #[test]
 fn test_chain() {
 	use tempfile::tempdir;
-
-	env_logger::init();
 
 	let path = tempdir().expect("could not create a temp dir");
 	let home = path.into_path();
@@ -52,7 +47,8 @@ fn test_chain() {
 
 	assert_eq!(executed_number, None);
 
-	let (expected_block_hash, expected_block, expected_executed, expected_tx) = expected_data();
+	let (expected_block_hash, expected_block, expected_executed, expected_tx) =
+		expected_data(&chain);
 
 	let block_hash = chain.get_block_hash(&0).unwrap().unwrap();
 	assert_eq!(block_hash, expected_block_hash);
@@ -78,15 +74,33 @@ fn test_chain() {
 	assert_eq!(tx_hash, &chain.hash_transaction(&tx).unwrap());
 }
 
-fn expected_data() -> (Hash, Block, Executed, Transaction) {
-	let dsa = Arc::new(DsaImpl::Ed25519);
-	let address = Arc::new(AddressImpl::Blake2b160);
-	let executor = Executor::new(dsa, address);
+#[test]
+fn test_chain_invalid_spec() {
+	use tempfile::tempdir;
 
+	let path = tempdir().expect("could not create a temp dir");
+	let home = path.into_path();
+
+	init_invalid_spec(&home);
+
+	let config = ChainConfig { home };
+
+	let chain = Chain::new(config);
+
+	match chain {
+		Err(e) => {
+			assert!(format!("{}", e).contains("Error: Invalid address"));
+		}
+		Ok(_) => unreachable!(),
+	}
+}
+
+fn expected_data(chain: &Chain) -> (Hash, Block, Executed, Transaction) {
 	let timestamp = 1588146696;
 
-	let tx = executor
-		.build_tx(
+	let tx = chain
+		.build_transaction(
+			None,
 			"system".to_string(),
 			"init".to_string(),
 			module::system::InitParams {
@@ -104,8 +118,9 @@ fn expected_data() -> (Hash, Block, Executed, Transaction) {
 
 	let account = Address::from_hex("b4decd5a5f8f2ba708f8ced72eec89f44f3be96a").unwrap();
 
-	let tx = executor
-		.build_tx(
+	let tx = chain
+		.build_transaction(
+			None,
 			"balance".to_string(),
 			"init".to_string(),
 			module::balance::InitParams {
@@ -265,6 +280,44 @@ params = '''
 {
     "endow": [
     	["b4decd5a5f8f2ba708f8ced72eec89f44f3be96a", 10]
+    ]
+}
+'''
+	"#;
+
+	fs::write(config_path.join("spec.toml"), &spec).unwrap();
+}
+
+fn init_invalid_spec(home: &PathBuf) {
+	let config_path = home.join("config");
+
+	fs::create_dir_all(&config_path).unwrap();
+
+	let spec = r#"
+[basic]
+hash = "blake2b_256"
+dsa = "ed25519"
+address = "blake2b_160"
+
+[genesis]
+
+[[genesis.txs]]
+module = "system"
+method = "init"
+params = '''
+{
+    "chain_id": "chain-test",
+    "timestamp": "2020-04-29T15:51:36.502+08:00"
+}
+'''
+
+[[genesis.txs]]
+module = "balance"
+method = "init"
+params = '''
+{
+    "endow": [
+    	["b4decd5a5f8f2ba708f8ced72eec89f44f3be96a00", 10]
     ]
 }
 '''

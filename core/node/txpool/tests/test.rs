@@ -12,73 +12,46 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::error::Error;
+use std::fs;
+use std::path::PathBuf;
 use std::sync::Arc;
 
+use tempfile::tempdir;
 use tokio::time::Duration;
 
-use crypto::hash::{Hash as HashT, HashImpl};
-use node_txpool::support::TxPoolSupport;
+use node_chain::{module, Chain, ChainConfig};
 use node_txpool::{PoolTransaction, TxPool, TxPoolConfig};
-use primitives::errors::{CommonError, CommonErrorKind, CommonResult, Display};
-use primitives::{codec, Call, Hash, Params, Transaction, TransactionForHash};
-
-#[derive(Clone)]
-struct TestTxPoolSupport {
-	hash: Arc<HashImpl>,
-}
-
-#[derive(Debug, Display)]
-enum ErrorKind {
-	#[display(fmt = "Invalid module: {}", _0)]
-	InvalidModule(String),
-}
-
-impl Error for ErrorKind {}
-
-impl From<ErrorKind> for CommonError {
-	fn from(error: ErrorKind) -> Self {
-		CommonError::new(CommonErrorKind::TxPool, Box::new(error))
-	}
-}
-
-impl TxPoolSupport for TestTxPoolSupport {
-	fn hash_transaction(&self, tx: &Transaction) -> CommonResult<Hash> {
-		let mut out = vec![0u8; self.hash.length().into()];
-		let transaction_for_hash = TransactionForHash::new(tx);
-		self.hash
-			.hash(&mut out, &codec::encode(&transaction_for_hash)?);
-		Ok(Hash(out))
-	}
-	fn validate_tx(&self, tx: &Transaction) -> CommonResult<()> {
-		if tx.call.module.as_str() == "b" {
-			return Err(ErrorKind::InvalidModule(tx.call.module.clone()).into());
-		}
-		Ok(())
-	}
-}
+use utils_test::test_accounts;
 
 #[tokio::test]
 async fn test_txpool() {
-	let support = Arc::new(get_support());
+	let chain = get_chain();
 	let config = TxPoolConfig {
 		pool_capacity: 1024,
 		buffer_capacity: 256,
 	};
-	let txpool = TxPool::new(config, support.clone()).unwrap();
+	let txpool = TxPool::new(config, chain.clone()).unwrap();
 
-	let tx = Transaction {
-		witness: None,
-		call: Call {
-			module: "a".to_string(),
-			method: "a".to_string(),
-			params: Params(vec![1u8; 32]),
-		},
-	};
+	let (account1, account2) = test_accounts(
+		chain.get_basic().dsa.clone(),
+		chain.get_basic().address.clone(),
+	);
+
+	let tx = chain
+		.build_transaction(
+			Some((account1.0, 0, 1)),
+			"balance".to_string(),
+			"transfer".to_string(),
+			module::balance::TransferParams {
+				recipient: account2.3.clone(),
+				value: 2,
+			},
+		)
+		.unwrap();
 
 	let expected_queue = vec![Arc::new(PoolTransaction {
 		tx: Arc::new(tx.clone()),
-		tx_hash: support.hash_transaction(&tx.clone()).unwrap(),
+		tx_hash: chain.hash_transaction(&tx.clone()).unwrap(),
 	})];
 
 	txpool.insert(tx).await.unwrap();
@@ -97,88 +70,169 @@ async fn test_txpool() {
 
 #[tokio::test]
 async fn test_txpool_dup() {
-	let support = Arc::new(get_support());
+	let chain = get_chain();
 	let config = TxPoolConfig {
 		pool_capacity: 1024,
 		buffer_capacity: 256,
 	};
-	let txpool = TxPool::new(config, support.clone()).unwrap();
+	let txpool = TxPool::new(config, chain.clone()).unwrap();
 
-	let tx = Transaction {
-		witness: None,
-		call: Call {
-			module: "a".to_string(),
-			method: "a".to_string(),
-			params: Params(vec![1u8; 32]),
-		},
-	};
+	let (account1, account2) = test_accounts(
+		chain.get_basic().dsa.clone(),
+		chain.get_basic().address.clone(),
+	);
+
+	let tx = chain
+		.build_transaction(
+			Some((account1.0, 0, 1)),
+			"balance".to_string(),
+			"transfer".to_string(),
+			module::balance::TransferParams {
+				recipient: account2.3.clone(),
+				value: 2,
+			},
+		)
+		.unwrap();
 
 	txpool.insert(tx.clone()).await.unwrap();
 
 	let result = txpool.insert(tx).await;
-	assert!(format!("{:?}", result).contains("error: Duplicated"));
+	assert!(format!("{}", result.unwrap_err()).contains("Error: Duplicated tx"));
 }
 
 #[tokio::test]
 async fn test_txpool_validate() {
-	let support = Arc::new(get_support());
+	let chain = get_chain();
 	let config = TxPoolConfig {
 		pool_capacity: 1024,
 		buffer_capacity: 256,
 	};
-	let txpool = TxPool::new(config, support.clone()).unwrap();
+	let txpool = TxPool::new(config, chain.clone()).unwrap();
 
-	let tx = Transaction {
-		witness: None,
-		call: Call {
-			module: "b".to_string(),
-			method: "a".to_string(),
-			params: Params(vec![1u8; 32]),
-		},
-	};
+	let (account1, account2) = test_accounts(
+		chain.get_basic().dsa.clone(),
+		chain.get_basic().address.clone(),
+	);
+
+	let mut tx = chain
+		.build_transaction(
+			Some((account1.0, 0, 1)),
+			"balance".to_string(),
+			"transfer".to_string(),
+			module::balance::TransferParams {
+				recipient: account2.3,
+				value: 2,
+			},
+		)
+		.unwrap();
+	tx.call.module = "unknown".to_string();
 
 	let result = txpool.insert(tx.clone()).await;
-	assert!(format!("{:?}", result).contains("error: InvalidModule"));
+	assert!(format!("{}", result.unwrap_err()).contains("Error: Invalid tx witness"));
 }
 
 #[tokio::test]
 async fn test_txpool_capacity() {
-	let support = Arc::new(get_support());
+	let chain = get_chain();
 	let config = TxPoolConfig {
 		pool_capacity: 2,
 		buffer_capacity: 256,
 	};
-	let txpool = TxPool::new(config, support.clone()).unwrap();
+	let txpool = TxPool::new(config, chain.clone()).unwrap();
 
-	let tx = Transaction {
-		witness: None,
-		call: Call {
-			module: "a".to_string(),
-			method: "a".to_string(),
-			params: Params(vec![1u8; 32]),
-		},
-	};
+	let (account1, account2) = test_accounts(
+		chain.get_basic().dsa.clone(),
+		chain.get_basic().address.clone(),
+	);
 
-	let tx2 = {
-		let mut tx = tx.clone();
-		tx.call.module = "c".to_string();
-		tx
-	};
+	let tx = chain
+		.build_transaction(
+			Some((account1.0.clone(), 0, 1)),
+			"balance".to_string(),
+			"transfer".to_string(),
+			module::balance::TransferParams {
+				recipient: account2.3.clone(),
+				value: 2,
+			},
+		)
+		.unwrap();
 
-	let tx3 = {
-		let mut tx = tx.clone();
-		tx.call.module = "d".to_string();
-		tx
-	};
+	let tx2 = chain
+		.build_transaction(
+			Some((account1.0.clone(), 1, 1)),
+			"balance".to_string(),
+			"transfer".to_string(),
+			module::balance::TransferParams {
+				recipient: account2.3.clone(),
+				value: 2,
+			},
+		)
+		.unwrap();
+
+	let tx3 = chain
+		.build_transaction(
+			Some((account1.0.clone(), 2, 1)),
+			"balance".to_string(),
+			"transfer".to_string(),
+			module::balance::TransferParams {
+				recipient: account2.3.clone(),
+				value: 2,
+			},
+		)
+		.unwrap();
 
 	txpool.insert(tx).await.unwrap();
 	txpool.insert(tx2).await.unwrap();
 	let result = txpool.insert(tx3).await;
-	assert!(format!("{:?}", result).contains("error: ExceedCapacity"));
+	assert!(format!("{}", result.unwrap_err()).contains("Error: Exceed capacity"));
 }
 
-fn get_support() -> TestTxPoolSupport {
-	let hash = Arc::new(HashImpl::Blake2b256);
-	let support = TestTxPoolSupport { hash };
-	support
+fn get_chain() -> Arc<Chain> {
+	let path = tempdir().expect("could not create a temp dir");
+	let home = path.into_path();
+
+	init(&home);
+
+	let chain_config = ChainConfig { home };
+
+	let chain = Arc::new(Chain::new(chain_config).unwrap());
+	chain
+}
+
+fn init(home: &PathBuf) {
+	let config_path = home.join("config");
+
+	fs::create_dir_all(&config_path).unwrap();
+
+	let spec = r#"
+[basic]
+hash = "blake2b_256"
+dsa = "ed25519"
+address = "blake2b_160"
+
+[genesis]
+
+[[genesis.txs]]
+module = "system"
+method = "init"
+params = '''
+{
+    "chain_id": "chain-test",
+    "timestamp": "2020-04-29T15:51:36.502+08:00"
+}
+'''
+
+[[genesis.txs]]
+module = "balance"
+method = "init"
+params = '''
+{
+    "endow": [
+    	["b4decd5a5f8f2ba708f8ced72eec89f44f3be96a", 10]
+    ]
+}
+'''
+	"#;
+
+	fs::write(config_path.join("spec.toml"), &spec).unwrap();
 }

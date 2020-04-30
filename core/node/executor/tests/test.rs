@@ -15,16 +15,15 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crypto::address::{Address as AddressT, AddressImpl};
-use crypto::dsa::{Dsa, DsaImpl, KeyPair};
+use crypto::address::AddressImpl;
+use crypto::dsa::DsaImpl;
 use crypto::hash::HashImpl;
 use node_db::DB;
 use node_executor::{module, Context, ContextEssence, Executor};
 use node_executor_primitives::ContextEnv;
 use node_statedb::{StateDB, TrieRoot};
-use primitives::{
-	codec, Address, DBKey, Hash, PublicKey, Signature, Transaction, TransactionForHash, Witness,
-};
+use primitives::{codec, Address, DBKey, Hash, Params, Transaction, TransactionForHash};
+use utils_test::test_accounts;
 
 #[test]
 fn test_executor() {
@@ -48,42 +47,7 @@ fn test_executor() {
 
 	let timestamp = 1588146696;
 
-	let (secret_key_len, public_key_len, sig_len) = dsa.length().into();
-	let address_len = address.length().into();
-
-	let account1 = {
-		let secret_key = vec![1u8; secret_key_len];
-
-		let key_pair = dsa.key_pair_from_secret_key(&secret_key).unwrap();
-		let public_key = PublicKey({
-			let mut out = vec![0u8; public_key_len];
-			key_pair.public_key(&mut out);
-			out
-		});
-		let account = Address({
-			let mut out = vec![0u8; address_len];
-			address.address(&mut out, &public_key.0);
-			out
-		});
-		(secret_key, public_key, key_pair, account)
-	};
-
-	let account2 = {
-		let secret_key = vec![2u8; secret_key_len];
-
-		let key_pair = dsa.key_pair_from_secret_key(&secret_key).unwrap();
-		let public_key = PublicKey({
-			let mut out = vec![0u8; public_key_len];
-			key_pair.public_key(&mut out);
-			out
-		});
-		let account = Address({
-			let mut out = vec![0u8; address_len];
-			address.address(&mut out, &public_key.0);
-			out
-		});
-		(secret_key, public_key, key_pair, account)
-	};
+	let (account1, account2) = test_accounts(dsa.clone(), address.clone());
 
 	let executor = Executor::new(dsa, address);
 
@@ -91,6 +55,7 @@ fn test_executor() {
 	let block_0_meta_txs = vec![Arc::new(
 		executor
 			.build_tx(
+				None,
 				"system".to_string(),
 				"init".to_string(),
 				module::system::InitParams {
@@ -103,6 +68,7 @@ fn test_executor() {
 	let block_0_payload_txs = vec![Arc::new(
 		executor
 			.build_tx(
+				None,
 				"balance".to_string(),
 				"init".to_string(),
 				module::balance::InitParams {
@@ -161,8 +127,73 @@ fn test_executor() {
 
 	let nonce = 0u32;
 	let until = 1u32;
-	let mut tx = executor
+
+	// invalid tx
+	let tx = executor.build_tx(
+		Some((account1.0.clone(), nonce, until)),
+		"balance".to_string(),
+		"transfer".to_string(),
+		module::balance::TransferParams {
+			recipient: Address(vec![1u8]),
+			value: 2,
+		},
+	);
+	assert!(format!("{}", tx.unwrap_err()).contains("Error: Invalid address"));
+
+	let tx = executor.build_tx(
+		Some((account1.0.clone(), nonce, until)),
+		"unknown".to_string(),
+		"transfer".to_string(),
+		module::balance::TransferParams {
+			recipient: Address(vec![1u8]),
+			value: 2,
+		},
+	);
+	assert!(format!("{}", tx.unwrap_err()).contains("Error: Invalid tx module"));
+
+	let tx = executor.build_tx(
+		Some((account1.0.clone(), nonce, until)),
+		"balance".to_string(),
+		"unknown".to_string(),
+		module::balance::TransferParams {
+			recipient: Address(vec![1u8]),
+			value: 2,
+		},
+	);
+	assert!(format!("{}", tx.unwrap_err()).contains("Error: Invalid tx method"));
+
+	let tx = executor.build_tx(
+		Some((account1.0.clone(), nonce, until)),
+		"balance".to_string(),
+		"transfer".to_string(),
+		Params(vec![0u8]),
+	);
+	assert!(format!("{}", tx.unwrap_err()).contains("Error: Invalid tx params"));
+
+	let tx = {
+		let mut tx = executor
+			.build_tx(
+				Some((account1.0.clone(), nonce, until)),
+				"balance".to_string(),
+				"transfer".to_string(),
+				module::balance::TransferParams {
+					recipient: account2.3.clone(),
+					value: 2,
+				},
+			)
+			.unwrap();
+		let mut witness = tx.witness.unwrap().clone();
+		witness.public_key = account2.1;
+		tx.witness = Some(witness);
+		tx
+	};
+	let result = executor.validate_tx(&tx, true);
+	// assert_eq!(format!("{}", result.unwrap_err()), "".to_string());
+	assert!(format!("{}", result.unwrap_err()).contains("Error: Invalid tx witness"));
+
+	let tx = executor
 		.build_tx(
+			Some((account1.0, nonce, until)),
 			"balance".to_string(),
 			"transfer".to_string(),
 			module::balance::TransferParams {
@@ -171,19 +202,7 @@ fn test_executor() {
 			},
 		)
 		.unwrap();
-	let message = codec::encode(&(nonce, until, &tx.call)).unwrap();
-	let sig = Signature({
-		let mut out = vec![0u8; sig_len];
-		account1.2.sign(&message, &mut out);
-		out
-	});
-	tx.witness = Some(Witness {
-		public_key: account1.1,
-		signature: sig,
-		nonce,
-		until,
-	});
-	executor.validate_tx(&tx).unwrap();
+	executor.validate_tx(&tx, true).unwrap();
 
 	let block_1_meta_txs = vec![];
 

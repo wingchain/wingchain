@@ -18,18 +18,12 @@ use std::sync::Arc;
 
 use tempfile::tempdir;
 
-use crypto::address::{Address as AddressT, AddressImpl};
-use crypto::dsa::{Dsa, DsaImpl, KeyPair};
-use crypto::hash::{Hash as HashT, HashImpl};
 use node_api::support::DefaultApiSupport;
 use node_api::{Api, ApiConfig};
-use node_chain::{Chain, ChainConfig};
-use node_executor::{module, Executor};
+use node_chain::{module, Chain, ChainConfig};
 use node_txpool::{TxPool, TxPoolConfig};
-use primitives::codec::Encode;
-use primitives::{
-	codec, Address, Hash, PublicKey, Signature, Transaction, TransactionForHash, Witness,
-};
+use primitives::{codec, Transaction};
+use utils_test::test_accounts;
 
 #[tokio::test]
 async fn test_api() {
@@ -38,13 +32,23 @@ async fn test_api() {
 		rpc_workers: 1,
 		rpc_maxconn: 100,
 	};
-	let support = Arc::new(get_support());
+
+	let chain = get_chain();
+
+	let txpool_config = TxPoolConfig {
+		pool_capacity: 32,
+		buffer_capacity: 32,
+	};
+
+	let txpool = Arc::new(TxPool::new(txpool_config, chain.clone()).unwrap());
+
+	let support = Arc::new(DefaultApiSupport::new(chain.clone(), txpool));
 
 	let _api = Api::new(config, support);
 
 	let client = reqwest::Client::new();
 
-	for (request, expected_response) in get_cases() {
+	for (request, expected_response) in get_cases(&chain) {
 		let res = client
 			.post("http://127.0.0.1:3109")
 			.body(request)
@@ -56,10 +60,10 @@ async fn test_api() {
 	}
 }
 
-fn get_cases() -> Vec<(String, String)> {
-	let tx = get_tx();
+fn get_cases(chain: &Arc<Chain>) -> Vec<(String, String)> {
+	let tx = get_tx(chain);
 
-	let tx_hash = hash(TransactionForHash::new(&tx));
+	let tx_hash = chain.hash_transaction(&tx).unwrap();
 
 	let tx_hex = hex::encode(codec::encode(&tx).unwrap());
 
@@ -97,59 +101,17 @@ fn get_cases() -> Vec<(String, String)> {
 	]
 }
 
-fn hash<E: Encode>(data: E) -> Hash {
-	let hasher = HashImpl::Blake2b256;
-	let mut hash = vec![0u8; hasher.length().into()];
-	hasher.hash(&mut hash, &codec::encode(&data).unwrap());
-	Hash(hash)
-}
-
-fn get_tx() -> Transaction {
-	let dsa = Arc::new(DsaImpl::Ed25519);
-	let address = Arc::new(AddressImpl::Blake2b160);
-	let executor = Executor::new(dsa.clone(), address.clone());
-
-	let (secret_key_len, public_key_len, sig_len) = dsa.length().into();
-	let address_len = address.length().into();
-
-	let account1 = {
-		let secret_key = vec![1u8; secret_key_len];
-
-		let key_pair = dsa.key_pair_from_secret_key(&secret_key).unwrap();
-		let public_key = PublicKey({
-			let mut out = vec![0u8; public_key_len];
-			key_pair.public_key(&mut out);
-			out
-		});
-		let account = Address({
-			let mut out = vec![0u8; address_len];
-			address.address(&mut out, &public_key.0);
-			out
-		});
-		(secret_key, public_key, key_pair, account)
-	};
-
-	let account2 = {
-		let secret_key = vec![2u8; secret_key_len];
-
-		let key_pair = dsa.key_pair_from_secret_key(&secret_key).unwrap();
-		let public_key = PublicKey({
-			let mut out = vec![0u8; public_key_len];
-			key_pair.public_key(&mut out);
-			out
-		});
-		let account = Address({
-			let mut out = vec![0u8; address_len];
-			address.address(&mut out, &public_key.0);
-			out
-		});
-		(secret_key, public_key, key_pair, account)
-	};
+fn get_tx(chain: &Arc<Chain>) -> Transaction {
+	let (account1, account2) = test_accounts(
+		chain.get_basic().dsa.clone(),
+		chain.get_basic().address.clone(),
+	);
 
 	let nonce = 0u32;
 	let until = 1u32;
-	let mut tx = executor
-		.build_tx(
+	let tx = chain
+		.build_transaction(
+			Some((account1.0, nonce, until)),
 			"balance".to_string(),
 			"transfer".to_string(),
 			module::balance::TransferParams {
@@ -158,23 +120,11 @@ fn get_tx() -> Transaction {
 			},
 		)
 		.unwrap();
-	let message = codec::encode(&(nonce, until, &tx.call)).unwrap();
-	let sig = Signature({
-		let mut out = vec![0u8; sig_len];
-		account1.2.sign(&message, &mut out);
-		out
-	});
-	tx.witness = Some(Witness {
-		public_key: account1.1,
-		signature: sig,
-		nonce,
-		until,
-	});
-	executor.validate_tx(&tx).unwrap();
+	chain.validate_transaction(&tx, true).unwrap();
 	tx
 }
 
-fn get_support() -> DefaultApiSupport<Chain> {
+fn get_chain() -> Arc<Chain> {
 	let path = tempdir().expect("could not create a temp dir");
 	let home = path.into_path();
 
@@ -184,14 +134,7 @@ fn get_support() -> DefaultApiSupport<Chain> {
 
 	let chain = Arc::new(Chain::new(chain_config).unwrap());
 
-	let txpool_config = TxPoolConfig {
-		pool_capacity: 32,
-		buffer_capacity: 32,
-	};
-
-	let txpool = Arc::new(TxPool::new(txpool_config, chain.clone()).unwrap());
-
-	DefaultApiSupport::new(chain, txpool)
+	chain
 }
 
 fn init(home: &PathBuf) {

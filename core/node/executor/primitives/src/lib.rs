@@ -13,13 +13,13 @@
 // limitations under the License.
 
 use std::marker::PhantomData;
-
-use codec::{Decode, Encode};
+use std::rc::Rc;
 
 pub use chrono;
+
+use codec::{Decode, Encode};
 use primitives::errors::CommonResult;
 use primitives::{codec, Address, BlockNumber, Call, DBValue};
-use std::rc::Rc;
 
 pub mod errors;
 
@@ -34,8 +34,8 @@ where
 
 	fn new(context: C) -> Self;
 
-	/// check if the call has the right method_id and decodable params
-	fn is_valid_call(call: &Call) -> bool;
+	/// validate the call
+	fn validate_call<V: Validator>(validator: &V, call: &Call) -> CommonResult<()>;
 
 	/// check if the call is a write call, a transaction should be built by a write call
 	fn is_write_call(call: &Call) -> Option<bool>;
@@ -56,6 +56,10 @@ pub trait Context: Clone {
 	fn meta_set(&self, key: &[u8], value: Option<DBValue>) -> CommonResult<()>;
 	fn payload_get(&self, key: &[u8]) -> CommonResult<Option<DBValue>>;
 	fn payload_set(&self, key: &[u8], value: Option<DBValue>) -> CommonResult<()>;
+}
+
+pub trait Validator {
+	fn validate_address(&self, address: &Address) -> CommonResult<()>;
 }
 
 pub struct StorageValue<T, C>

@@ -26,4 +26,4 @@ primitives = { path = "../../primitives" }
 tempfile = "3.1.0"
 reqwest = { version = "0.10", features = ["json"] }
 crypto = { path = "../../crypto" }
-node-executor = { path = "../executor" }
+utils-test = { path = "../../../utils/test" }

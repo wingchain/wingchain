@@ -13,12 +13,15 @@
 // limitations under the License.
 
 use proc_macro::TokenStream;
+use std::collections::{HashMap, HashSet};
 
 use syn::{
 	parse_macro_input, FnArg, Ident, ImplItem, ImplItemMethod, ItemImpl, Meta, NestedMeta, Type,
 };
 
 use quote::quote;
+
+const VALIDATE_METHOD_PREFIX: &'static str = "validate_";
 
 #[proc_macro_attribute]
 pub fn dispatcher(_attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -37,11 +40,11 @@ pub fn dispatcher(_attr: TokenStream, item: TokenStream) -> TokenStream {
 		})
 		.collect::<Vec<_>>();
 
-	let is_valid_call_ts_vec = variants
+	let validate_call_ts_vec = variants
 		.iter()
 		.map(|x| {
 			let ident = &x.ident;
-			quote! { stringify!(#ident) => Ok(module::#ident::Module::<C>::is_valid_call(&call)) }
+			quote! { stringify!(#ident) => module::#ident::Module::<C>::validate_call(validator, &call) }
 		})
 		.collect::<Vec<_>>();
 
@@ -72,25 +75,25 @@ pub fn dispatcher(_attr: TokenStream, item: TokenStream) -> TokenStream {
 			fn is_meta<C: ContextT>(module: &str) -> CommonResult<bool>{
 				match module {
 					#(#is_meta_ts_vec),*,
-					other => Err(errors::ErrorKind::InvalidModule(other.to_string()).into()),
+					other => Err(errors::ErrorKind::InvalidTxModule(other.to_string()).into()),
 				}
 			}
-			fn is_valid_call<C: ContextT>(module: &str, call: &Call) -> CommonResult<bool>{
+			fn validate_call<C: ContextT, V: ValidatorT>(module: &str, validator: &V, call: &Call) -> CommonResult<()>{
 				match module {
-					#(#is_valid_call_ts_vec),*,
-					other => Err(errors::ErrorKind::InvalidModule(other.to_string()).into()),
+					#(#validate_call_ts_vec),*,
+					other => Err(errors::ErrorKind::InvalidTxModule(other.to_string()).into()),
 				}
 			}
 			fn is_write_call<C: ContextT>(module: &str, call: &Call) -> CommonResult<Option<bool>> {
 				match module {
 					#(#is_write_call_ts_vec),*,
-					other => Err(errors::ErrorKind::InvalidModule(other.to_string()).into()),
+					other => Err(errors::ErrorKind::InvalidTxModule(other.to_string()).into()),
 				}
 			}
 			fn execute_call<C: ContextT>(module: &str, context: &C, sender: Option<&Address>, call: &Call) -> CommonResult<CommonResult<()>>{
 				match module {
 					#(#execute_call_ts_vec),*,
-					other => Err(errors::ErrorKind::InvalidModule(other.to_string()).into()),
+					other => Err(errors::ErrorKind::InvalidTxModule(other.to_string()).into()),
 				}
 			}
 		}
@@ -111,12 +114,26 @@ pub fn module(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
 	let methods = get_module_call_methods(&impl_item);
 
-	let is_valid_call_ts_vec = methods
+	let validate_call_ts_vec = methods
 		.iter()
 		.map(|x| {
 			let method_ident = &x.method_ident;
 			let params_ident = x.params_ident.clone();
-			quote! { stringify!(#method_ident) => codec::decode::<#params_ident>(&params).is_ok() }
+			let validate = match &x.validate_ident {
+				Some(validate_ident) => quote! {
+					Self::#validate_ident(validator, params)
+				},
+				None => quote! {Ok(())},
+			};
+			quote! {
+				stringify!(#method_ident) => {
+					let params = match codec::decode::<#params_ident>(&params) {
+						Ok(params) => params,
+						Err(_) => return Err(errors::ErrorKind::InvalidTxParams("codec error".to_string()).into()),
+					};
+					#validate
+				}
+			}
 		})
 		.collect::<Vec<_>>();
 
@@ -133,7 +150,7 @@ pub fn module(_attr: TokenStream, item: TokenStream) -> TokenStream {
 		.iter()
 		.map(|x| {
 			let method_ident = &x.method_ident;
-			quote! { stringify!(#method_ident) => self.#method_ident(sender, codec::decode(&params).map_err(|_| errors::ErrorKind::InvalidParams)?) }
+			quote! { stringify!(#method_ident) => self.#method_ident(sender, codec::decode(&params).map_err(|_| errors::ErrorKind::InvalidTxParams("codec error".to_string()))?) }
 		})
 		.collect::<Vec<_>>();
 
@@ -150,11 +167,11 @@ pub fn module(_attr: TokenStream, item: TokenStream) -> TokenStream {
 				Self::new(context)
 			}
 
-			fn is_valid_call(call: &Call) -> bool {
+			fn validate_call<V: Validator>(validator: &V, call: &Call) -> CommonResult<()> {
 				let params = &call.params.0[..];
 				match call.method.as_str() {
-					#(#is_valid_call_ts_vec),*,
-					_ => false,
+					#(#validate_call_ts_vec),*,
+					other => Err(errors::ErrorKind::InvalidTxMethod(other.to_string()).into()),
 				}
 			}
 
@@ -171,7 +188,7 @@ pub fn module(_attr: TokenStream, item: TokenStream) -> TokenStream {
 				let method = call.method.as_str();
 				match method {
 					#(#execute_call_ts_vec),*,
-					other => Err(errors::ErrorKind::InvalidMethod(other.to_string()).into()),
+					other => Err(errors::ErrorKind::InvalidTxMethod(other.to_string()).into()),
 				}
 			}
 
@@ -189,7 +206,7 @@ fn get_module_ident(impl_item: &ItemImpl) -> Ident {
 }
 
 fn get_module_call_methods(impl_item: &ItemImpl) -> Vec<ModuleMethod> {
-	impl_item
+	let call_methods = impl_item
 		.items
 		.iter()
 		.filter_map(|item| {
@@ -201,6 +218,7 @@ fn get_module_call_methods(impl_item: &ItemImpl) -> Vec<ModuleMethod> {
 							if word.segments[0].ident == "call" {
 								Some(ModuleMethod {
 									write: false,
+									validate_ident: None,
 									method_ident: method.sig.ident.clone(),
 									params_ident: get_method_params_ident(&method),
 									method: method.clone(),
@@ -225,6 +243,7 @@ fn get_module_call_methods(impl_item: &ItemImpl) -> Vec<ModuleMethod> {
 								let write = write.unwrap_or(false);
 								Some(ModuleMethod {
 									write,
+									validate_ident: None,
 									method_ident: method.sig.ident.clone(),
 									params_ident: get_method_params_ident(&method),
 									method: method.clone(),
@@ -241,7 +260,44 @@ fn get_module_call_methods(impl_item: &ItemImpl) -> Vec<ModuleMethod> {
 				None
 			}
 		})
-		.collect()
+		.collect::<Vec<_>>();
+
+	let call_method_names = call_methods
+		.iter()
+		.map(|x| x.method_ident.to_string())
+		.collect::<HashSet<_>>();
+	let call_method_validates = impl_item
+		.items
+		.iter()
+		.filter_map(|item| {
+			if let ImplItem::Method(method) = item {
+				let method_name = method.sig.ident.to_string();
+				if method_name.starts_with(VALIDATE_METHOD_PREFIX) {
+					let call_method_name = method_name.trim_start_matches(VALIDATE_METHOD_PREFIX);
+					if call_method_names.contains(call_method_name) {
+						Some((call_method_name.to_string(), method.sig.ident.clone()))
+					} else {
+						None
+					}
+				} else {
+					None
+				}
+			} else {
+				None
+			}
+		})
+		.collect::<HashMap<_, _>>();
+
+	let call_methods = call_methods
+		.into_iter()
+		.map(|mut method| {
+			let method_name = method.method_ident.to_string();
+			method.validate_ident = call_method_validates.get(&method_name).cloned();
+			method
+		})
+		.collect::<Vec<_>>();
+
+	call_methods
 }
 
 fn get_method_params_ident(method: &ImplItemMethod) -> Ident {
@@ -271,4 +327,5 @@ struct ModuleMethod {
 	method_ident: Ident,
 	params_ident: Ident,
 	write: bool,
+	validate_ident: Option<Ident>,
 }

@@ -24,16 +24,17 @@ use crypto::dsa::DsaImpl;
 use crypto::hash::{Hash as HashT, HashImpl};
 use main_base::spec::Spec;
 use node_db::{DBTransaction, DB};
+pub use node_executor::module;
 use node_executor::{Context, ContextEnv, ContextEssence, Executor};
 use node_statedb::{StateDB, TrieRoot};
+use primitives::codec::Encode;
 use primitives::errors::CommonResult;
 use primitives::{
-	codec, Block, BlockNumber, Body, DBKey, Executed, FullBlock, Hash, Header, Transaction,
-	TransactionForHash,
+	codec, Block, BlockNumber, Body, DBKey, Executed, FullBlock, Hash, Header, Nonce, SecretKey,
+	Transaction, TransactionForHash,
 };
 
 use crate::genesis::{build_genesis, GenesisInfo};
-use primitives::codec::Encode;
 
 pub mod errors;
 mod genesis;
@@ -53,11 +54,9 @@ pub struct Chain {
 }
 
 pub struct Basic {
-	hash: Arc<HashImpl>,
-	#[allow(dead_code)]
-	dsa: Arc<DsaImpl>,
-	#[allow(dead_code)]
-	address: Arc<AddressImpl>,
+	pub hash: Arc<HashImpl>,
+	pub dsa: Arc<DsaImpl>,
+	pub address: Arc<AddressImpl>,
 }
 
 impl Chain {
@@ -114,8 +113,26 @@ impl Chain {
 		Ok(self.hash_slice(&encoded))
 	}
 
-	pub fn validate_tx(&self, tx: &Transaction) -> CommonResult<()> {
-		self.executor.validate_tx(tx)
+	pub fn validate_transaction(
+		&self,
+		tx: &Transaction,
+		witness_required: bool,
+	) -> CommonResult<()> {
+		self.executor.validate_tx(tx, witness_required)
+	}
+
+	pub fn build_transaction<P: Encode>(
+		&self,
+		witness: Option<(SecretKey, Nonce, BlockNumber)>,
+		module: String,
+		method: String,
+		params: P,
+	) -> CommonResult<Transaction> {
+		self.executor.build_tx(witness, module, method, params)
+	}
+
+	pub fn get_basic(&self) -> Arc<Basic> {
+		self.basic.clone()
 	}
 
 	pub fn get_best_number(&self) -> CommonResult<Option<BlockNumber>> {

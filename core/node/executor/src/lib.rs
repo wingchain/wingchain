@@ -18,17 +18,20 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use crypto::address::{Address as AddressT, AddressImpl};
-use crypto::dsa::{Dsa, DsaImpl, Verifier};
+use crypto::dsa::{Dsa, DsaImpl, KeyPair, Verifier};
 use node_db::DBTransaction;
 use node_executor_macro::dispatcher;
 pub use node_executor_primitives::ContextEnv;
-use node_executor_primitives::{Context as ContextT, Module as ModuleT};
+use node_executor_primitives::{
+	errors, Context as ContextT, Module as ModuleT, Validator as ValidatorT,
+};
 use node_statedb::{StateDB, StateDBGetter, StateDBStmt, TrieRoot};
 use primitives::codec::Encode;
-use primitives::{codec, errors::CommonResult, TransactionForHash};
+use primitives::{
+	codec, errors::CommonResult, BlockNumber, Nonce, PublicKey, SecretKey, Signature,
+	TransactionForHash, Witness,
+};
 use primitives::{Address, Call, DBKey, DBValue, Hash, Params, Transaction};
-
-pub mod errors;
 
 const META_TXS_SIZE: usize = 64;
 const PAYLOAD_TXS_SIZE: usize = 512;
@@ -201,18 +204,41 @@ impl<'a> Context<'a> {
 	}
 }
 
+struct Validator {
+	address: Arc<AddressImpl>,
+}
+
+impl ValidatorT for Validator {
+	fn validate_address(&self, address: &Address) -> CommonResult<()> {
+		let address_len = self.address.length().into();
+		if address.0.len() != address_len {
+			return Err(errors::ErrorKind::InvalidAddress(format!("{}", address)).into());
+		}
+		Ok(())
+	}
+}
+
 pub struct Executor {
 	dsa: Arc<DsaImpl>,
 	address: Arc<AddressImpl>,
+	validator: Validator,
 }
 
 impl Executor {
 	pub fn new(dsa: Arc<DsaImpl>, address: Arc<AddressImpl>) -> Self {
-		Self { dsa, address }
+		let validator = Validator {
+			address: address.clone(),
+		};
+		Self {
+			dsa,
+			address,
+			validator,
+		}
 	}
 
 	pub fn build_tx<P: Encode>(
 		&self,
+		witness: Option<(SecretKey, Nonce, BlockNumber)>,
 		module: String,
 		method: String,
 		params: P,
@@ -221,62 +247,71 @@ impl Executor {
 
 		let call = Call {
 			module: module.clone(),
-			method: method,
+			method,
 			params,
 		};
 
-		let valid = Dispatcher::is_valid_call::<Context>(&module, &call)?;
+		Dispatcher::validate_call::<Context, _>(&module, &self.validator, &call)?;
 
-		if !valid {
-			return Err(errors::ErrorKind::InvalidTxCall.into());
-		}
+		let witness = match witness {
+			Some((secret_key, nonce, until)) => {
+				let message = codec::encode(&(&nonce, &until, &call))?;
+				let key_pair = self.dsa.key_pair_from_secret_key(&secret_key.0)?;
+				let (_, pub_len, sig_len) = self.dsa.length().into();
+				let public_key = {
+					let mut out = vec![0u8; pub_len];
+					key_pair.public_key(&mut out);
+					PublicKey(out)
+				};
+				let signature = {
+					let mut out = vec![0u8; sig_len];
+					key_pair.sign(&message, &mut out);
+					Signature(out)
+				};
+				Some(Witness {
+					public_key,
+					signature,
+					nonce,
+					until,
+				})
+			}
+			None => None,
+		};
 
-		Ok(Transaction {
-			witness: None,
-			call,
-		})
+		Ok(Transaction { witness, call })
 	}
 
-	pub fn validate_tx(&self, tx: &Transaction) -> CommonResult<()> {
-		let witness = tx
-			.witness
-			.as_ref()
-			.ok_or(errors::ErrorKind::InvalidTxWitness(
-				"missing witness".to_string(),
-			))?;
+	pub fn validate_tx(&self, tx: &Transaction, witness_required: bool) -> CommonResult<()> {
 		let call = &tx.call;
 
-		let signature = &witness.signature;
-		let message = codec::encode(&(&witness.nonce, &witness.until, call))?;
-
-		let verifier = self.dsa.verifier_from_public_key(&witness.public_key.0)?;
-
-		verifier
-			.verify(&message, &signature.0)
-			.map_err(|_| errors::ErrorKind::InvalidTxWitness("invalid signature".to_string()))?;
+		match &tx.witness {
+			Some(witness) => {
+				let signature = &witness.signature;
+				let message = codec::encode(&(&witness.nonce, &witness.until, call))?;
+				let verifier = self.dsa.verifier_from_public_key(&witness.public_key.0)?;
+				verifier.verify(&message, &signature.0).map_err(|_| {
+					errors::ErrorKind::InvalidTxWitness("invalid signature".to_string())
+				})?;
+			}
+			None => {
+				if witness_required {
+					return Err(
+						errors::ErrorKind::InvalidTxWitness("missing witness".to_string()).into(),
+					);
+				}
+			}
+		};
 
 		let module = &call.module;
-
-		let valid = Dispatcher::is_valid_call::<Context>(module, &call)?;
-
-		if !valid {
-			return Err(errors::ErrorKind::InvalidTxCall.into());
-		}
+		Dispatcher::validate_call::<Context, _>(module, &self.validator, &call)?;
 
 		let write = Dispatcher::is_write_call::<Context>(module, &call)?;
-
 		if write != Some(true) {
-			return Err(errors::ErrorKind::InvalidTxCall.into());
+			return Err(
+				errors::ErrorKind::InvalidTxMethod(format!("{}: not write", call.method)).into(),
+			);
 		}
 
-		Ok(())
-	}
-
-	pub fn validate_address(&self, address: &Address) -> CommonResult<()> {
-		let expected_address_len: usize = self.address.length().into();
-		if address.0.len() != expected_address_len {
-			return Err(errors::ErrorKind::InvalidAddress.into());
-		}
 		Ok(())
 	}
 
