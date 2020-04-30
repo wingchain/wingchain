@@ -14,13 +14,12 @@
 
 use std::rc::Rc;
 
-use serde::{Deserialize, Serialize};
-
 use executor_macro::{call, module};
 use executor_primitives::{
 	errors::{self, execute_error_result},
 	Context, ContextEnv, Module as ModuleT, StorageMap,
 };
+use primitives::codec::{Decode, Encode};
 use primitives::errors::CommonResult;
 use primitives::{codec, Address, Balance, Call};
 
@@ -108,15 +107,15 @@ impl<C: Context> Module<C> {
 	}
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Encode, Decode, Debug, PartialEq)]
 pub struct InitParams {
 	pub endow: Vec<(Address, Balance)>,
 }
 
-#[derive(Deserialize)]
+#[derive(Decode)]
 pub struct EmptyParams;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Encode, Decode)]
 pub struct TransferParams {
 	pub recipient: Address,
 	pub value: Balance,

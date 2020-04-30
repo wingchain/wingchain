@@ -14,13 +14,12 @@
 
 use std::rc::Rc;
 
-use serde::{Deserialize, Serialize};
-
 use executor_macro::{call, module};
 use executor_primitives::{
 	errors::{self, execute_error_result},
 	Context, ContextEnv, Module as ModuleT, StorageValue,
 };
+use primitives::codec::{Decode, Encode};
 use primitives::errors::CommonResult;
 use primitives::{codec, Address, Call};
 
@@ -61,7 +60,7 @@ impl<C: Context> Module<C> {
 	}
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Encode, Decode, Debug, PartialEq)]
 pub struct InitParams {
 	pub chain_id: String,
 	pub timestamp: u32,

@@ -21,7 +21,6 @@ use test::{black_box, Bencher};
 
 use futures::future::join_all;
 use rand::random;
-use serde::Serialize;
 use tokio::runtime::Runtime;
 
 use crypto::hash::{Hash as HashT, HashImpl};

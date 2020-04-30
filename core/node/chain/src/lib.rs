@@ -18,7 +18,6 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use log::info;
-use serde::Serialize;
 
 use crypto::address::AddressImpl;
 use crypto::dsa::DsaImpl;
@@ -34,6 +33,7 @@ use primitives::{
 };
 
 use crate::genesis::{build_genesis, GenesisInfo};
+use primitives::codec::Encode;
 
 pub mod errors;
 mod genesis;
@@ -109,7 +109,7 @@ impl Chain {
 		self.hash(&transaction_for_hash)
 	}
 
-	pub fn hash<D: Serialize>(&self, data: &D) -> CommonResult<Hash> {
+	pub fn hash<D: Encode>(&self, data: &D) -> CommonResult<Hash> {
 		let encoded = codec::encode(data)?;
 		Ok(self.hash_slice(&encoded))
 	}

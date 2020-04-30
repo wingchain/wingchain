@@ -16,7 +16,6 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use serde::Serialize;
 use tempfile::tempdir;
 
 use crypto::address::{Address as AddressT, AddressImpl};
@@ -27,6 +26,7 @@ use node_api::{Api, ApiConfig};
 use node_chain::{Chain, ChainConfig};
 use node_executor::{module, Executor};
 use node_txpool::{TxPool, TxPoolConfig};
+use primitives::codec::Encode;
 use primitives::{
 	codec, Address, Hash, PublicKey, Signature, Transaction, TransactionForHash, Witness,
 };
@@ -74,16 +74,16 @@ fn get_cases() -> Vec<(String, String)> {
 		(
 			r#"{"jsonrpc": "2.0", "method": "chain_getBlockByNumber", "params": ["best"], "id": 1}"#
 				.to_string(),
-			r#"{"jsonrpc":"2.0","result":{"hash":"0xdf57d2ec74a0eab9cb11e223ec8f4cb44b1c407d16eed3eee00434d8521b7996","header":{"number":"0x00000000","timestamp":"0x5ea93208","parent_hash":"0x0000000000000000000000000000000000000000000000000000000000000000","meta_txs_root":"0xd9ff49df9fb0d4abd0926af1c32059d63b62f61cfe117041d71f56e96d8d5ad4","meta_state_root":"0xf29d7ef97517727c206ffb819977017fd545ee02dc82e4d0d703faf590a401f4","payload_txs_root":"0xe67d3833c74144ef5d7df2c0a0aacf5b97f59796556efe292228bb6e089d8ead","payload_executed_gap":"0x01","payload_executed_state_root":"0x0000000000000000000000000000000000000000000000000000000000000000"},"body":{"meta_txs":["0x1fd2851248c12938fa5d59da8513e3471755a1c797f21d1f41bc013050b07954"],"payload_txs":["0x3d8d2b91d2cd54c27d59d954036fb64963894c84415f89cc0b3c5c49f25c370b"]}},"id":1}"#.to_string(),
+			format!(r#"{{"jsonrpc":"2.0","result":{{"hash":"0x56296bb9151709986b58fe3bc319b584641bfb094637c4079506bdd3358a182f","header":{{"number":"0x00000000","timestamp":"0x5ea93208","parent_hash":"0x0000000000000000000000000000000000000000000000000000000000000000","meta_txs_root":"0x456782bfe57bea3fdbb86bfa3d7ee8dc7fbe484183d944d18f9ecfb9cbaf890f","meta_state_root":"0x6401be7e6ca2bb6c4fe983256b9312044829c17857fd9aebc4fd6bf5236ebfa5","payload_txs_root":"0xc73b1740e53645a26e1926f9d910e560a99a601d14680deb6dc31eb26f321edc","payload_executed_gap":"0x01","payload_executed_state_root":"0x0000000000000000000000000000000000000000000000000000000000000000"}},"body":{{"meta_txs":["0xf27e963c5fdec44555394b68a14f013557c034ca322e0c0e7b9f4a33c91f273f"],"payload_txs":["0x6745417d545c3e0f7d610cadfd1ee8d450a92e89fa74bb75777950a779f2aa94"]}}}},"id":1}}"#, ),
 		),
 		(
-			r#"{"jsonrpc": "2.0", "method": "chain_getTransactionByHash", "params": ["0x1fd2851248c12938fa5d59da8513e3471755a1c797f21d1f41bc013050b07954"], "id": 1}"#
+			r#"{"jsonrpc": "2.0", "method": "chain_getTransactionByHash", "params": ["0xf27e963c5fdec44555394b68a14f013557c034ca322e0c0e7b9f4a33c91f273f"], "id": 1}"#
 				.to_string(),
-			r#"{"jsonrpc":"2.0","result":{"hash":"0x1fd2851248c12938fa5d59da8513e3471755a1c797f21d1f41bc013050b07954","witness":null,"call":{"module":"system","method":"init","params":"0x0a00000000000000636861696e2d746573740832a95e"}},"id":1}"#.to_string(),
+			r#"{"jsonrpc":"2.0","result":{"hash":"0xf27e963c5fdec44555394b68a14f013557c034ca322e0c0e7b9f4a33c91f273f","witness":null,"call":{"module":"system","method":"init","params":"0x28636861696e2d746573740832a95e"}},"id":1}"#.to_string(),
 		),
 		(
-			r#"{"jsonrpc": "2.0", "method": "chain_getRawTransactionByHash", "params": ["0x1fd2851248c12938fa5d59da8513e3471755a1c797f21d1f41bc013050b07954"], "id": 1}"#.to_string(),
-			r#"{"jsonrpc":"2.0","result":"0x00060000000000000073797374656d0400000000000000696e697416000000000000000a00000000000000636861696e2d746573740832a95e","id":1}"#.to_string(),
+			r#"{"jsonrpc": "2.0", "method": "chain_getRawTransactionByHash", "params": ["0xf27e963c5fdec44555394b68a14f013557c034ca322e0c0e7b9f4a33c91f273f"], "id": 1}"#.to_string(),
+			r#"{"jsonrpc":"2.0","result":"0x001873797374656d10696e69743c28636861696e2d746573740832a95e","id":1}"#.to_string(),
 		),
 		(
 			format!(r#"{{"jsonrpc": "2.0", "method": "chain_sendRawTransaction", "params": ["0x{}"], "id": 1}}"#, tx_hex),
@@ -97,7 +97,7 @@ fn get_cases() -> Vec<(String, String)> {
 	]
 }
 
-fn hash<E: Serialize>(data: E) -> Hash {
+fn hash<E: Encode>(data: E) -> Hash {
 	let hasher = HashImpl::Blake2b256;
 	let mut hash = vec![0u8; hasher.length().into()];
 	hasher.hash(&mut hash, &codec::encode(&data).unwrap());

@@ -14,13 +14,11 @@
 
 use std::marker::PhantomData;
 
-use serde::de::DeserializeOwned;
-use serde::Serialize;
+use codec::{Decode, Encode};
 
 pub use chrono;
 use primitives::errors::CommonResult;
 use primitives::{codec, Address, BlockNumber, Call, DBValue};
-pub use serde_json;
 use std::rc::Rc;
 
 pub mod errors;
@@ -62,7 +60,7 @@ pub trait Context: Clone {
 
 pub struct StorageValue<T, C>
 where
-	T: Serialize + DeserializeOwned,
+	T: Encode + Decode,
 	C: Context,
 {
 	context: C,
@@ -73,7 +71,7 @@ where
 
 impl<T, C> StorageValue<T, C>
 where
-	T: Serialize + DeserializeOwned,
+	T: Encode + Decode,
 	C: Context,
 {
 	pub fn new<M: Module<C>>(context: C, storage_key: &'static [u8]) -> Self {
@@ -102,8 +100,8 @@ where
 
 pub struct StorageMap<K, V, C>
 where
-	K: Serialize + DeserializeOwned,
-	V: Serialize + DeserializeOwned,
+	K: Encode + Decode,
+	V: Encode + Decode,
 	C: Context,
 {
 	context: C,
@@ -114,8 +112,8 @@ where
 
 impl<K, V, C> StorageMap<K, V, C>
 where
-	K: Serialize + DeserializeOwned,
-	V: Serialize + DeserializeOwned,
+	K: Encode + Decode,
+	V: Encode + Decode,
 	C: Context,
 {
 	pub fn new<M: Module<C>>(context: C, storage_key: &'static [u8]) -> Self {
@@ -148,7 +146,7 @@ where
 	}
 }
 
-fn context_get<C: Context, V: DeserializeOwned>(
+fn context_get<C: Context, V: Decode>(
 	context: &C,
 	meta_module: bool,
 	key: &[u8],
@@ -169,7 +167,7 @@ fn context_get<C: Context, V: DeserializeOwned>(
 	}
 }
 
-fn context_set<C: Context, V: Serialize>(
+fn context_set<C: Context, V: Encode>(
 	context: &C,
 	meta_module: bool,
 	key: &[u8],

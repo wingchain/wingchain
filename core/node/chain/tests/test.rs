@@ -17,8 +17,6 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use serde::Serialize;
-
 use crypto::address::AddressImpl;
 use crypto::dsa::DsaImpl;
 use crypto::hash::{Hash as HashT, HashImpl};
@@ -26,6 +24,7 @@ use node_chain::{Chain, ChainConfig};
 use node_db::DB;
 use node_executor::{module, Executor};
 use node_statedb::{StateDB, TrieRoot};
+use primitives::codec::Encode;
 use primitives::{
 	codec, Address, Block, Body, DBKey, Executed, Hash, Header, Transaction, TransactionForHash,
 };
@@ -150,7 +149,7 @@ fn expected_data() -> (Hash, Block, Executed, Transaction) {
 	(block_hash, block, executed, tx)
 }
 
-fn hash<E: Serialize>(data: E) -> Hash {
+fn hash<E: Encode>(data: E) -> Hash {
 	let hasher = HashImpl::Blake2b256;
 	let mut hash = vec![0u8; hasher.length().into()];
 	hasher.hash(&mut hash, &codec::encode(&data).unwrap());

@@ -14,7 +14,7 @@
 
 use std::fmt;
 
-use serde::{Deserialize, Serialize};
+use codec::{Decode, Encode};
 use smallvec::SmallVec;
 
 use crate::errors::{CommonError, CommonErrorKind, CommonResult};
@@ -22,19 +22,19 @@ use crate::errors::{CommonError, CommonErrorKind, CommonResult};
 pub mod codec;
 pub mod errors;
 
-#[derive(Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Encode, Decode, PartialEq)]
 pub struct Address(pub Vec<u8>);
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Encode, Decode, PartialEq)]
 pub struct PublicKey(pub Vec<u8>);
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Encode, Decode, PartialEq)]
 /// signature for (nonce, until, call)
 pub struct Signature(pub Vec<u8>);
 
 pub type Nonce = u32;
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Encode, Decode, PartialEq)]
 pub struct Witness {
 	pub public_key: PublicKey,
 	pub signature: Signature,
@@ -42,30 +42,30 @@ pub struct Witness {
 	pub until: BlockNumber,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Encode, Decode, PartialEq)]
 pub struct Params(pub Vec<u8>);
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Encode, Decode, PartialEq)]
 pub struct Call {
 	pub module: String,
 	pub method: String,
 	pub params: Params,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Encode, Decode, PartialEq)]
 pub struct Transaction {
 	pub witness: Option<Witness>,
 	pub call: Call,
 }
 
-#[derive(Clone, Serialize, Deserialize, PartialEq, Hash)]
+#[derive(Clone, Encode, Decode, PartialEq, Hash)]
 pub struct Hash(pub Vec<u8>);
 
 pub type BlockNumber = u32;
 
 pub type Balance = u64;
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Encode, Decode, PartialEq)]
 pub struct Header {
 	pub number: BlockNumber,
 	pub timestamp: u32,
@@ -77,7 +77,7 @@ pub struct Header {
 	pub payload_executed_state_root: Hash,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Encode, Decode, PartialEq)]
 pub struct Body {
 	pub meta_txs: Vec<Hash>,
 	pub payload_txs: Vec<Hash>,
@@ -98,7 +98,7 @@ pub struct FullBlock {
 	pub txs: Vec<(Hash, Transaction)>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Encode, Decode, PartialEq)]
 pub struct Executed {
 	pub payload_executed_state_root: Hash,
 }
@@ -147,7 +147,7 @@ impl Address {
 }
 
 /// exclude signature to avoid malleability
-#[derive(Serialize)]
+#[derive(Encode)]
 pub struct TransactionForHash<'a> {
 	pub witness: Option<(&'a PublicKey, &'a Nonce, &'a BlockNumber)>,
 	pub call: &'a Call,
