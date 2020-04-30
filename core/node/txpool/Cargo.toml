@@ -19,3 +19,5 @@ node-chain = { path = "../chain" }
 crypto = { path = "../../crypto" }
 rand = "0.4.6"
 futures = "0.3"
+tempfile = "3.1.0"
+node-executor = { path = "../executor" }

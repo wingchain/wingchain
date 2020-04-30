@@ -259,9 +259,13 @@ impl Executor {
 
 		let valid = Dispatcher::is_valid_call::<Context>(module, &call)?;
 
+		if !valid {
+			return Err(errors::ErrorKind::InvalidTxCall.into());
+		}
+
 		let write = Dispatcher::is_write_call::<Context>(module, &call)?;
 
-		if !(valid && write == Some(true)) {
+		if write != Some(true) {
 			return Err(errors::ErrorKind::InvalidTxCall.into());
 		}
 
