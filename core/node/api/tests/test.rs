@@ -20,8 +20,10 @@ use tempfile::tempdir;
 
 use node_api::support::DefaultApiSupport;
 use node_api::{Api, ApiConfig};
-use node_chain::{Chain, ChainConfig};
+use node_chain::{module, Chain, ChainConfig};
 use node_txpool::{TxPool, TxPoolConfig};
+use primitives::{codec, Transaction};
+use utils_test::test_accounts;
 
 #[tokio::test]
 async fn test_api() {
@@ -30,13 +32,23 @@ async fn test_api() {
 		rpc_workers: 1,
 		rpc_maxconn: 100,
 	};
-	let support = Arc::new(get_support());
+
+	let chain = get_chain();
+
+	let txpool_config = TxPoolConfig {
+		pool_capacity: 32,
+		buffer_capacity: 32,
+	};
+
+	let txpool = Arc::new(TxPool::new(txpool_config, chain.clone()).unwrap());
+
+	let support = Arc::new(DefaultApiSupport::new(chain.clone(), txpool));
 
 	let _api = Api::new(config, support);
 
 	let client = reqwest::Client::new();
 
-	for (request, expected_response) in get_cases() {
+	for (request, expected_response) in get_cases(&chain) {
 		let res = client
 			.post("http://127.0.0.1:3109")
 			.body(request)
@@ -48,34 +60,71 @@ async fn test_api() {
 	}
 }
 
-fn get_cases() -> Vec<(String, String)> {
+fn get_cases(chain: &Arc<Chain>) -> Vec<(String, String)> {
+	let tx = get_tx(chain);
+
+	let tx_hash = chain.hash_transaction(&tx).unwrap();
+
+	let tx_hex = hex::encode(codec::encode(&tx).unwrap());
+
+	let tx_hash_hex = hex::encode(tx_hash.0);
+	let tx_public_key_hex = hex::encode(&tx.witness.clone().unwrap().public_key.0);
+	let tx_sig_hex = hex::encode(&tx.witness.clone().unwrap().signature.0);
+	let nonce_hex = hex::encode(tx.witness.clone().unwrap().nonce.to_be_bytes());
+	let until_hex = hex::encode(tx.witness.clone().unwrap().until.to_be_bytes());
+	let params_hex = hex::encode(&tx.call.params.0);
+
 	vec![
 		(
 			r#"{"jsonrpc": "2.0", "method": "chain_getBlockByNumber", "params": ["best"], "id": 1}"#
 				.to_string(),
-			r#"{"jsonrpc":"2.0","result":{"hash":"0x210d67b3539a8bf7466e1c1dfd30088143df6efb","header":{"number":"0x00000000","timestamp":"0x5e987dba","parent_hash":"0x0000000000000000000000000000000000000000","meta_txs_root":"0x6c6fdfd66f23cd420ce336d66446cac4af1a4f2f","meta_state_root":"0x9abf22924c884d089c9b90c48b90fde40ea89867","payload_txs_root":"0x082ad992fb76871c33a1b9993a082952feaca5e6","payload_executed_gap":"0x01","payload_executed_state_root":"0x0000000000000000000000000000000000000000"},"body":{"meta_txs":["0x6f83855c8abfeff14ad9fb01f68922f4125071f8"],"payload_txs":[]}},"id":1}"#.to_string(),
+			format!(r#"{{"jsonrpc":"2.0","result":{{"hash":"0x56296bb9151709986b58fe3bc319b584641bfb094637c4079506bdd3358a182f","header":{{"number":"0x00000000","timestamp":"0x5ea93208","parent_hash":"0x0000000000000000000000000000000000000000000000000000000000000000","meta_txs_root":"0x456782bfe57bea3fdbb86bfa3d7ee8dc7fbe484183d944d18f9ecfb9cbaf890f","meta_state_root":"0x6401be7e6ca2bb6c4fe983256b9312044829c17857fd9aebc4fd6bf5236ebfa5","payload_txs_root":"0xc73b1740e53645a26e1926f9d910e560a99a601d14680deb6dc31eb26f321edc","payload_executed_gap":"0x01","payload_executed_state_root":"0x0000000000000000000000000000000000000000000000000000000000000000"}},"body":{{"meta_txs":["0xf27e963c5fdec44555394b68a14f013557c034ca322e0c0e7b9f4a33c91f273f"],"payload_txs":["0x6745417d545c3e0f7d610cadfd1ee8d450a92e89fa74bb75777950a779f2aa94"]}}}},"id":1}}"#, ),
 		),
 		(
-			r#"{"jsonrpc": "2.0", "method": "chain_getTransactionByHash", "params": ["0x6f83855c8abfeff14ad9fb01f68922f4125071f8"], "id": 1}"#
+			r#"{"jsonrpc": "2.0", "method": "chain_getTransactionByHash", "params": ["0xf27e963c5fdec44555394b68a14f013557c034ca322e0c0e7b9f4a33c91f273f"], "id": 1}"#
 				.to_string(),
-			r#"{"jsonrpc":"2.0","result":{"hash":"0x6f83855c8abfeff14ad9fb01f68922f4125071f8","witness":null,"call":{"module":"system","method":"init","params":"0x0a00000000000000636861696e2d74657374ba7d985e"}},"id":1}"#.to_string(),
+			r#"{"jsonrpc":"2.0","result":{"hash":"0xf27e963c5fdec44555394b68a14f013557c034ca322e0c0e7b9f4a33c91f273f","witness":null,"call":{"module":"system","method":"init","params":"0x28636861696e2d746573740832a95e"}},"id":1}"#.to_string(),
 		),
 		(
-			r#"{"jsonrpc": "2.0", "method": "chain_getRawTransactionByHash", "params": ["0x6f83855c8abfeff14ad9fb01f68922f4125071f8"], "id": 1}"#.to_string(),
-			r#"{"jsonrpc":"2.0","result":"0x00060000000000000073797374656d0400000000000000696e697416000000000000000a00000000000000636861696e2d74657374ba7d985e","id":1}"#.to_string(),
+			r#"{"jsonrpc": "2.0", "method": "chain_getRawTransactionByHash", "params": ["0xf27e963c5fdec44555394b68a14f013557c034ca322e0c0e7b9f4a33c91f273f"], "id": 1}"#.to_string(),
+			r#"{"jsonrpc":"2.0","result":"0x001873797374656d10696e69743c28636861696e2d746573740832a95e","id":1}"#.to_string(),
 		),
 		(
-			r#"{"jsonrpc": "2.0", "method": "chain_sendRawTransaction", "params": ["0x00060000000000000073797374656d0400000000000000696e69741a000000000000000e00000000000000636861696e2d6a64726a71666868a0f79e5e"], "id": 1}"#.to_string(),
-			r#"{"jsonrpc":"2.0","result":"0x3b624b93cb726681ddb8d79378783eb2b3147804","id":1}"#.to_string(),
+			format!(r#"{{"jsonrpc": "2.0", "method": "chain_sendRawTransaction", "params": ["0x{}"], "id": 1}}"#, tx_hex),
+			format!(r#"{{"jsonrpc":"2.0","result":"0x{}","id":1}}"#, tx_hash_hex),
 		),
 		(
-			r#"{"jsonrpc": "2.0", "method": "chain_getTransactionInTxPool", "params": ["0x3b624b93cb726681ddb8d79378783eb2b3147804"], "id": 1}"#.to_string(),
-			r#"{"jsonrpc":"2.0","result":{"hash":"0x3b624b93cb726681ddb8d79378783eb2b3147804","witness":null,"call":{"module":"system","method":"init","params":"0x0e00000000000000636861696e2d6a64726a71666868a0f79e5e"}},"id":1}"#.to_string(),
+			format!(r#"{{"jsonrpc": "2.0", "method": "chain_getTransactionInTxPool", "params": ["{}"], "id": 1}}"#, tx_hash_hex),
+			format!(r#"{{"jsonrpc":"2.0","result":{{"hash":"0x{}","witness":{{"public_key":"0x{}","signature":"0x{}","nonce":"0x{}","until":"0x{}"}},"call":{{"module":"balance","method":"transfer","params":"0x{}"}}}},"id":1}}"#,
+					tx_hash_hex, tx_public_key_hex, tx_sig_hex, nonce_hex, until_hex, params_hex),
 		)
 	]
 }
 
-fn get_support() -> DefaultApiSupport<Chain> {
+fn get_tx(chain: &Arc<Chain>) -> Transaction {
+	let (account1, account2) = test_accounts(
+		chain.get_basic().dsa.clone(),
+		chain.get_basic().address.clone(),
+	);
+
+	let nonce = 0u32;
+	let until = 1u32;
+	let tx = chain
+		.build_transaction(
+			Some((account1.0, nonce, until)),
+			"balance".to_string(),
+			"transfer".to_string(),
+			module::balance::TransferParams {
+				recipient: account2.3,
+				value: 2,
+			},
+		)
+		.unwrap();
+	chain.validate_transaction(&tx, true).unwrap();
+	tx
+}
+
+fn get_chain() -> Arc<Chain> {
 	let path = tempdir().expect("could not create a temp dir");
 	let home = path.into_path();
 
@@ -85,14 +134,7 @@ fn get_support() -> DefaultApiSupport<Chain> {
 
 	let chain = Arc::new(Chain::new(chain_config).unwrap());
 
-	let txpool_config = TxPoolConfig {
-		pool_capacity: 32,
-		buffer_capacity: 32,
-	};
-
-	let txpool = Arc::new(TxPool::new(txpool_config, chain.clone()).unwrap());
-
-	DefaultApiSupport::new(chain, txpool)
+	chain
 }
 
 fn init(home: &PathBuf) {
@@ -102,21 +144,32 @@ fn init(home: &PathBuf) {
 
 	let spec = r#"
 [basic]
-hash = "blake2b_160"
+hash = "blake2b_256"
 dsa = "ed25519"
 address = "blake2b_160"
 
 [genesis]
 
-# System module init
 [[genesis.txs]]
-method = "system.init"
-params = ['''
+module = "system"
+method = "init"
+params = '''
 {
     "chain_id": "chain-test",
-    "time": "2020-04-16T23:46:02.189+08:00"
+    "timestamp": "2020-04-29T15:51:36.502+08:00"
 }
-''']
+'''
+
+[[genesis.txs]]
+module = "balance"
+method = "init"
+params = '''
+{
+    "endow": [
+    	["b4decd5a5f8f2ba708f8ced72eec89f44f3be96a", 10]
+    ]
+}
+'''
 	"#;
 
 	fs::write(config_path.join("spec.toml"), &spec).unwrap();

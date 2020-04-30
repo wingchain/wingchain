@@ -14,53 +14,62 @@
 
 use std::fmt;
 
-use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
+
+use codec::{Decode, Encode};
 
 use crate::errors::{CommonError, CommonErrorKind, CommonResult};
 
 pub mod codec;
 pub mod errors;
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Encode, Decode, PartialEq)]
 pub struct Address(pub Vec<u8>);
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-/// signature for (nonce, call)
+#[derive(Clone, Debug, Encode, Decode, PartialEq)]
+pub struct PublicKey(pub Vec<u8>);
+
+#[derive(Clone, Debug, Encode, Decode, PartialEq)]
+pub struct SecretKey(pub Vec<u8>);
+
+#[derive(Clone, Debug, Encode, Decode, PartialEq)]
+/// signature for (nonce, until, call)
 pub struct Signature(pub Vec<u8>);
 
 pub type Nonce = u32;
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Encode, Decode, PartialEq)]
 pub struct Witness {
-	pub address: Address,
+	pub public_key: PublicKey,
 	pub signature: Signature,
 	pub nonce: Nonce,
-	pub expire: BlockNumber,
+	pub until: BlockNumber,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Encode, Decode, PartialEq)]
 pub struct Params(pub Vec<u8>);
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Encode, Decode, PartialEq)]
 pub struct Call {
 	pub module: String,
 	pub method: String,
 	pub params: Params,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Encode, Decode, PartialEq)]
 pub struct Transaction {
 	pub witness: Option<Witness>,
 	pub call: Call,
 }
 
-#[derive(Clone, Serialize, Deserialize, PartialEq, Hash)]
+#[derive(Clone, Encode, Decode, PartialEq, Hash)]
 pub struct Hash(pub Vec<u8>);
 
 pub type BlockNumber = u32;
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub type Balance = u64;
+
+#[derive(Clone, Debug, Encode, Decode, PartialEq)]
 pub struct Header {
 	pub number: BlockNumber,
 	pub timestamp: u32,
@@ -72,7 +81,7 @@ pub struct Header {
 	pub payload_executed_state_root: Hash,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Encode, Decode, PartialEq)]
 pub struct Body {
 	pub meta_txs: Vec<Hash>,
 	pub payload_txs: Vec<Hash>,
@@ -84,6 +93,7 @@ pub struct Block {
 	pub body: Body,
 }
 
+#[derive(Debug, PartialEq)]
 pub struct FullBlock {
 	pub number: BlockNumber,
 	pub block_hash: Hash,
@@ -92,7 +102,7 @@ pub struct FullBlock {
 	pub txs: Vec<(Hash, Transaction)>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Encode, Decode, PartialEq)]
 pub struct Executed {
 	pub payload_executed_state_root: Hash,
 }
@@ -106,10 +116,54 @@ impl fmt::Debug for Hash {
 	}
 }
 
+impl fmt::Display for Hash {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "{}", hex::encode(&self.0))
+	}
+}
+
 impl Hash {
 	pub fn from_hex(hex: &str) -> CommonResult<Self> {
 		let hex =
 			hex::decode(hex).map_err(|e| CommonError::new(CommonErrorKind::Codec, Box::new(e)))?;
 		Ok(Hash(hex))
+	}
+}
+
+impl fmt::Debug for Address {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "{}", hex::encode(&self.0))
+	}
+}
+
+impl fmt::Display for Address {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "{}", hex::encode(&self.0))
+	}
+}
+
+impl Address {
+	pub fn from_hex(hex: &str) -> CommonResult<Self> {
+		let hex =
+			hex::decode(hex).map_err(|e| CommonError::new(CommonErrorKind::Codec, Box::new(e)))?;
+		Ok(Address(hex))
+	}
+}
+
+/// exclude signature to avoid malleability
+#[derive(Encode)]
+pub struct TransactionForHash<'a> {
+	pub witness: Option<(&'a PublicKey, &'a Nonce, &'a BlockNumber)>,
+	pub call: &'a Call,
+}
+
+impl<'a> TransactionForHash<'a> {
+	pub fn new(tx: &'a Transaction) -> Self {
+		let witness = tx
+			.witness
+			.as_ref()
+			.map(|witness| (&witness.public_key, &witness.nonce, &witness.until));
+		let call = &tx.call;
+		Self { witness, call }
 	}
 }

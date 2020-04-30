@@ -162,7 +162,7 @@ pub async fn chain_send_raw_transaction<S: ApiSupport>(
 
 	let support = data.0;
 
-	let tx_hash = support.hash(&transaction).await?.into();
+	let tx_hash = support.hash_transaction(&transaction).await?.into();
 
 	support.insert_transaction(transaction).await?;
 
@@ -245,10 +245,10 @@ pub struct Transaction {
 
 #[derive(Serialize)]
 pub struct Witness {
-	address: Hex,
+	public_key: Hex,
 	signature: Hex,
 	nonce: Hex,
-	expire: Hex,
+	until: Hex,
 }
 
 #[derive(Serialize)]
@@ -306,10 +306,10 @@ impl From<primitives::Transaction> for Transaction {
 impl From<primitives::Witness> for Witness {
 	fn from(witness: primitives::Witness) -> Self {
 		Self {
-			address: witness.address.into(),
+			public_key: witness.public_key.into(),
 			signature: witness.signature.into(),
 			nonce: witness.nonce.into(),
-			expire: witness.nonce.into(),
+			until: witness.until.into(),
 		}
 	}
 }
@@ -342,9 +342,9 @@ impl From<Vec<u8>> for Hex {
 	}
 }
 
-impl From<primitives::Address> for Hex {
-	fn from(address: primitives::Address) -> Self {
-		Hex(format!("0x{}", hex::encode(address.0)))
+impl From<primitives::PublicKey> for Hex {
+	fn from(public_key: primitives::PublicKey) -> Self {
+		Hex(format!("0x{}", hex::encode(public_key.0)))
 	}
 }
 

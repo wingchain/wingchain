@@ -13,13 +13,13 @@
 // limitations under the License.
 
 use crate::errors::{CommonError, CommonErrorKind, CommonResult};
-use serde::de::DeserializeOwned;
-use serde::Serialize;
+pub use scale_codec::{Decode, Encode};
 
-pub fn encode<S: Serialize>(value: &S) -> CommonResult<Vec<u8>> {
-	bincode::serialize(value).map_err(|e| CommonError::new(CommonErrorKind::Codec, Box::new(e)))
+pub fn encode<E: Encode>(value: &E) -> CommonResult<Vec<u8>> {
+	Ok(Encode::encode(value))
 }
 
-pub fn decode<D: DeserializeOwned>(bytes: &[u8]) -> CommonResult<D> {
-	bincode::deserialize(bytes).map_err(|e| CommonError::new(CommonErrorKind::Codec, Box::new(e)))
+pub fn decode<D: Decode>(bytes: &[u8]) -> CommonResult<D> {
+	Decode::decode(&mut &bytes[..])
+		.map_err(|e| CommonError::new(CommonErrorKind::Codec, Box::new(e)))
 }

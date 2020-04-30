@@ -31,7 +31,7 @@ pub enum CommonErrorKind {
 }
 
 #[derive(Debug, Constructor, Display)]
-#[display(fmt = "[CommonError] Kind: {:?} Error: {:?}", kind, error)]
+#[display(fmt = "[CommonError] Kind: {} Error: {}", kind, error)]
 pub struct CommonError {
 	pub kind: CommonErrorKind,
 	pub error: Box<dyn Error + Send>,

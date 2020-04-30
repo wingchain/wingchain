@@ -17,25 +17,27 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use chrono::DateTime;
 use log::info;
-use serde::Serialize;
-use toml::Value;
 
 use crypto::address::AddressImpl;
 use crypto::dsa::DsaImpl;
 use crypto::hash::{Hash as HashT, HashImpl};
 use main_base::spec::Spec;
-use main_base::SystemInitParams;
 use node_db::{DBTransaction, DB};
-use node_executor::{module, Context, Executor};
+pub use node_executor::module;
+use node_executor::{Context, ContextEnv, ContextEssence, Executor};
 use node_statedb::{StateDB, TrieRoot};
+use primitives::codec::Encode;
 use primitives::errors::CommonResult;
 use primitives::{
-	codec, Block, BlockNumber, Body, DBKey, Executed, FullBlock, Hash, Header, Transaction,
+	codec, Block, BlockNumber, Body, DBKey, Executed, FullBlock, Hash, Header, Nonce, SecretKey,
+	Transaction, TransactionForHash,
 };
 
+use crate::genesis::{build_genesis, GenesisInfo};
+
 pub mod errors;
+mod genesis;
 
 pub struct ChainConfig {
 	pub home: PathBuf,
@@ -52,11 +54,9 @@ pub struct Chain {
 }
 
 pub struct Basic {
-	hash: Arc<HashImpl>,
-	#[allow(dead_code)]
-	dsa: Arc<DsaImpl>,
-	#[allow(dead_code)]
-	address: Arc<AddressImpl>,
+	pub hash: Arc<HashImpl>,
+	pub dsa: Arc<DsaImpl>,
+	pub address: Arc<AddressImpl>,
 }
 
 impl Chain {
@@ -80,7 +80,7 @@ impl Chain {
 		)?);
 		let trie_root = Arc::new(TrieRoot::new(hash.clone())?);
 
-		let executor = Executor::new();
+		let executor = Executor::new(dsa.clone(), address.clone());
 
 		let basic = Arc::new(Basic { hash, dsa, address });
 
@@ -103,20 +103,36 @@ impl Chain {
 		Ok(chain)
 	}
 
-	#[allow(dead_code)]
-	pub fn hash<D: Serialize>(&self, data: &D) -> CommonResult<Hash> {
+	pub fn hash_transaction(&self, tx: &Transaction) -> CommonResult<Hash> {
+		let transaction_for_hash = TransactionForHash::new(tx);
+		self.hash(&transaction_for_hash)
+	}
+
+	pub fn hash<D: Encode>(&self, data: &D) -> CommonResult<Hash> {
 		let encoded = codec::encode(data)?;
 		Ok(self.hash_slice(&encoded))
 	}
 
-	pub fn hash_slice(&self, data: &[u8]) -> Hash {
-		let mut out = vec![0u8; self.basic.hash.length().into()];
-		self.basic.hash.hash(&mut out, data);
-		Hash(out)
+	pub fn validate_transaction(
+		&self,
+		tx: &Transaction,
+		witness_required: bool,
+	) -> CommonResult<()> {
+		self.executor.validate_tx(tx, witness_required)
 	}
 
-	pub fn validate_tx(&self, tx: &Transaction) -> CommonResult<()> {
-		self.executor.validate_tx(tx)
+	pub fn build_transaction<P: Encode>(
+		&self,
+		witness: Option<(SecretKey, Nonce, BlockNumber)>,
+		module: String,
+		method: String,
+		params: P,
+	) -> CommonResult<Transaction> {
+		self.executor.build_tx(witness, module, method, params)
+	}
+
+	pub fn get_basic(&self) -> Arc<Basic> {
+		self.basic.clone()
 	}
 
 	pub fn get_best_number(&self) -> CommonResult<Option<BlockNumber>> {
@@ -229,6 +245,12 @@ impl Chain {
 			.get(node_db::columns::TX, &DBKey::from_slice(&tx_hash.0))
 	}
 
+	fn hash_slice(&self, data: &[u8]) -> Hash {
+		let mut out = vec![0u8; self.basic.hash.length().into()];
+		self.basic.hash.hash(&mut out, data);
+		Hash(out)
+	}
+
 	fn get_spec(config: &ChainConfig) -> CommonResult<(bool, DB, Spec)> {
 		let db_path = config.home.join(main_base::DATA).join(main_base::DB);
 		let db = DB::open(&db_path)?;
@@ -272,69 +294,27 @@ impl Chain {
 		let spec: Spec = toml::from_str(&spec_str)
 			.map_err(|e| errors::ErrorKind::Spec(format!("failed to parse spec file: {:?}", e)))?;
 
-		let tx = match spec.genesis.txs.get(0) {
-			Some(tx) if tx.method == "system.init" => tx,
-			_ => {
-				return Err(errors::ErrorKind::Spec(format!(
-					"invalid genesis txs: missing system.init"
-				))
-				.into());
-			}
-		};
+		let GenesisInfo {
+			meta_txs,
+			payload_txs,
+			timestamp,
+		} = build_genesis(&spec, &self.executor)?;
 
-		let param = match tx.params.get(0) {
-			Some(Value::String(param)) => match serde_json::from_str::<SystemInitParams>(param) {
-				Ok(param) => param,
-				_ => {
-					return Err(errors::ErrorKind::Spec(format!(
-						"invalid genesis txs: invalid system.init params"
-					))
-					.into());
-				}
-			},
-			_ => {
-				return Err(errors::ErrorKind::Spec(format!(
-					"invalid genesis txs: invalid system.init params"
-				))
-				.into());
-			}
-		};
-
-		let chain_id = param.chain_id.clone();
-		let time = DateTime::parse_from_rfc3339(&param.time).map_err(|_| {
-			errors::ErrorKind::Spec(format!(
-				"invalid genesis txs: invalid system.init param time: {:?}",
-				param.time.clone()
-			))
-		})?;
-		let timestamp = time.timestamp() as u32;
-
-		let tx = Arc::new(
-			self.executor
-				.build_tx(
-					"system".to_string(),
-					"init".to_string(),
-					module::system::InitParams {
-						chain_id,
-						timestamp,
-					},
-				)
-				.expect("qed"),
-		);
-		let meta_txs = vec![tx];
-		let payload_txs = vec![];
 		let zero_hash = Hash(vec![0u8; self.basic.hash.length().into()]);
 
 		let number = 0;
-		let context = Context::new(
-			number,
-			timestamp,
+		let env = ContextEnv { number, timestamp };
+
+		let context_essence = ContextEssence::new(
+			env,
 			self.trie_root.clone(),
 			self.meta_statedb.clone(),
 			Hash(self.meta_statedb.default_root()),
 			self.payload_statedb.clone(),
 			Hash(self.payload_statedb.default_root()),
 		)?;
+
+		let context = Context::new(&context_essence)?;
 
 		self.executor.execute_txs(&context, meta_txs)?;
 		self.executor.execute_txs(&context, payload_txs)?;
@@ -362,12 +342,12 @@ impl Chain {
 
 		let meta_txs = meta_txs
 			.into_iter()
-			.map(|x| self.hash(&x).map(|hash| (hash, x)))
+			.map(|x| self.hash_transaction(&x).map(|hash| (hash, x)))
 			.collect::<CommonResult<Vec<_>>>()?;
 
 		let payload_txs = payload_txs
 			.into_iter()
-			.map(|x| self.hash(&x).map(|hash| (hash, x)))
+			.map(|x| self.hash_transaction(&x).map(|hash| (hash, x)))
 			.collect::<CommonResult<Vec<_>>>()?;
 
 		let meta_tx_hashes = meta_txs

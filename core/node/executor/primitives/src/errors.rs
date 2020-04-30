@@ -15,15 +15,30 @@
 use std::error::Error;
 use std::fmt::Debug;
 
-use primitives::errors::{CommonError, CommonErrorKind, Display};
+use primitives::errors::{CommonError, CommonErrorKind, CommonResult, Display};
 
 #[derive(Debug, Display)]
 pub enum ErrorKind {
-	#[display(fmt = "Invalid method: {}", _0)]
-	InvalidMethod(String),
+	#[display(fmt = "Invalid txs: {:?}", _0)]
+	InvalidTxs(String),
 
-	#[display(fmt = "Invalid params")]
-	InvalidParams,
+	#[display(fmt = "Invalid tx witness: {}", _0)]
+	InvalidTxWitness(String),
+
+	#[display(fmt = "Invalid tx module: {}", _0)]
+	InvalidTxModule(String),
+
+	#[display(fmt = "Invalid tx method: {}", _0)]
+	InvalidTxMethod(String),
+
+	#[display(fmt = "Invalid tx params: {}", _0)]
+	InvalidTxParams(String),
+
+	#[display(fmt = "Invalid address: {}", _0)]
+	InvalidAddress(String),
+
+	#[display(fmt = "{}", _0)]
+	ExecuteError(String),
 }
 
 impl Error for ErrorKind {}
@@ -32,4 +47,8 @@ impl From<ErrorKind> for CommonError {
 	fn from(error: ErrorKind) -> Self {
 		CommonError::new(CommonErrorKind::Executor, Box::new(error))
 	}
+}
+
+pub fn execute_error_result(message: &str) -> CommonResult<CommonResult<()>> {
+	Ok(Err(ErrorKind::ExecuteError(message.to_string()).into()))
 }

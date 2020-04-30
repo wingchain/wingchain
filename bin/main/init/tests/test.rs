@@ -15,14 +15,24 @@
 use std::fs;
 
 use chrono::DateTime;
+use serde::Deserialize;
 use tempfile::tempdir;
-use toml::Value;
 
 use base::spec::Spec;
 use base::SharedParams;
-use base::SystemInitParams;
 use main_init::cli::InitOpt;
 use main_init::run;
+
+#[derive(Deserialize)]
+pub struct SystemInitParams {
+	pub chain_id: String,
+	pub timestamp: String,
+}
+
+#[derive(Deserialize)]
+pub struct BalanceInitParams {
+	pub endow: Vec<(String, u64)>,
+}
 
 #[test]
 fn test_init() {
@@ -53,19 +63,22 @@ fn test_init() {
 
 	let tx = &spec.genesis.txs[0];
 
-	assert_eq!(tx.method, "system.init");
+	assert_eq!(tx.module, "system");
+	assert_eq!(tx.method, "init");
 
-	let param = &tx.params[0];
-
-	let param = match param {
-		Value::String(s) => s,
-		_ => unreachable!("param should be string"),
-	};
-
-	let param: SystemInitParams = serde_json::from_str(param).unwrap();
+	let param: SystemInitParams = serde_json::from_str(&tx.params).unwrap();
 
 	assert_eq!(param.chain_id.len(), 14);
-	assert!(DateTime::parse_from_rfc3339(&param.time).is_ok());
+	assert!(DateTime::parse_from_rfc3339(&param.timestamp).is_ok());
+
+	let tx = &spec.genesis.txs[1];
+
+	assert_eq!(tx.module, "balance");
+	assert_eq!(tx.method, "init");
+
+	let param: BalanceInitParams = serde_json::from_str(&tx.params).unwrap();
+
+	assert_eq!(param.endow.len(), 0);
 }
 
 #[cfg(feature = "build-dep-test")]
@@ -98,17 +111,20 @@ fn test_init_command() {
 
 	let tx = &spec.genesis.txs[0];
 
-	assert_eq!(tx.method, "system.init");
+	assert_eq!(tx.module, "system");
+	assert_eq!(tx.method, "init");
 
-	let param = &tx.params[0];
-
-	let param = match param {
-		Value::String(s) => s,
-		_ => unreachable!("param should be string"),
-	};
-
-	let param: SystemInitParams = serde_json::from_str(param).unwrap();
+	let param: SystemInitParams = serde_json::from_str(&tx.params).unwrap();
 
 	assert_eq!(param.chain_id.len(), 14);
-	assert!(DateTime::parse_from_rfc3339(&param.time).is_ok());
+	assert!(DateTime::parse_from_rfc3339(&param.timestamp).is_ok());
+
+	let tx = &spec.genesis.txs[1];
+
+	assert_eq!(tx.module, "balance");
+	assert_eq!(tx.method, "init");
+
+	let param: BalanceInitParams = serde_json::from_str(&tx.params).unwrap();
+
+	assert_eq!(param.endow.len(), 0);
 }

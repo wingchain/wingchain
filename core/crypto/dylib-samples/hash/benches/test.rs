@@ -23,10 +23,10 @@ use std::ffi::CString;
 
 #[bench]
 fn bench_hash_native(b: &mut Bencher) {
-	let hash = HashImpl::Blake2b256;
+	let hash = HashImpl::Blake2b160;
 
 	let data = (0..32u8).collect::<Vec<_>>();
-	let mut out = [0u8; 32];
+	let mut out = [0u8; 20];
 
 	b.iter(|| black_box(hash.hash(&mut out, &data)));
 }
@@ -45,14 +45,14 @@ fn bench_hash_dylib(b: &mut Bencher) {
 	let hasher = HashImpl::from_str(&path).unwrap();
 
 	let data = (0..32u8).collect::<Vec<_>>();
-	let mut out = [0u8; 32];
+	let mut out = [0u8; 20];
 
 	b.iter(|| black_box(hasher.hash(&mut out, &data)));
 }
 
 #[bench]
 fn bench_name_native(b: &mut Bencher) {
-	let hash = HashImpl::Blake2b256;
+	let hash = HashImpl::Blake2b160;
 
 	b.iter(|| black_box(hash.name()));
 }
@@ -75,7 +75,7 @@ fn bench_name_dylib(b: &mut Bencher) {
 
 #[bench]
 fn bench_key_length_native(b: &mut Bencher) {
-	let hash = HashImpl::Blake2b256;
+	let hash = HashImpl::Blake2b160;
 
 	b.iter(|| black_box(hash.length()));
 }

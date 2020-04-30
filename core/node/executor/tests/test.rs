@@ -15,14 +15,15 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use chrono::Local;
-
+use crypto::address::AddressImpl;
+use crypto::dsa::DsaImpl;
 use crypto::hash::HashImpl;
-use module_system::InitParams;
 use node_db::DB;
-use node_executor::{module, Context, Executor};
+use node_executor::{module, Context, ContextEssence, Executor};
+use node_executor_primitives::ContextEnv;
 use node_statedb::{StateDB, TrieRoot};
-use primitives::{codec, DBKey, Hash, Transaction};
+use primitives::{codec, Address, DBKey, Hash, Params, Transaction, TransactionForHash};
+use utils_test::test_accounts;
 
 #[test]
 fn test_executor() {
@@ -32,7 +33,9 @@ fn test_executor() {
 	let path = path.into_path();
 
 	let db = Arc::new(DB::open(&path).unwrap());
-	let hasher = Arc::new(HashImpl::Blake2b160);
+	let hasher = Arc::new(HashImpl::Blake2b256);
+	let dsa = Arc::new(DsaImpl::Ed25519);
+	let address = Arc::new(AddressImpl::Blake2b160);
 
 	let meta_statedb =
 		Arc::new(StateDB::new(db.clone(), node_db::columns::META_STATE, hasher.clone()).unwrap());
@@ -42,46 +45,48 @@ fn test_executor() {
 
 	let trie_root = Arc::new(TrieRoot::new(hasher.clone()).unwrap());
 
-	let timestamp = Local::now().timestamp() as u32;
+	let timestamp = 1588146696;
 
-	let executor = Executor::new();
+	let (account1, account2) = test_accounts(dsa.clone(), address.clone());
+
+	let executor = Executor::new(dsa, address);
 
 	// block 0
-	let txs_0 = vec![
-		Arc::new(
-			executor
-				.build_tx(
-					"system".to_string(),
-					"init".to_string(),
-					module::system::InitParams {
-						chain_id: "chain-001".to_string(),
-						timestamp,
-					},
-				)
-				.unwrap(),
-		),
-		Arc::new(
-			executor
-				.build_tx(
-					"system".to_string(),
-					"init".to_string(),
-					module::system::InitParams {
-						chain_id: "chain-002".to_string(),
-						timestamp: timestamp + 1,
-					},
-				)
-				.unwrap(),
-		),
-	];
+	let block_0_meta_txs = vec![Arc::new(
+		executor
+			.build_tx(
+				None,
+				"system".to_string(),
+				"init".to_string(),
+				module::system::InitParams {
+					chain_id: "chain-test".to_string(),
+					timestamp,
+				},
+			)
+			.unwrap(),
+	)];
+	let block_0_payload_txs = vec![Arc::new(
+		executor
+			.build_tx(
+				None,
+				"balance".to_string(),
+				"init".to_string(),
+				module::balance::InitParams {
+					endow: vec![(account1.3, 10)],
+				},
+			)
+			.unwrap(),
+	)];
 
 	let number = 0;
 
 	let meta_state_root = meta_statedb.default_root();
 	let payload_state_root = meta_statedb.default_root();
 
-	let context = Context::new(
-		number,
-		timestamp,
+	let env = ContextEnv { number, timestamp };
+
+	let context_essence = ContextEssence::new(
+		env,
 		trie_root.clone(),
 		meta_statedb.clone(),
 		Hash(meta_state_root),
@@ -89,82 +94,171 @@ fn test_executor() {
 		Hash(payload_state_root),
 	)
 	.unwrap();
+	let context = Context::new(&context_essence).unwrap();
 
-	executor.execute_txs(&context, txs_0.clone()).unwrap();
-	let (state_root, transaction) = context.get_meta_update().unwrap();
+	executor
+		.execute_txs(&context, block_0_meta_txs.clone())
+		.unwrap();
+	executor
+		.execute_txs(&context, block_0_payload_txs.clone())
+		.unwrap();
+	let (meta_state_root, meta_transaction) = context.get_meta_update().unwrap();
+	let (payload_state_root, payload_transaction) = context.get_payload_update().unwrap();
 
-	let (txs_root, _txs) = context.get_meta_txs().unwrap();
+	let (meta_txs_root, _txs) = context.get_meta_txs().unwrap();
+	let (payload_txs_root, _txs) = context.get_payload_txs().unwrap();
 
-	assert_eq!(txs_root, expected_txs_root(txs_0.clone()));
-	assert_eq!(state_root, expected_state_root_0(txs_0.clone()));
+	assert_eq!(meta_txs_root, expected_txs_root(&block_0_meta_txs));
+	assert_eq!(payload_txs_root, expected_txs_root(&block_0_payload_txs));
+	assert_eq!(
+		meta_state_root,
+		expected_block_0_meta_state_root(&block_0_meta_txs)
+	);
+	assert_eq!(
+		payload_state_root,
+		expected_block_0_payload_state_root(&block_0_payload_txs)
+	);
 
 	// commit
-	db.write(transaction).unwrap();
+	db.write(meta_transaction).unwrap();
+	db.write(payload_transaction).unwrap();
 
 	// block 1
-	let txs_1 = vec![
-		Arc::new(
-			executor
-				.build_tx(
-					"system".to_string(),
-					"init".to_string(),
-					module::system::InitParams {
-						chain_id: "chain-003".to_string(),
-						timestamp: timestamp + 2,
-					},
-				)
-				.unwrap(),
-		),
-		Arc::new(
-			executor
-				.build_tx(
-					"system".to_string(),
-					"init".to_string(),
-					module::system::InitParams {
-						chain_id: "chain-004".to_string(),
-						timestamp: timestamp + 3,
-					},
-				)
-				.unwrap(),
-		),
-	];
+
+	let nonce = 0u32;
+	let until = 1u32;
+
+	// invalid tx
+	let tx = executor.build_tx(
+		Some((account1.0.clone(), nonce, until)),
+		"balance".to_string(),
+		"transfer".to_string(),
+		module::balance::TransferParams {
+			recipient: Address(vec![1u8]),
+			value: 2,
+		},
+	);
+	assert!(format!("{}", tx.unwrap_err()).contains("Error: Invalid address"));
+
+	let tx = executor.build_tx(
+		Some((account1.0.clone(), nonce, until)),
+		"unknown".to_string(),
+		"transfer".to_string(),
+		module::balance::TransferParams {
+			recipient: Address(vec![1u8]),
+			value: 2,
+		},
+	);
+	assert!(format!("{}", tx.unwrap_err()).contains("Error: Invalid tx module"));
+
+	let tx = executor.build_tx(
+		Some((account1.0.clone(), nonce, until)),
+		"balance".to_string(),
+		"unknown".to_string(),
+		module::balance::TransferParams {
+			recipient: Address(vec![1u8]),
+			value: 2,
+		},
+	);
+	assert!(format!("{}", tx.unwrap_err()).contains("Error: Invalid tx method"));
+
+	let tx = executor.build_tx(
+		Some((account1.0.clone(), nonce, until)),
+		"balance".to_string(),
+		"transfer".to_string(),
+		Params(vec![0u8]),
+	);
+	assert!(format!("{}", tx.unwrap_err()).contains("Error: Invalid tx params"));
+
+	let tx = {
+		let mut tx = executor
+			.build_tx(
+				Some((account1.0.clone(), nonce, until)),
+				"balance".to_string(),
+				"transfer".to_string(),
+				module::balance::TransferParams {
+					recipient: account2.3.clone(),
+					value: 2,
+				},
+			)
+			.unwrap();
+		let mut witness = tx.witness.unwrap().clone();
+		witness.public_key = account2.1;
+		tx.witness = Some(witness);
+		tx
+	};
+	let result = executor.validate_tx(&tx, true);
+	// assert_eq!(format!("{}", result.unwrap_err()), "".to_string());
+	assert!(format!("{}", result.unwrap_err()).contains("Error: Invalid tx witness"));
+
+	let tx = executor
+		.build_tx(
+			Some((account1.0, nonce, until)),
+			"balance".to_string(),
+			"transfer".to_string(),
+			module::balance::TransferParams {
+				recipient: account2.3,
+				value: 2,
+			},
+		)
+		.unwrap();
+	executor.validate_tx(&tx, true).unwrap();
+
+	let block_1_meta_txs = vec![];
+
+	let block_1_payload_txs = vec![Arc::new(tx)];
 
 	let number = 1;
+	let timestamp = timestamp + 1;
 
-	let meta_state_root = state_root;
-	let payload_state_root = meta_statedb.default_root();
+	let env = ContextEnv { number, timestamp };
 
-	let context = Context::new(
-		number,
-		timestamp,
+	let context_essence = ContextEssence::new(
+		env,
 		trie_root.clone(),
-		meta_statedb,
+		meta_statedb.clone(),
 		meta_state_root,
-		payload_statedb,
-		Hash(payload_state_root),
+		payload_statedb.clone(),
+		payload_state_root,
 	)
 	.unwrap();
+	let context = Context::new(&context_essence).unwrap();
 
-	executor.execute_txs(&context, txs_1.clone()).unwrap();
-	let (state_root, _) = context.get_meta_update().unwrap();
-	let (txs_root, _txs) = context.get_meta_txs().unwrap();
+	executor
+		.execute_txs(&context, block_1_meta_txs.clone())
+		.unwrap();
+	executor
+		.execute_txs(&context, block_1_payload_txs.clone())
+		.unwrap();
+	let (meta_state_root, _meta_transaction) = context.get_meta_update().unwrap();
+	let (payload_state_root, _payload_transaction) = context.get_payload_update().unwrap();
 
-	assert_eq!(txs_root, expected_txs_root(txs_1.clone()));
+	let (meta_txs_root, _txs) = context.get_meta_txs().unwrap();
+	let (payload_txs_root, _txs) = context.get_payload_txs().unwrap();
+
+	assert_eq!(meta_txs_root, expected_txs_root(&block_1_meta_txs));
+	assert_eq!(payload_txs_root, expected_txs_root(&block_1_payload_txs));
 	assert_eq!(
-		state_root,
-		expected_state_root_1(txs_0.clone(), txs_1.clone())
+		meta_state_root,
+		expected_block_0_meta_state_root(&block_0_meta_txs)
+	);
+	assert_eq!(
+		payload_state_root,
+		expected_block_1_payload_state_root(block_0_payload_txs, block_1_payload_txs)
 	);
 }
 
-fn expected_txs_root(txs: Vec<Arc<Transaction>>) -> Hash {
-	let trie_root = TrieRoot::new(Arc::new(HashImpl::Blake2b160)).unwrap();
-	let txs = txs.into_iter().map(|x| codec::encode(&*x).unwrap());
+fn expected_txs_root(txs: &Vec<Arc<Transaction>>) -> Hash {
+	let trie_root = TrieRoot::new(Arc::new(HashImpl::Blake2b256)).unwrap();
+	let txs = txs
+		.into_iter()
+		.map(|x| codec::encode(&TransactionForHash::new(&**x)).unwrap());
 	Hash(trie_root.calc_ordered_trie_root(txs))
 }
 
-fn expected_state_root_0(txs: Vec<Arc<Transaction>>) -> Hash {
-	let tx = &txs[1]; // use the last tx
-	let params: InitParams = codec::decode(&tx.call.params.0[..]).unwrap();
+fn expected_block_0_meta_state_root(txs: &Vec<Arc<Transaction>>) -> Hash {
+	let tx = &txs[0]; // use the last tx
+	let params: module::system::InitParams = codec::decode(&tx.call.params.0[..]).unwrap();
 
 	let data = vec![
 		(
@@ -185,7 +279,7 @@ fn expected_state_root_0(txs: Vec<Arc<Transaction>>) -> Hash {
 	let path = path.into_path();
 
 	let db = Arc::new(DB::open(&path).unwrap());
-	let hasher = Arc::new(HashImpl::Blake2b160);
+	let hasher = Arc::new(HashImpl::Blake2b256);
 
 	let statedb =
 		Arc::new(StateDB::new(db.clone(), node_db::columns::META_STATE, hasher.clone()).unwrap());
@@ -196,20 +290,22 @@ fn expected_state_root_0(txs: Vec<Arc<Transaction>>) -> Hash {
 	Hash(state_root)
 }
 
-fn expected_state_root_1(txs_0: Vec<Arc<Transaction>>, txs_1: Vec<Arc<Transaction>>) -> Hash {
-	let tx = &txs_0[1]; // use the last tx
-	let params: InitParams = codec::decode(&tx.call.params.0[..]).unwrap();
+fn expected_block_0_payload_state_root(txs: &Vec<Arc<Transaction>>) -> Hash {
+	let tx = &txs[0]; // use the last tx
+	let params: module::balance::InitParams = codec::decode(&tx.call.params.0[..]).unwrap();
 
-	let data = vec![
-		(
-			DBKey::from_slice(b"system_chain_id"),
-			Some(codec::encode(&params.chain_id).unwrap()),
+	let (account, balance) = &params.endow[0];
+
+	let data = vec![(
+		DBKey::from_slice(
+			&[
+				&b"balance_balance_"[..],
+				&codec::encode(&account.0).unwrap(),
+			]
+			.concat(),
 		),
-		(
-			DBKey::from_slice(b"system_timestamp"),
-			Some(codec::encode(&params.timestamp).unwrap()),
-		),
-	]
+		Some(codec::encode(&balance).unwrap()),
+	)]
 	.into_iter()
 	.collect::<HashMap<_, _>>();
 
@@ -219,28 +315,82 @@ fn expected_state_root_1(txs_0: Vec<Arc<Transaction>>, txs_1: Vec<Arc<Transactio
 	let path = path.into_path();
 
 	let db = Arc::new(DB::open(&path).unwrap());
-	let hasher = Arc::new(HashImpl::Blake2b160);
+	let hasher = Arc::new(HashImpl::Blake2b256);
 
-	let statedb =
-		Arc::new(StateDB::new(db.clone(), node_db::columns::META_STATE, hasher.clone()).unwrap());
+	let statedb = Arc::new(
+		StateDB::new(db.clone(), node_db::columns::PAYLOAD_STATE, hasher.clone()).unwrap(),
+	);
 
-	let (state_root, transcation) = statedb
+	let (state_root, _) = statedb
+		.prepare_update(&statedb.default_root(), data.iter())
+		.unwrap();
+	Hash(state_root)
+}
+
+fn expected_block_1_payload_state_root(
+	block_0_txs: Vec<Arc<Transaction>>,
+	block_1_txs: Vec<Arc<Transaction>>,
+) -> Hash {
+	let tx = &block_0_txs[0]; // use the last tx
+	let params: module::balance::InitParams = codec::decode(&tx.call.params.0[..]).unwrap();
+	let (account1, balance) = &params.endow[0];
+
+	let data = vec![(
+		DBKey::from_slice(
+			&[
+				&b"balance_balance_"[..],
+				&codec::encode(&account1.0).unwrap(),
+			]
+			.concat(),
+		),
+		Some(codec::encode(&balance).unwrap()),
+	)]
+	.into_iter()
+	.collect::<HashMap<_, _>>();
+
+	use tempfile::tempdir;
+
+	let path = tempdir().expect("could not create a temp dir");
+	let path = path.into_path();
+
+	let db = Arc::new(DB::open(&path).unwrap());
+	let hasher = Arc::new(HashImpl::Blake2b256);
+
+	let statedb = Arc::new(
+		StateDB::new(db.clone(), node_db::columns::PAYLOAD_STATE, hasher.clone()).unwrap(),
+	);
+
+	let (state_root, transaction) = statedb
 		.prepare_update(&statedb.default_root(), data.iter())
 		.unwrap();
 
-	db.write(transcation).unwrap();
+	db.write(transaction).unwrap();
 
-	let tx = &txs_1[1]; // use the last tx
-	let params: InitParams = codec::decode(&tx.call.params.0[..]).unwrap();
+	let tx = &block_1_txs[0]; // use the last tx
+	let params: module::balance::TransferParams = codec::decode(&tx.call.params.0[..]).unwrap();
+
+	let (account2, value) = (&params.recipient, params.value);
 
 	let data = vec![
 		(
-			DBKey::from_slice(b"system_chain_id"),
-			Some(codec::encode(&params.chain_id).unwrap()),
+			DBKey::from_slice(
+				&[
+					&b"balance_balance_"[..],
+					&codec::encode(&account1.0).unwrap(),
+				]
+				.concat(),
+			),
+			Some(codec::encode(&(balance - value)).unwrap()),
 		),
 		(
-			DBKey::from_slice(b"system_timestamp"),
-			Some(codec::encode(&params.timestamp).unwrap()),
+			DBKey::from_slice(
+				&[
+					&b"balance_balance_"[..],
+					&codec::encode(&account2.0).unwrap(),
+				]
+				.concat(),
+			),
+			Some(codec::encode(&value).unwrap()),
 		),
 	]
 	.into_iter()

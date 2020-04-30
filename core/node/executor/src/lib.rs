@@ -17,144 +17,102 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 
+use crypto::address::{Address as AddressT, AddressImpl};
+use crypto::dsa::{Dsa, DsaImpl, KeyPair, Verifier};
 use node_db::DBTransaction;
 use node_executor_macro::dispatcher;
-use node_executor_primitives::{Context as ContextT, Module as ModuleT};
+pub use node_executor_primitives::ContextEnv;
+use node_executor_primitives::{
+	errors, Context as ContextT, Module as ModuleT, Validator as ValidatorT,
+};
 use node_statedb::{StateDB, StateDBGetter, StateDBStmt, TrieRoot};
-use primitives::{codec, errors::CommonResult};
-use primitives::{BlockNumber, Call, DBKey, DBValue, Hash, Params, Transaction};
-use serde::Serialize;
-
-pub mod errors;
+use primitives::codec::Encode;
+use primitives::{
+	codec, errors::CommonResult, BlockNumber, Nonce, PublicKey, SecretKey, Signature,
+	TransactionForHash, Witness,
+};
+use primitives::{Address, Call, DBKey, DBValue, Hash, Params, Transaction};
 
 const META_TXS_SIZE: usize = 64;
 const PAYLOAD_TXS_SIZE: usize = 512;
 
-#[derive(Clone)]
-pub struct Context {
-	inner: Rc<ContextInner>,
-}
-
-struct ContextInner {
-	#[allow(dead_code)]
-	number: BlockNumber,
-	#[allow(dead_code)]
-	timestamp: u32,
+pub struct ContextEssence {
+	env: Rc<ContextEnv>,
 	trie_root: Arc<TrieRoot>,
 	meta_statedb: Arc<StateDB>,
-	meta_state_root: Hash,
-	meta_state: ContextState,
-	meta_txs: RefCell<Vec<Arc<Transaction>>>,
+	meta_state_root: Rc<Hash>,
+	meta_stmt: StateDBStmt,
 	payload_statedb: Arc<StateDB>,
-	payload_state_root: Hash,
-	payload_state: ContextState,
-	payload_txs: RefCell<Vec<Arc<Transaction>>>,
-	// to mark the context has already started to executed payload txs
-	payload_phase: Cell<bool>,
+	payload_state_root: Rc<Hash>,
+	payload_stmt: StateDBStmt,
 }
 
-impl Context {
+impl ContextEssence {
 	pub fn new(
-		number: BlockNumber,
-		timestamp: u32,
+		env: ContextEnv,
 		trie_root: Arc<TrieRoot>,
 		meta_statedb: Arc<StateDB>,
 		meta_state_root: Hash,
 		payload_statedb: Arc<StateDB>,
 		payload_state_root: Hash,
 	) -> CommonResult<Self> {
-		let meta_state = ContextState::new(meta_statedb.clone(), &meta_state_root.0)?;
-		let payload_state = ContextState::new(payload_statedb.clone(), &payload_state_root.0)?;
+		let meta_stmt = meta_statedb.prepare_stmt(&meta_state_root.0)?;
+		let payload_stmt = payload_statedb.prepare_stmt(&payload_state_root.0)?;
 
-		let inner = Rc::new(ContextInner {
-			number,
-			timestamp,
+		Ok(Self {
+			env: Rc::new(env),
 			trie_root,
 			meta_statedb,
-			meta_state_root,
-			meta_state,
-			meta_txs: RefCell::new(Vec::with_capacity(META_TXS_SIZE)),
+			meta_state_root: Rc::new(meta_state_root),
+			meta_stmt,
 			payload_statedb,
-			payload_state_root,
-			payload_state,
-			payload_txs: RefCell::new(Vec::with_capacity(PAYLOAD_TXS_SIZE)),
-			payload_phase: Cell::new(false),
-		});
-
-		Ok(Self { inner })
-	}
-
-	pub fn get_meta_update(&self) -> CommonResult<(Hash, DBTransaction)> {
-		let buffer = self.inner.meta_state.buffer.borrow();
-		let (root, transaction) = self
-			.inner
-			.meta_statedb
-			.prepare_update(&self.inner.meta_state_root.0, buffer.iter())?;
-		Ok((Hash(root), transaction))
-	}
-
-	pub fn get_meta_txs(&self) -> CommonResult<(Hash, Vec<Arc<Transaction>>)> {
-		let txs = self.inner.meta_txs.borrow().clone();
-
-		let input = txs
-			.iter()
-			.map(|x| codec::encode(&**x))
-			.collect::<Result<Vec<Vec<u8>>, _>>()?;
-		let txs_root = self.inner.trie_root.calc_ordered_trie_root(input);
-
-		Ok((Hash(txs_root), txs))
-	}
-
-	pub fn get_payload_update(&self) -> CommonResult<(Hash, DBTransaction)> {
-		let buffer = self.inner.payload_state.buffer.borrow();
-		let (root, transaction) = self
-			.inner
-			.payload_statedb
-			.prepare_update(&self.inner.payload_state_root.0, buffer.iter())?;
-		Ok((Hash(root), transaction))
-	}
-
-	pub fn get_payload_txs(&self) -> CommonResult<(Hash, Vec<Arc<Transaction>>)> {
-		let txs = self.inner.payload_txs.borrow().clone();
-
-		let input = txs
-			.iter()
-			.map(|x| codec::encode(&**x))
-			.collect::<Result<Vec<Vec<u8>>, _>>()?;
-		let txs_root = self.inner.trie_root.calc_ordered_trie_root(input);
-
-		Ok((Hash(txs_root), txs))
+			payload_state_root: Rc::new(payload_state_root),
+			payload_stmt,
+		})
 	}
 }
 
-struct ContextState {
-	#[allow(dead_code)]
-	/// statedb_stmt is referred by statedb_getter, should be kept
-	statedb_stmt: StateDBStmt,
-	/// unsafe, should never out live lib
-	statedb_getter: StateDBGetter<'static>,
+#[derive(Clone)]
+pub struct Context<'a> {
+	inner: Rc<ContextInner<'a>>,
+}
+
+struct ContextInner<'a> {
+	env: Rc<ContextEnv>,
+	trie_root: Arc<TrieRoot>,
+	meta_statedb: Arc<StateDB>,
+	meta_state_root: Rc<Hash>,
+	meta_state: ContextState<'a>,
+	meta_txs: RefCell<Vec<Arc<Transaction>>>,
+	payload_statedb: Arc<StateDB>,
+	payload_state_root: Rc<Hash>,
+	payload_state: ContextState<'a>,
+	payload_txs: RefCell<Vec<Arc<Transaction>>>,
+	// to mark the context has already started to executed payload txs
+	payload_phase: Cell<bool>,
+}
+
+struct ContextState<'a> {
+	statedb_getter: StateDBGetter<'a>,
 	buffer: RefCell<HashMap<DBKey, Option<DBValue>>>,
 }
 
-impl ContextState {
-	fn new(statedb: Arc<StateDB>, state_root: &[u8]) -> CommonResult<Self> {
-		let statedb_stmt = statedb.prepare_stmt(state_root)?;
-		let statedb_getter = StateDB::prepare_get(&statedb_stmt)?;
+impl<'a> ContextState<'a> {
+	fn new(statedb_stmt: &'a StateDBStmt) -> CommonResult<Self> {
+		let statedb_getter = StateDB::prepare_get(statedb_stmt)?;
 		let buffer = Default::default();
 
-		let statedb_getter = unsafe {
-			std::mem::transmute::<StateDBGetter<'_>, StateDBGetter<'static>>(statedb_getter)
-		};
-
 		Ok(ContextState {
-			statedb_stmt,
 			statedb_getter,
 			buffer,
 		})
 	}
 }
 
-impl ContextT for Context {
+impl<'a> ContextT for Context<'a> {
+	fn env(&self) -> Rc<ContextEnv> {
+		self.inner.env.clone()
+	}
 	fn meta_get(&self, key: &[u8]) -> CommonResult<Option<DBValue>> {
 		let buffer = self.inner.meta_state.buffer.borrow();
 		match buffer.get(&DBKey::from_slice(key)) {
@@ -181,15 +139,106 @@ impl ContextT for Context {
 	}
 }
 
-pub struct Executor;
+impl<'a> Context<'a> {
+	pub fn new(context_essence: &'a ContextEssence) -> CommonResult<Self> {
+		let meta_state = ContextState::new(&context_essence.meta_stmt)?;
+		let payload_state = ContextState::new(&context_essence.payload_stmt)?;
 
-impl Executor {
-	pub fn new() -> Self {
-		Self
+		let inner = Rc::new(ContextInner {
+			env: context_essence.env.clone(),
+			trie_root: context_essence.trie_root.clone(),
+			meta_statedb: context_essence.meta_statedb.clone(),
+			meta_state_root: context_essence.meta_state_root.clone(),
+			meta_state,
+			meta_txs: RefCell::new(Vec::with_capacity(META_TXS_SIZE)),
+			payload_statedb: context_essence.payload_statedb.clone(),
+			payload_state_root: context_essence.payload_state_root.clone(),
+			payload_state,
+			payload_txs: RefCell::new(Vec::with_capacity(PAYLOAD_TXS_SIZE)),
+			payload_phase: Cell::new(false),
+		});
+
+		Ok(Self { inner })
 	}
 
-	pub fn build_tx<P: Serialize>(
+	pub fn get_meta_update(&self) -> CommonResult<(Hash, DBTransaction)> {
+		let buffer = self.inner.meta_state.buffer.borrow();
+		let (root, transaction) = self
+			.inner
+			.meta_statedb
+			.prepare_update(&self.inner.meta_state_root.0, buffer.iter())?;
+		Ok((Hash(root), transaction))
+	}
+
+	pub fn get_meta_txs(&self) -> CommonResult<(Hash, Vec<Arc<Transaction>>)> {
+		let txs = self.inner.meta_txs.borrow().clone();
+
+		let input = txs
+			.iter()
+			.map(|x| codec::encode(&TransactionForHash::new(&**x)))
+			.collect::<Result<Vec<Vec<u8>>, _>>()?;
+		let txs_root = self.inner.trie_root.calc_ordered_trie_root(input);
+
+		Ok((Hash(txs_root), txs))
+	}
+
+	pub fn get_payload_update(&self) -> CommonResult<(Hash, DBTransaction)> {
+		let buffer = self.inner.payload_state.buffer.borrow();
+		let (root, transaction) = self
+			.inner
+			.payload_statedb
+			.prepare_update(&self.inner.payload_state_root.0, buffer.iter())?;
+		Ok((Hash(root), transaction))
+	}
+
+	pub fn get_payload_txs(&self) -> CommonResult<(Hash, Vec<Arc<Transaction>>)> {
+		let txs = self.inner.payload_txs.borrow().clone();
+
+		let input = txs
+			.iter()
+			.map(|x| codec::encode(&TransactionForHash::new(&**x)))
+			.collect::<Result<Vec<Vec<u8>>, _>>()?;
+		let txs_root = self.inner.trie_root.calc_ordered_trie_root(input);
+
+		Ok((Hash(txs_root), txs))
+	}
+}
+
+struct Validator {
+	address: Arc<AddressImpl>,
+}
+
+impl ValidatorT for Validator {
+	fn validate_address(&self, address: &Address) -> CommonResult<()> {
+		let address_len = self.address.length().into();
+		if address.0.len() != address_len {
+			return Err(errors::ErrorKind::InvalidAddress(format!("{}", address)).into());
+		}
+		Ok(())
+	}
+}
+
+pub struct Executor {
+	dsa: Arc<DsaImpl>,
+	address: Arc<AddressImpl>,
+	validator: Validator,
+}
+
+impl Executor {
+	pub fn new(dsa: Arc<DsaImpl>, address: Arc<AddressImpl>) -> Self {
+		let validator = Validator {
+			address: address.clone(),
+		};
+		Self {
+			dsa,
+			address,
+			validator,
+		}
+	}
+
+	pub fn build_tx<P: Encode>(
 		&self,
+		witness: Option<(SecretKey, Nonce, BlockNumber)>,
 		module: String,
 		method: String,
 		params: P,
@@ -198,37 +247,77 @@ impl Executor {
 
 		let call = Call {
 			module: module.clone(),
-			method: method,
+			method,
 			params,
 		};
 
-		let valid = Dispatcher::is_valid_call::<Context>(&module, &call)?;
+		Dispatcher::validate_call::<Context, _>(&module, &self.validator, &call)?;
 
-		if !valid {
-			return Err(errors::ErrorKind::InvalidTxCall.into());
-		}
+		let witness = match witness {
+			Some((secret_key, nonce, until)) => {
+				let message = codec::encode(&(&nonce, &until, &call))?;
+				let key_pair = self.dsa.key_pair_from_secret_key(&secret_key.0)?;
+				let (_, pub_len, sig_len) = self.dsa.length().into();
+				let public_key = {
+					let mut out = vec![0u8; pub_len];
+					key_pair.public_key(&mut out);
+					PublicKey(out)
+				};
+				let signature = {
+					let mut out = vec![0u8; sig_len];
+					key_pair.sign(&message, &mut out);
+					Signature(out)
+				};
+				Some(Witness {
+					public_key,
+					signature,
+					nonce,
+					until,
+				})
+			}
+			None => None,
+		};
 
-		Ok(Transaction {
-			witness: None,
-			call,
-		})
+		Ok(Transaction { witness, call })
 	}
 
-	pub fn validate_tx(&self, tx: &Transaction) -> CommonResult<()> {
-		// TODO validate witness
-
-		let module = &tx.call.module;
+	pub fn validate_tx(&self, tx: &Transaction, witness_required: bool) -> CommonResult<()> {
 		let call = &tx.call;
 
-		let valid = Dispatcher::is_valid_call::<Context>(module, &call)?;
+		match &tx.witness {
+			Some(witness) => {
+				let signature = &witness.signature;
+				let message = codec::encode(&(&witness.nonce, &witness.until, call))?;
+				let verifier = self.dsa.verifier_from_public_key(&witness.public_key.0)?;
+				verifier.verify(&message, &signature.0).map_err(|_| {
+					errors::ErrorKind::InvalidTxWitness("invalid signature".to_string())
+				})?;
+			}
+			None => {
+				if witness_required {
+					return Err(
+						errors::ErrorKind::InvalidTxWitness("missing witness".to_string()).into(),
+					);
+				}
+			}
+		};
+
+		let module = &call.module;
+		Dispatcher::validate_call::<Context, _>(module, &self.validator, &call)?;
 
 		let write = Dispatcher::is_write_call::<Context>(module, &call)?;
-
-		if !(valid && write == Some(true)) {
-			return Err(errors::ErrorKind::InvalidTxCall.into());
+		if write != Some(true) {
+			return Err(
+				errors::ErrorKind::InvalidTxMethod(format!("{}: not write", call.method)).into(),
+			);
 		}
 
 		Ok(())
+	}
+
+	pub fn is_meta_tx(&self, tx: &Transaction) -> CommonResult<bool> {
+		let module = &tx.call.module;
+		Dispatcher::is_meta::<Context>(module)
 	}
 
 	pub fn execute_txs(&self, context: &Context, txs: Vec<Arc<Transaction>>) -> CommonResult<()> {
@@ -252,7 +341,15 @@ impl Executor {
 				}
 			}
 
-			let _result = Dispatcher::execute_call::<Context>(module, context, &call)?;
+			let sender = tx.witness.as_ref().map(|witness| {
+				let public_key = &witness.public_key;
+				let mut address = vec![0u8; self.address.length().into()];
+				self.address.address(&mut address, &public_key.0);
+				Address(address)
+			});
+
+			let _result =
+				Dispatcher::execute_call::<Context>(module, context, sender.as_ref(), &call)?;
 		}
 
 		if context.inner.payload_phase.get() && txs_is_meta == Some(true) {
@@ -277,9 +374,11 @@ impl Executor {
 #[dispatcher]
 enum Dispatcher {
 	system,
+	balance,
 }
 
 /// re-import modules
 pub mod module {
+	pub use module_balance as balance;
 	pub use module_system as system;
 }

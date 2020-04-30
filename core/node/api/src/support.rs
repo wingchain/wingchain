@@ -14,8 +14,6 @@
 
 use std::sync::Arc;
 
-use serde::Serialize;
-
 use async_trait::async_trait;
 use node_chain::Chain;
 use node_txpool::support::TxPoolSupport;
@@ -25,7 +23,7 @@ use primitives::{Block, BlockNumber, Hash, Header, Transaction};
 
 #[async_trait]
 pub trait ApiSupport {
-	async fn hash<E: Serialize + Sync>(&self, data: &E) -> CommonResult<Hash>;
+	async fn hash_transaction(&self, tx: &Transaction) -> CommonResult<Hash>;
 	async fn get_best_number(&self) -> CommonResult<Option<BlockNumber>>;
 	async fn get_executed_number(&self) -> CommonResult<Option<BlockNumber>>;
 	async fn get_block_hash(&self, number: &BlockNumber) -> CommonResult<Option<Hash>>;
@@ -59,8 +57,8 @@ impl<TS> ApiSupport for DefaultApiSupport<TS>
 where
 	TS: TxPoolSupport + Send + Sync,
 {
-	async fn hash<E: Serialize + Sync>(&self, data: &E) -> CommonResult<Hash> {
-		self.chain.hash(data)
+	async fn hash_transaction(&self, tx: &Transaction) -> CommonResult<Hash> {
+		self.chain.hash_transaction(tx)
 	}
 	async fn get_best_number(&self) -> CommonResult<Option<BlockNumber>> {
 		self.chain.get_best_number()

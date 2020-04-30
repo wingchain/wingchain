@@ -13,12 +13,13 @@
 // limitations under the License.
 
 use std::marker::PhantomData;
+use std::rc::Rc;
 
-use serde::de::DeserializeOwned;
-use serde::Serialize;
+pub use chrono;
 
-use primitives::errors::{CommonError, CommonResult};
-use primitives::{codec, Call, DBValue};
+use codec::{Decode, Encode};
+use primitives::errors::CommonResult;
+use primitives::{codec, Address, BlockNumber, Call, DBValue};
 
 pub mod errors;
 
@@ -33,26 +34,37 @@ where
 
 	fn new(context: C) -> Self;
 
-	/// check if the call has the right method_id and decodable params
-	fn is_valid_call(call: &Call) -> bool;
+	/// validate the call
+	fn validate_call<V: Validator>(validator: &V, call: &Call) -> CommonResult<()>;
 
 	/// check if the call is a write call, a transaction should be built by a write call
 	fn is_write_call(call: &Call) -> Option<bool>;
 
 	/// execute the call
-	fn execute_call(&self, call: &Call) -> Result<(), CommonError>;
+	fn execute_call(&self, sender: Option<&Address>, call: &Call)
+		-> CommonResult<CommonResult<()>>;
+}
+
+pub struct ContextEnv {
+	pub number: BlockNumber,
+	pub timestamp: u32,
 }
 
 pub trait Context: Clone {
+	fn env(&self) -> Rc<ContextEnv>;
 	fn meta_get(&self, key: &[u8]) -> CommonResult<Option<DBValue>>;
 	fn meta_set(&self, key: &[u8], value: Option<DBValue>) -> CommonResult<()>;
 	fn payload_get(&self, key: &[u8]) -> CommonResult<Option<DBValue>>;
 	fn payload_set(&self, key: &[u8], value: Option<DBValue>) -> CommonResult<()>;
 }
 
+pub trait Validator {
+	fn validate_address(&self, address: &Address) -> CommonResult<()>;
+}
+
 pub struct StorageValue<T, C>
 where
-	T: Serialize + DeserializeOwned,
+	T: Encode + Decode,
 	C: Context,
 {
 	context: C,
@@ -63,7 +75,7 @@ where
 
 impl<T, C> StorageValue<T, C>
 where
-	T: Serialize + DeserializeOwned,
+	T: Encode + Decode,
 	C: Context,
 {
 	pub fn new<M: Module<C>>(context: C, storage_key: &'static [u8]) -> Self {
@@ -92,8 +104,8 @@ where
 
 pub struct StorageMap<K, V, C>
 where
-	K: Serialize + DeserializeOwned,
-	V: Serialize + DeserializeOwned,
+	K: Encode + Decode,
+	V: Encode + Decode,
 	C: Context,
 {
 	context: C,
@@ -104,17 +116,13 @@ where
 
 impl<K, V, C> StorageMap<K, V, C>
 where
-	K: Serialize + DeserializeOwned,
-	V: Serialize + DeserializeOwned,
+	K: Encode + Decode,
+	V: Encode + Decode,
 	C: Context,
 {
-	pub fn new(
-		context: C,
-		meta_module: bool,
-		module_key: &'static [u8],
-		storage_key: &'static [u8],
-	) -> Self {
-		let key = [module_key, storage_key].concat();
+	pub fn new<M: Module<C>>(context: C, storage_key: &'static [u8]) -> Self {
+		let key = [M::STORAGE_KEY, SEPARATOR, storage_key].concat();
+		let meta_module = M::META_MODULE;
 		Self {
 			context,
 			meta_module,
@@ -123,26 +131,26 @@ where
 		}
 	}
 
-	pub fn get(&self, key: K) -> CommonResult<Option<V>> {
+	pub fn get(&self, key: &K) -> CommonResult<Option<V>> {
 		let key = codec::encode(&key)?;
 		let key = &[&self.key, SEPARATOR, &key].concat();
 		context_get(&self.context, self.meta_module, key)
 	}
 
-	pub fn set(&self, key: K, value: &V) -> CommonResult<()> {
+	pub fn set(&self, key: &K, value: &V) -> CommonResult<()> {
 		let key = codec::encode(&key)?;
 		let key = &[&self.key, SEPARATOR, &key].concat();
 		context_set(&self.context, self.meta_module, key, value)
 	}
 
-	pub fn delete(&self, key: K) -> CommonResult<()> {
+	pub fn delete(&self, key: &K) -> CommonResult<()> {
 		let key = codec::encode(&key)?;
 		let key = &[&self.key, SEPARATOR, &key].concat();
 		context_delete(&self.context, self.meta_module, key)
 	}
 }
 
-fn context_get<C: Context, V: DeserializeOwned>(
+fn context_get<C: Context, V: Decode>(
 	context: &C,
 	meta_module: bool,
 	key: &[u8],
@@ -163,7 +171,7 @@ fn context_get<C: Context, V: DeserializeOwned>(
 	}
 }
 
-fn context_set<C: Context, V: Serialize>(
+fn context_set<C: Context, V: Encode>(
 	context: &C,
 	meta_module: bool,
 	key: &[u8],

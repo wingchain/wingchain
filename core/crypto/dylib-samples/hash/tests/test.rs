@@ -37,19 +37,19 @@ fn test_custom_lib_hash() {
 	let hasher = HashImpl::from_str(&path).unwrap();
 
 	let name = hasher.name();
-	assert_eq!(name, "blake2b_256".to_string());
+	assert_eq!(name, "blake2b_160".to_string());
 
 	let length = hasher.length();
-	assert_eq!(length, HashLength::HashLength32);
+	assert_eq!(length, HashLength::HashLength20);
 
 	let data = [1u8, 2u8, 3u8];
-	let mut out = [0u8; 32];
+	let mut out = [0u8; 20];
 	hasher.hash(&mut out, &data);
 	assert_eq!(
 		out,
 		[
-			17, 192, 231, 155, 113, 195, 151, 108, 205, 12, 2, 209, 49, 14, 37, 22, 192, 142, 220,
-			157, 139, 111, 87, 204, 214, 128, 214, 58, 77, 142, 114, 218
+			197, 117, 145, 134, 122, 108, 242, 5, 233, 74, 212, 142, 167, 139, 236, 142, 103, 194,
+			14, 98
 		]
 	);
 }
@@ -79,7 +79,7 @@ fn test_dylib_hash() {
 		name
 	};
 
-	assert_eq!(name, "blake2b_256");
+	assert_eq!(name, "blake2b_160");
 
 	// key length
 	type CallHashLength = unsafe extern "C" fn() -> usize;
@@ -90,13 +90,13 @@ fn test_dylib_hash() {
 		length as usize
 	};
 
-	assert_eq!(length, 32);
+	assert_eq!(length, 20);
 
 	// hash
 	type CallHash = unsafe extern "C" fn(*mut c_uchar, c_uint, *const c_uchar, c_uint);
 
 	let data = [1u8, 2u8, 3u8];
-	let mut out = [0u8; 32];
+	let mut out = [0u8; 20];
 
 	unsafe {
 		let call_hash: Symbol<CallHash> = lib.get(b"_crypto_hash_custom_hash").unwrap();
@@ -111,8 +111,8 @@ fn test_dylib_hash() {
 	assert_eq!(
 		out,
 		[
-			17, 192, 231, 155, 113, 195, 151, 108, 205, 12, 2, 209, 49, 14, 37, 22, 192, 142, 220,
-			157, 139, 111, 87, 204, 214, 128, 214, 58, 77, 142, 114, 218
+			197, 117, 145, 134, 122, 108, 242, 5, 233, 74, 212, 142, 167, 139, 236, 142, 103, 194,
+			14, 98
 		]
 	);
 }
