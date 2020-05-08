@@ -25,13 +25,14 @@ use crypto::hash::{Hash as HashT, HashImpl};
 use main_base::spec::Spec;
 use node_db::{DBTransaction, DB};
 pub use node_executor::module;
+pub use node_executor::CallResult;
 use node_executor::{Context, ContextEnv, ContextEssence, Executor};
 use node_statedb::{StateDB, TrieRoot};
 use primitives::codec::Encode;
 use primitives::errors::CommonResult;
 use primitives::{
-	codec, Block, BlockNumber, Body, DBKey, Executed, FullBlock, Hash, Header, Nonce, SecretKey,
-	Transaction, TransactionForHash,
+	codec, Address, Block, BlockNumber, Body, Call, DBKey, Executed, FullBlock, Hash, Header,
+	Nonce, SecretKey, Transaction, TransactionForHash,
 };
 
 use crate::genesis::{build_genesis, GenesisInfo};
@@ -243,6 +244,54 @@ impl Chain {
 	pub fn get_raw_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Vec<u8>>> {
 		self.db
 			.get(node_db::columns::TX, &DBKey::from_slice(&tx_hash.0))
+	}
+
+	pub fn execute_call(
+		&self,
+		block_hash: &Hash,
+		sender: &Address,
+		call: &Call,
+	) -> CommonResult<CommonResult<CallResult>> {
+		let header = match self.get_header(block_hash)? {
+			Some(header) => header,
+			None => {
+				return Err(
+					errors::ErrorKind::Data(format!("unknown block hash: {}", block_hash)).into(),
+				)
+			}
+		};
+
+		let executed = match self.get_executed(block_hash)? {
+			Some(executed) => executed,
+			None => {
+				return Err(errors::ErrorKind::Data(format!(
+					"not executed block hash: {}",
+					block_hash
+				))
+				.into())
+			}
+		};
+
+		let number = header.number;
+		let timestamp = header.timestamp;
+
+		let meta_state_root = header.meta_state_root;
+		let payload_state_root = executed.payload_executed_state_root;
+
+		let env = ContextEnv { number, timestamp };
+
+		let context_essence = ContextEssence::new(
+			env,
+			self.trie_root.clone(),
+			self.meta_statedb.clone(),
+			meta_state_root,
+			self.payload_statedb.clone(),
+			payload_state_root,
+		)?;
+
+		let context = Context::new(&context_essence)?;
+
+		self.executor.execute_call(&context, sender, call)
 	}
 
 	fn hash_slice(&self, data: &[u8]) -> Hash {

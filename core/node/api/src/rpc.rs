@@ -83,6 +83,7 @@ where
 			"chain_getTransactionInTxPool",
 			method::chain_get_transaction_in_txpool::<S>,
 		)
+		.with_method("chain_executeCall", method::chain_execute_call::<S>)
 		.finish();
 
 	let workers = match config.rpc_workers {

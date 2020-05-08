@@ -189,6 +189,19 @@ pub async fn chain_get_transaction_in_txpool<S: ApiSupport>(
 	Ok(tx)
 }
 
+pub async fn chain_execute_call<S: ApiSupport>(
+	data: Data<Arc<S>>,
+	Params(request): Params<ExecuteTransactionRequest>,
+) -> CustomResult<Hex> {
+	let block_hash: primitives::Hash = request.block_hash.try_into()?;
+	let sender: primitives::Address = request.sender.try_into()?;
+	let call: primitives::Call = request.call.try_into()?;
+
+	let result = data.execute_call(&block_hash, &sender, &call).await??;
+	let result = result.0.into();
+	Ok(result)
+}
+
 /// Number input: number, hex or tag (best, executed)
 #[derive(Deserialize)]
 pub struct BlockNumber(String);
@@ -197,7 +210,11 @@ pub struct BlockNumber(String);
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Hash(String);
 
-/// Hex format for number
+/// Address
+#[derive(Serialize, Deserialize)]
+pub struct Address(String);
+
+/// Hex format for number, public key, signature, params
 #[derive(Serialize, Deserialize)]
 pub struct Hex(String);
 
@@ -251,11 +268,18 @@ pub struct Witness {
 	until: Hex,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct Call {
 	pub module: String,
 	pub method: String,
 	pub params: Hex,
+}
+
+#[derive(Deserialize)]
+pub struct ExecuteTransactionRequest {
+	pub block_hash: Hash,
+	pub sender: Address,
+	pub call: Call,
 }
 
 impl From<primitives::Header> for Header {
@@ -377,6 +401,17 @@ impl TryInto<primitives::Hash> for Hash {
 	}
 }
 
+impl TryInto<primitives::Address> for Address {
+	type Error = CommonError;
+
+	fn try_into(self) -> Result<primitives::Address, Self::Error> {
+		let hex = self.0.trim_start_matches("0x");
+		let hex = hex::decode(hex)
+			.map_err(|_| errors::ErrorKind::InvalidParams(format!("invalid hex: {}", hex)))?;
+		Ok(primitives::Address(hex))
+	}
+}
+
 impl TryInto<Vec<u8>> for Hex {
 	type Error = CommonError;
 
@@ -385,6 +420,20 @@ impl TryInto<Vec<u8>> for Hex {
 		let hex = hex::decode(hex)
 			.map_err(|_| errors::ErrorKind::InvalidParams(format!("invalid hex: {}", hex)))?;
 		Ok(hex)
+	}
+}
+
+impl TryInto<primitives::Call> for Call {
+	type Error = CommonError;
+
+	fn try_into(self) -> Result<primitives::Call, Self::Error> {
+		let params = primitives::Params(self.params.try_into()?);
+
+		Ok(primitives::Call {
+			module: self.module,
+			method: self.method,
+			params,
+		})
 	}
 }
 

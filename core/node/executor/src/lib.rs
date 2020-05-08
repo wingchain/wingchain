@@ -21,6 +21,7 @@ use crypto::address::{Address as AddressT, AddressImpl};
 use crypto::dsa::{Dsa, DsaImpl, KeyPair, Verifier};
 use node_db::DBTransaction;
 use node_executor_macro::dispatcher;
+pub use node_executor_primitives::CallResult;
 pub use node_executor_primitives::ContextEnv;
 use node_executor_primitives::{
 	errors, Context as ContextT, Module as ModuleT, Validator as ValidatorT,
@@ -210,7 +211,7 @@ struct Validator {
 
 impl ValidatorT for Validator {
 	fn validate_address(&self, address: &Address) -> CommonResult<()> {
-		let address_len = self.address.length().into();
+		let address_len: usize = self.address.length().into();
 		if address.0.len() != address_len {
 			return Err(errors::ErrorKind::InvalidAddress(format!("{}", address)).into());
 		}
@@ -318,6 +319,17 @@ impl Executor {
 	pub fn is_meta_tx(&self, tx: &Transaction) -> CommonResult<bool> {
 		let module = &tx.call.module;
 		Dispatcher::is_meta::<Context>(module)
+	}
+
+	pub fn execute_call(
+		&self,
+		context: &Context,
+		sender: &Address,
+		call: &Call,
+	) -> CommonResult<CommonResult<CallResult>> {
+		let module = &call.module;
+		let sender = Some(sender);
+		Dispatcher::execute_call::<Context>(module, context, sender, call)
 	}
 
 	pub fn execute_txs(&self, context: &Context, txs: Vec<Arc<Transaction>>) -> CommonResult<()> {
