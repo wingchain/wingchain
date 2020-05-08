@@ -97,6 +97,10 @@ fn get_cases(chain: &Arc<Chain>) -> Vec<(String, String)> {
 			format!(r#"{{"jsonrpc": "2.0", "method": "chain_getTransactionInTxPool", "params": ["{}"], "id": 1}}"#, tx_hash_hex),
 			format!(r#"{{"jsonrpc":"2.0","result":{{"hash":"0x{}","witness":{{"public_key":"0x{}","signature":"0x{}","nonce":"0x{}","until":"0x{}"}},"call":{{"module":"balance","method":"transfer","params":"0x{}"}}}},"id":1}}"#,
 					tx_hash_hex, tx_public_key_hex, tx_sig_hex, nonce_hex, until_hex, params_hex),
+		),
+		(
+			format!(r#"{{"jsonrpc": "2.0", "method": "chain_executeCall", "params": {{ "block_hash": "0x56296bb9151709986b58fe3bc319b584641bfb094637c4079506bdd3358a182f", "sender": "0xb4decd5a5f8f2ba708f8ced72eec89f44f3be96a", "call": {{ "module":"balance", "method":"get_balance", "params": "" }} }}, "id": 1}}"#),
+			format!(r#"{{"jsonrpc":"2.0","result":"0x0a00000000000000","id":1}}"#),
 		)
 	]
 }

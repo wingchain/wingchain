@@ -23,7 +23,8 @@ use node_db::DB;
 use node_statedb::{StateDB, TrieRoot};
 use primitives::codec::Encode;
 use primitives::{
-	codec, Address, Block, Body, DBKey, Executed, Hash, Header, Transaction, TransactionForHash,
+	codec, Address, Balance, Block, Body, DBKey, Executed, Hash, Header, Transaction,
+	TransactionForHash,
 };
 
 #[test]
@@ -72,6 +73,25 @@ fn test_chain() {
 	assert_eq!(tx, expected_tx);
 
 	assert_eq!(tx_hash, &chain.hash_transaction(&tx).unwrap());
+
+	let sender = Address(hex::decode(&"b4decd5a5f8f2ba708f8ced72eec89f44f3be96a").unwrap());
+	let params = module::balance::EmptyParams;
+	let call = chain
+		.build_transaction(
+			None,
+			"balance".to_string(),
+			"get_balance".to_string(),
+			params,
+		)
+		.unwrap()
+		.call;
+	let result = chain
+		.execute_call(&block_hash, &sender, &call)
+		.unwrap()
+		.unwrap()
+		.0;
+	let result: Balance = codec::decode(&result).unwrap();
+	assert_eq!(10, result);
 }
 
 #[test]

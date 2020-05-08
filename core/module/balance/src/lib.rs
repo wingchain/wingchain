@@ -17,7 +17,7 @@ use std::rc::Rc;
 use executor_macro::{call, module};
 use executor_primitives::{
 	errors::{self, execute_error_result},
-	Context, ContextEnv, Module as ModuleT, StorageMap, Validator,
+	CallResult, Context, ContextEnv, Module as ModuleT, StorageMap, Validator,
 };
 use primitives::codec::{Decode, Encode};
 use primitives::errors::CommonResult;
@@ -70,11 +70,11 @@ impl<C: Context> Module<C> {
 		&self,
 		sender: Option<&Address>,
 		_params: EmptyParams,
-	) -> CommonResult<CommonResult<()>> {
+	) -> CommonResult<CommonResult<Balance>> {
 		let address = sender.expect("should be signed");
-		let _balance = self.balance.get(address)?;
-		// TODO
-		Ok(Ok(()))
+		let balance = self.balance.get(address)?;
+		let balance = balance.unwrap_or(0);
+		Ok(Ok(balance))
 	}
 
 	#[call(write = true)]
@@ -124,7 +124,7 @@ pub struct InitParams {
 	pub endow: Vec<(Address, Balance)>,
 }
 
-#[derive(Decode)]
+#[derive(Encode, Decode)]
 pub struct EmptyParams;
 
 #[derive(Encode, Decode)]

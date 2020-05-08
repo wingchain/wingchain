@@ -19,14 +19,14 @@ extern crate test;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
-use test::{Bencher, black_box};
+use test::{black_box, Bencher};
 
 use futures::future::join_all;
 use tempfile::tempdir;
 use tokio::runtime::Runtime;
 
 use crypto::dsa::KeyPairImpl;
-use node_chain::{Chain, ChainConfig, module};
+use node_chain::{module, Chain, ChainConfig};
 use node_txpool::{TxPool, TxPoolConfig};
 use primitives::{Address, PublicKey, SecretKey, Transaction};
 use utils_test::test_accounts;
@@ -75,7 +75,6 @@ fn get_chain() -> Arc<Chain> {
 }
 
 fn gen_transfer_txs(chain: &Arc<Chain>, size: usize) -> Vec<Transaction> {
-
 	let (account1, account2) = test_accounts(
 		chain.get_basic().dsa.clone(),
 		chain.get_basic().address.clone(),

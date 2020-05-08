@@ -15,8 +15,6 @@
 use std::marker::PhantomData;
 use std::rc::Rc;
 
-pub use chrono;
-
 use codec::{Decode, Encode};
 use primitives::errors::CommonResult;
 use primitives::{codec, Address, BlockNumber, Call, DBValue};
@@ -41,8 +39,11 @@ where
 	fn is_write_call(call: &Call) -> Option<bool>;
 
 	/// execute the call
-	fn execute_call(&self, sender: Option<&Address>, call: &Call)
-		-> CommonResult<CommonResult<()>>;
+	fn execute_call(
+		&self,
+		sender: Option<&Address>,
+		call: &Call,
+	) -> CommonResult<CommonResult<CallResult>>;
 }
 
 pub struct ContextEnv {
@@ -189,5 +190,14 @@ fn context_delete<C: Context>(context: &C, meta_module: bool, key: &[u8]) -> Com
 	match meta_module {
 		true => context.meta_set(key, None),
 		false => context.payload_set(key, None),
+	}
+}
+
+pub struct CallResult(pub Vec<u8>);
+
+impl CallResult {
+	pub fn from<E: Encode>(data: &E) -> CommonResult<Self> {
+		let vec = codec::encode(data)?;
+		Ok(Self(vec))
 	}
 }
