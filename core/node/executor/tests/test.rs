@@ -61,6 +61,7 @@ fn test_executor() {
 				module::system::InitParams {
 					chain_id: "chain-test".to_string(),
 					timestamp,
+					until_gap: 20,
 				},
 			)
 			.unwrap(),
@@ -268,6 +269,10 @@ fn expected_block_0_meta_state_root(txs: &Vec<Arc<Transaction>>) -> Hash {
 		(
 			DBKey::from_slice(b"system_timestamp"),
 			Some(codec::encode(&params.timestamp).unwrap()),
+		),
+		(
+			DBKey::from_slice(b"system_until_gap"),
+			Some(codec::encode(&params.until_gap).unwrap()),
 		),
 	]
 	.into_iter()

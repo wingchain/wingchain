@@ -36,7 +36,7 @@ pub trait ApiSupport {
 	async fn execute_call(
 		&self,
 		block_hash: &Hash,
-		sender: &Address,
+		sender: Option<&Address>,
 		call: &Call,
 	) -> CommonResult<CommonResult<CallResult>>;
 }
@@ -100,7 +100,7 @@ where
 	async fn execute_call(
 		&self,
 		block_hash: &Hash,
-		sender: &Address,
+		sender: Option<&Address>,
 		call: &Call,
 	) -> CommonResult<CommonResult<CallResult>> {
 		self.chain.execute_call(block_hash, sender, call)

@@ -26,6 +26,12 @@ pub enum ErrorKind {
 	#[display(fmt = "Duplicated tx: tx_hash: {:?}", _0)]
 	Duplicated(Hash),
 
+	#[display(fmt = "Invalid until: tx_hash: {:?}", _0)]
+	InvalidUntil(Hash),
+
+	#[display(fmt = "Exceed until: tx_hash: {:?}", _0)]
+	ExceedUntil(Hash),
+
 	#[display(fmt = "Insert error: tx_hash: {:?}", _0)]
 	Insert(Hash),
 }

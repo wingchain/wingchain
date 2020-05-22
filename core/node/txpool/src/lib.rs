@@ -19,10 +19,12 @@ use log::info;
 use parking_lot::RwLock;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
-use primitives::errors::CommonResult;
+use node_executor::module;
 use primitives::{Hash, Transaction};
+use primitives::errors::CommonResult;
 
 use crate::support::TxPoolSupport;
+use node_executor_primitives::EmptyParams;
 
 pub mod errors;
 pub mod support;
@@ -39,10 +41,11 @@ pub struct PoolTransaction {
 }
 
 pub struct TxPool<S>
-where
-	S: TxPoolSupport,
+	where
+		S: TxPoolSupport,
 {
 	config: TxPoolConfig,
+	system_meta: module::system::Meta,
 	support: Arc<S>,
 	map: CHashMap<Hash, Arc<PoolTransaction>>,
 	queue: Arc<RwLock<Vec<Arc<PoolTransaction>>>>,
@@ -50,8 +53,8 @@ where
 }
 
 impl<S> TxPool<S>
-where
-	S: TxPoolSupport,
+	where
+		S: TxPoolSupport,
 {
 	pub fn new(config: TxPoolConfig, support: Arc<S>) -> CommonResult<Self> {
 		let map = CHashMap::with_capacity(config.pool_capacity);
@@ -59,8 +62,11 @@ where
 
 		let (buffer_tx, buffer_rx) = channel(config.buffer_capacity);
 
+		let system_meta = get_system_meta(support.clone())?;
+
 		let tx_pool = Self {
 			config,
+			system_meta,
 			support,
 			map,
 			queue: queue.clone(),
@@ -85,9 +91,10 @@ where
 	pub async fn insert(&self, tx: Transaction) -> CommonResult<()> {
 		self.check_capacity()?;
 		let tx_hash = self.support.hash_transaction(&tx)?;
-		self.check_exist(&tx_hash)?;
 
-		self.support.validate_transaction(&tx, true)?;
+		self.check_pool_exist(&tx_hash)?;
+		self.validate_transaction(&tx_hash, &tx)?;
+		self.check_chain_exist(&tx_hash)?;
 
 		let pool_tx = Arc::new(PoolTransaction {
 			tx: Arc::new(tx),
@@ -115,10 +122,36 @@ where
 		Ok(())
 	}
 
-	fn check_exist(&self, tx_hash: &Hash) -> CommonResult<()> {
+	fn check_pool_exist(&self, tx_hash: &Hash) -> CommonResult<()> {
 		if self.contain(tx_hash) {
 			return Err(errors::ErrorKind::Duplicated(tx_hash.clone()).into());
 		}
+		Ok(())
+	}
+
+	fn check_chain_exist(&self, tx_hash: &Hash) -> CommonResult<()> {
+		if self.support.get_transaction(&tx_hash)?.is_some() {
+			return Err(errors::ErrorKind::Duplicated(tx_hash.clone()).into());
+		}
+		Ok(())
+	}
+
+	fn validate_transaction(&self, tx_hash: &Hash, tx: &Transaction) -> CommonResult<()> {
+		self.support.validate_transaction(&tx, true)?;
+		let witness = tx.witness.as_ref().expect("qed");
+
+		let best_number = self.support.get_best_number()?.expect("qed");
+		let until_gap = self.system_meta.until_gap;
+		let max_until = best_number + until_gap;
+
+		if witness.until > max_until {
+			return Err(errors::ErrorKind::InvalidUntil(tx_hash.clone()).into());
+		}
+
+		if witness.until <= best_number {
+			return Err(errors::ErrorKind::ExceedUntil(tx_hash.clone()).into());
+		}
+
 		Ok(())
 	}
 
@@ -138,4 +171,9 @@ async fn process_buffer(
 			queue.write().push(tx);
 		}
 	}
+}
+
+fn get_system_meta<S: TxPoolSupport>(support: Arc<S>) -> CommonResult<module::system::Meta> {
+	let block_number = support.get_best_number()?.expect("qed");
+	support.execute_call_with_block_number(&block_number, "system".to_string(), "get_meta".to_string(), EmptyParams)
 }

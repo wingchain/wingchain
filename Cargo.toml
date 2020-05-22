@@ -18,8 +18,11 @@ members = [
 	"core/node/txpool",
 	"core/node/chain",
 	"core/node/api",
+	"core/node/consensus",
+	"core/node/consensus/solo",
 	"core/module/system",
 	"core/module/balance",
+	"core/module/solo",
 ]
 
 [profile.release]

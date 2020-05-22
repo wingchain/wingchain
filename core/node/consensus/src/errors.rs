@@ -13,31 +13,20 @@
 // limitations under the License.
 
 use std::error::Error;
+use std::fmt::Debug;
 
-pub use derive_more::{Constructor, Display};
+use primitives::errors::{CommonError, CommonErrorKind, Display};
 
 #[derive(Debug, Display)]
-pub enum CommonErrorKind {
-	Main,
-	Service,
-	Crypto,
-	DB,
-	StateDB,
-	Executor,
-	TxPool,
-	Chain,
-	Codec,
-	Api,
-	Consensus,
+pub enum ErrorKind {
+	#[display(fmt = "Invalid meta: {}", _0)]
+	Meta(String),
 }
 
-#[derive(Debug, Constructor, Display)]
-#[display(fmt = "[CommonError] Kind: {} Error: {}", kind, error)]
-pub struct CommonError {
-	pub kind: CommonErrorKind,
-	pub error: Box<dyn Error + Send>,
+impl Error for ErrorKind {}
+
+impl From<ErrorKind> for CommonError {
+	fn from(error: ErrorKind) -> Self {
+		CommonError::new(CommonErrorKind::Consensus, Box::new(error))
+	}
 }
-
-impl Error for CommonError {}
-
-pub type CommonResult<T> = Result<T, CommonError>;

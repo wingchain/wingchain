@@ -21,4 +21,6 @@ node-executor = { path = "../executor" }
 node-chain = { path = "../chain" }
 node-txpool = { path = "../txpool" }
 node-api = { path = "../api" }
+node-consensus = { path = "../consensus" }
+node-consensus-solo = { path = "../consensus/solo" }
 main-base = { path = "../../../bin/main/base" }

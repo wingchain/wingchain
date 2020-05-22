@@ -324,11 +324,10 @@ impl Executor {
 	pub fn execute_call(
 		&self,
 		context: &Context,
-		sender: &Address,
+		sender: Option<&Address>,
 		call: &Call,
 	) -> CommonResult<CommonResult<CallResult>> {
 		let module = &call.module;
-		let sender = Some(sender);
 		Dispatcher::execute_call::<Context>(module, context, sender, call)
 	}
 
@@ -387,10 +386,12 @@ impl Executor {
 enum Dispatcher {
 	system,
 	balance,
+	solo,
 }
 
 /// re-import modules
 pub mod module {
 	pub use module_balance as balance;
 	pub use module_system as system;
+	pub use module_solo as solo;
 }

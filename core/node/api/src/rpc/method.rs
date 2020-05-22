@@ -194,10 +194,13 @@ pub async fn chain_execute_call<S: ApiSupport>(
 	Params(request): Params<ExecuteTransactionRequest>,
 ) -> CustomResult<Hex> {
 	let block_hash: primitives::Hash = request.block_hash.try_into()?;
-	let sender: primitives::Address = request.sender.try_into()?;
+	let sender: Option<primitives::Address> = match request.sender {
+		Some(sender) => Some(sender.try_into()?),
+		None => None,
+	};
 	let call: primitives::Call = request.call.try_into()?;
 
-	let result = data.execute_call(&block_hash, &sender, &call).await??;
+	let result = data.execute_call(&block_hash, sender.as_ref(), &call).await??;
 	let result = result.0.into();
 	Ok(result)
 }
@@ -278,7 +281,7 @@ pub struct Call {
 #[derive(Deserialize)]
 pub struct ExecuteTransactionRequest {
 	pub block_hash: Hash,
-	pub sender: Address,
+	pub sender: Option<Address>,
 	pub call: Call,
 }
 

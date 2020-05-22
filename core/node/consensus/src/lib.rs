@@ -12,32 +12,5 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::error::Error;
-
-pub use derive_more::{Constructor, Display};
-
-#[derive(Debug, Display)]
-pub enum CommonErrorKind {
-	Main,
-	Service,
-	Crypto,
-	DB,
-	StateDB,
-	Executor,
-	TxPool,
-	Chain,
-	Codec,
-	Api,
-	Consensus,
-}
-
-#[derive(Debug, Constructor, Display)]
-#[display(fmt = "[CommonError] Kind: {} Error: {}", kind, error)]
-pub struct CommonError {
-	pub kind: CommonErrorKind,
-	pub error: Box<dyn Error + Send>,
-}
-
-impl Error for CommonError {}
-
-pub type CommonResult<T> = Result<T, CommonError>;
+pub mod support;
+pub mod errors;

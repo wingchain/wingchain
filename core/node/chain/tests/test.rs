@@ -75,7 +75,7 @@ fn test_chain() {
 	assert_eq!(tx_hash, &chain.hash_transaction(&tx).unwrap());
 
 	let sender = Address(hex::decode(&"b4decd5a5f8f2ba708f8ced72eec89f44f3be96a").unwrap());
-	let params = module::balance::EmptyParams;
+	let params = node_executor_primitives::EmptyParams;
 	let call = chain
 		.build_transaction(
 			None,
@@ -86,7 +86,7 @@ fn test_chain() {
 		.unwrap()
 		.call;
 	let result = chain
-		.execute_call(&block_hash, &sender, &call)
+		.execute_call(&block_hash, Some(&sender), &call)
 		.unwrap()
 		.unwrap()
 		.0;
@@ -126,6 +126,7 @@ fn expected_data(chain: &Chain) -> (Hash, Block, Executed, Transaction) {
 			module::system::InitParams {
 				chain_id: "chain-test".to_string(),
 				timestamp,
+				until_gap: 20,
 			},
 		)
 		.unwrap();
@@ -212,6 +213,10 @@ fn expected_block_0_meta_state_root(txs: &Vec<Arc<Transaction>>) -> Hash {
 			DBKey::from_slice(b"system_timestamp"),
 			Some(codec::encode(&params.timestamp).unwrap()),
 		),
+		(
+			DBKey::from_slice(b"system_until_gap"),
+			Some(codec::encode(&params.until_gap).unwrap()),
+		),
 	]
 	.into_iter()
 	.collect::<HashMap<_, _>>();
@@ -289,7 +294,8 @@ method = "init"
 params = '''
 {
     "chain_id": "chain-test",
-    "timestamp": "2020-04-29T15:51:36.502+08:00"
+    "timestamp": "2020-04-29T15:51:36.502+08:00",
+    "until_gap" : 20
 }
 '''
 
@@ -327,7 +333,8 @@ method = "init"
 params = '''
 {
     "chain_id": "chain-test",
-    "timestamp": "2020-04-29T15:51:36.502+08:00"
+    "timestamp": "2020-04-29T15:51:36.502+08:00",
+    "until_gap" : 20
 }
 '''
 

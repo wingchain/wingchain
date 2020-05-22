@@ -17,11 +17,11 @@ use std::rc::Rc;
 use executor_macro::{call, module};
 use executor_primitives::{
 	errors::{self, execute_error_result},
-	CallResult, Context, ContextEnv, Module as ModuleT, StorageValue, Validator,
+	CallResult, Context, ContextEnv, Module as ModuleT, StorageValue, Validator, EmptyParams
 };
 use primitives::codec::{Decode, Encode};
 use primitives::errors::CommonResult;
-use primitives::{codec, Address, Call};
+use primitives::{codec, Address, Call, BlockNumber};
 
 pub struct Module<C>
 where
@@ -30,6 +30,7 @@ where
 	env: Rc<ContextEnv>,
 	chain_id: StorageValue<String, C>,
 	timestamp: StorageValue<u32, C>,
+	until_gap: StorageValue<BlockNumber, C>,
 }
 
 #[module]
@@ -41,7 +42,8 @@ impl<C: Context> Module<C> {
 		Self {
 			env: context.env(),
 			chain_id: StorageValue::new::<Self>(context.clone(), b"chain_id"),
-			timestamp: StorageValue::new::<Self>(context, b"timestamp"),
+			timestamp: StorageValue::new::<Self>(context.clone(), b"timestamp"),
+			until_gap: StorageValue::new::<Self>(context, b"until_gap"),
 		}
 	}
 
@@ -56,12 +58,42 @@ impl<C: Context> Module<C> {
 		}
 		self.chain_id.set(&params.chain_id)?;
 		self.timestamp.set(&params.timestamp)?;
+		self.until_gap.set(&params.until_gap)?;
 		Ok(Ok(()))
+	}
+
+	#[call]
+	fn get_meta(
+		&self,
+		_sender: Option<&Address>,
+		_params: EmptyParams,
+	) -> CommonResult<CommonResult<Meta>> {
+		let chain_id = match self.chain_id.get()? {
+			Some(chain_id) => chain_id,
+			None => return execute_error_result("unexpected none"),
+		};
+		let timestamp = match self.timestamp.get()? {
+			Some(timestamp) => timestamp,
+			None => return execute_error_result("unexpected none"),
+		};
+		let until_gap = match self.until_gap.get()? {
+			Some(until_gap) => until_gap,
+			None => return execute_error_result("unexpected none"),
+		};
+		let meta = Meta{
+			chain_id,
+			timestamp,
+			until_gap
+		};
+		Ok(Ok(meta))
 	}
 }
 
+pub type InitParams = Meta;
+
 #[derive(Encode, Decode, Debug, PartialEq)]
-pub struct InitParams {
+pub struct Meta {
 	pub chain_id: String,
 	pub timestamp: u32,
+	pub until_gap: BlockNumber,
 }

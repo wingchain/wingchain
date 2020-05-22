@@ -19,6 +19,7 @@ crypto = { path = "../../crypto" }
 node-db = { path = "../db" }
 node-statedb = { path = "../statedb" }
 node-executor = { path = "../executor" }
+node-executor-primitives = { path = "../executor/primitives" }
 main-base = { path = "../../../bin/main/base" }
 
 [dev-dependencies]

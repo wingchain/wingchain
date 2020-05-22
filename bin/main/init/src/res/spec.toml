@@ -16,7 +16,8 @@ method = "init"
 params = '''
 {
     "chain_id": "${CHAIN_ID}",
-    "timestamp": "${TIME}"
+    "timestamp": "${TIME}",
+    "until_gap": 20
 }
 '''
 
@@ -26,5 +27,14 @@ method = "init"
 params = '''
 {
     "endow": []
+}
+'''
+
+[[genesis.txs]]
+module = "solo"
+method = "init"
+params = '''
+{
+    "block_interval": 3000
 }
 '''

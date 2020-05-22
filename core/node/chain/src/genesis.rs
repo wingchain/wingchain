@@ -21,7 +21,7 @@ use serde::Deserialize;
 use main_base::spec::{Spec, Tx};
 use node_executor::{module, Executor};
 use primitives::errors::{CommonError, CommonResult};
-use primitives::{Address, Transaction};
+use primitives::{Address, Transaction, BlockNumber};
 
 use crate::errors;
 
@@ -76,11 +76,15 @@ fn build_tx(
 			let params: module::balance::InitParams = JsonParams(params).try_into()?;
 			executor.build_tx(None, module.clone(), method.clone(), params)
 		}
+		("solo", "init") => {
+			let params: module::solo::InitParams = JsonParams(params).try_into()?;
+			executor.build_tx(None, module.clone(), method.clone(), params)
+		}
 		_ => Err(errors::ErrorKind::Spec(format!(
 			"unknown module or method: {}.{}",
 			module, method
 		))
-		.into()),
+			.into()),
 	}
 }
 
@@ -93,6 +97,7 @@ impl<'a> TryInto<module::system::InitParams> for JsonParams<'a> {
 		pub struct InitParams {
 			pub chain_id: String,
 			pub timestamp: String,
+			pub until_gap: BlockNumber,
 		}
 		let params = serde_json::from_str::<InitParams>(self.0)
 			.map_err(|e| errors::ErrorKind::Spec(format!("invalid json: {:?}", e)))?;
@@ -100,9 +105,11 @@ impl<'a> TryInto<module::system::InitParams> for JsonParams<'a> {
 			.map_err(|e| errors::ErrorKind::Spec(format!("invalid time format: {:?}", e)))?;
 		let timestamp = timestamp.timestamp() as u32;
 		let chain_id = params.chain_id;
+		let until_gap = params.until_gap;
 		Ok(module::system::InitParams {
 			chain_id,
 			timestamp,
+			until_gap,
 		})
 	}
 }
@@ -131,6 +138,21 @@ impl<'a> TryInto<module::balance::InitParams> for JsonParams<'a> {
 	}
 }
 
+impl<'a> TryInto<module::solo::InitParams> for JsonParams<'a> {
+	type Error = CommonError;
+	fn try_into(self) -> Result<module::solo::InitParams, Self::Error> {
+		#[derive(Deserialize)]
+		pub struct InitParams {
+			pub block_interval: u64,
+		}
+		let params = serde_json::from_str::<InitParams>(self.0)
+			.map_err(|e| errors::ErrorKind::Spec(format!("invalid json: {:?}", e)))?;
+		let block_interval = params.block_interval;
+
+		Ok(module::solo::InitParams { block_interval })
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use crypto::address::AddressImpl;
@@ -146,7 +168,8 @@ mod tests {
 		let str = r#"
 		{
 			"chain_id": "chain-test",
-			"timestamp": "2020-04-16T23:46:02.189+08:00"
+			"timestamp": "2020-04-16T23:46:02.189+08:00",
+			"until_gap": 20
 		}
 		"#;
 		let json_params = JsonParams(&str);
@@ -158,6 +181,7 @@ mod tests {
 			module::system::InitParams {
 				chain_id: "chain-test".to_string(),
 				timestamp: 1587051962,
+				until_gap: 20,
 			}
 		)
 	}
@@ -214,10 +238,11 @@ mod tests {
 						params: r#"
 							{
 								"chain_id": "chain-test",
-								"timestamp": "2020-04-16T23:46:02.189+08:00"
+								"timestamp": "2020-04-16T23:46:02.189+08:00",
+								"until_gap": 20
 							}
 						"#
-						.to_string(),
+							.to_string(),
 					},
 					Tx {
 						module: "balance".to_string(),
@@ -229,7 +254,7 @@ mod tests {
 								]
 							}
 						"#
-						.to_string(),
+							.to_string(),
 					},
 				],
 			},

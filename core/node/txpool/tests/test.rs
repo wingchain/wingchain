@@ -116,11 +116,11 @@ async fn test_txpool_validate() {
 
 	let mut tx = chain
 		.build_transaction(
-			Some((account1.0, 0, 1)),
+			Some((account1.0.clone(), 0, 1)),
 			"balance".to_string(),
 			"transfer".to_string(),
 			module::balance::TransferParams {
-				recipient: account2.3,
+				recipient: account2.3.clone(),
 				value: 2,
 			},
 		)
@@ -129,6 +129,35 @@ async fn test_txpool_validate() {
 
 	let result = txpool.insert(tx.clone()).await;
 	assert!(format!("{}", result.unwrap_err()).contains("Error: Invalid tx witness"));
+
+
+	let tx = chain
+		.build_transaction(
+			Some((account1.0.clone(), 0, 21)),
+			"balance".to_string(),
+			"transfer".to_string(),
+			module::balance::TransferParams {
+				recipient: account2.3.clone(),
+				value: 2,
+			},
+		)
+		.unwrap();
+	let result = txpool.insert(tx).await;
+	assert!(format!("{}", result.unwrap_err()).contains("Error: Invalid until"));
+
+	let tx = chain
+		.build_transaction(
+			Some((account1.0, 0, 0)),
+			"balance".to_string(),
+			"transfer".to_string(),
+			module::balance::TransferParams {
+				recipient: account2.3,
+				value: 2,
+			},
+		)
+		.unwrap();
+	let result = txpool.insert(tx).await;
+	assert!(format!("{}", result.unwrap_err()).contains("Error: Exceed until"));
 }
 
 #[tokio::test]
@@ -218,7 +247,8 @@ method = "init"
 params = '''
 {
     "chain_id": "chain-test",
-    "timestamp": "2020-04-29T15:51:36.502+08:00"
+    "timestamp": "2020-04-29T15:51:36.502+08:00",
+    "until_gap": 20
 }
 '''
 

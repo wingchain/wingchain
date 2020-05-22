@@ -201,3 +201,6 @@ impl CallResult {
 		Ok(Self(vec))
 	}
 }
+
+#[derive(Encode, Decode)]
+pub struct EmptyParams;
