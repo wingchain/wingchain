@@ -17,29 +17,30 @@ use std::sync::Arc;
 use std::task::Context;
 use std::time::{Duration, SystemTime};
 
-use futures::{prelude::*};
-use futures::{Future, Stream, TryStreamExt};
+use futures::future::Either;
+use futures::prelude::*;
 use futures::task::Poll;
+use futures::{Future, Stream, TryStreamExt};
 use log::info;
 use log::warn;
-use tokio::time::{Delay, delay_for};
+use tokio::time::{delay_for, Delay};
 
 use node_consensus::support::ConsensusSupport;
 use node_executor::module;
-use primitives::errors::CommonResult;
 use node_executor_primitives::EmptyParams;
+use primitives::errors::CommonResult;
 
 pub struct Solo<S>
-	where
-		S: ConsensusSupport,
+where
+	S: ConsensusSupport,
 {
 	#[allow(dead_code)]
 	support: Arc<S>,
 }
 
 impl<S> Solo<S>
-	where
-		S: ConsensusSupport + Send + Sync + 'static,
+where
+	S: ConsensusSupport + Send + Sync + 'static,
 {
 	pub fn new(support: Arc<S>) -> CommonResult<Self> {
 		let solo = Solo {
@@ -56,23 +57,41 @@ impl<S> Solo<S>
 	}
 }
 
-async fn start<S>(meta: module::solo::Meta, _support: Arc<S>) -> CommonResult<()>
-	where S: ConsensusSupport + Send + Sync + 'static, {
-	let task = Scheduler::new(meta.block_interval).try_for_each(move |schedule_info| {
-		println!("{:?}", schedule_info.timestamp);
-		future::ready(Ok(()))
-	}).then(|res| {
-		if let Err(err) = res {
-			warn!("Terminated with an error: {:?}", err);
-		}
-		future::ready(Ok(()))
-	});
+async fn start<S>(meta: module::solo::Meta, support: Arc<S>) -> CommonResult<()>
+where
+	S: ConsensusSupport + Send + Sync + 'static,
+{
+	let task = Scheduler::new(meta.block_interval)
+		.try_for_each(move |schedule_info| {
+			println!("{:?}", schedule_info.timestamp);
+
+			let txs = match support.get_transactions_in_txpool() {
+				Ok(txs) => txs,
+				Err(e) => {
+					warn!("Unable to get transactions in txpool: {}", e,);
+					return Either::Right(future::ready(Ok(())));
+				}
+			};
+
+			Either::Left(future::ready(Ok(())))
+		})
+		.then(|res| {
+			if let Err(err) = res {
+				warn!("Terminated with an error: {:?}", err);
+			}
+			future::ready(Ok(()))
+		});
 	task.await
 }
 
 fn get_solo_meta<S: ConsensusSupport>(support: Arc<S>) -> CommonResult<module::solo::Meta> {
 	let block_number = support.get_best_number()?.expect("qed");
-	support.execute_call_with_block_number(&block_number, "solo".to_string(), "get_meta".to_string(), EmptyParams)
+	support.execute_call_with_block_number(
+		&block_number,
+		"solo".to_string(),
+		"get_meta".to_string(),
+		EmptyParams,
+	)
 }
 
 struct Scheduler {
@@ -96,10 +115,7 @@ struct ScheduleInfo {
 impl Stream for Scheduler {
 	type Item = Result<ScheduleInfo, ()>;
 
-	fn poll_next(
-		mut self: Pin<&mut Self>,
-		cx: &mut Context<'_>,
-	) -> Poll<Option<Self::Item>> {
+	fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
 		self.delay = match self.delay.take() {
 			None => {
 				// schedule wait.
@@ -124,9 +140,7 @@ impl Stream for Scheduler {
 			Err(_) => return Poll::Ready(Some(Err(()))),
 		};
 
-		Poll::Ready(Some(Ok(ScheduleInfo {
-			timestamp
-		})))
+		Poll::Ready(Some(Ok(ScheduleInfo { timestamp })))
 	}
 }
 
@@ -137,9 +151,11 @@ fn time_until_next(now: Duration, duration: u64) -> Duration {
 
 fn duration_now() -> Duration {
 	let now = SystemTime::now();
-	now.duration_since(SystemTime::UNIX_EPOCH).unwrap_or_else(|e| panic!(
-		"Current time {:?} is before unix epoch. Something is wrong: {:?}",
-		now,
-		e,
-	))
+	now.duration_since(SystemTime::UNIX_EPOCH)
+		.unwrap_or_else(|e| {
+			panic!(
+				"Current time {:?} is before unix epoch. Something is wrong: {:?}",
+				now, e,
+			)
+		})
 }

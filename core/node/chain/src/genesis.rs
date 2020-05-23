@@ -21,21 +21,21 @@ use serde::Deserialize;
 use main_base::spec::{Spec, Tx};
 use node_executor::{module, Executor};
 use primitives::errors::{CommonError, CommonResult};
-use primitives::{Address, Transaction, BlockNumber};
+use primitives::{Address, BlockNumber, Transaction};
 
 use crate::errors;
 
 pub struct GenesisInfo {
 	pub meta_txs: Vec<Arc<Transaction>>,
 	pub payload_txs: Vec<Arc<Transaction>>,
-	pub timestamp: u32,
+	pub timestamp: u64,
 }
 
 pub fn build_genesis(spec: &Spec, executor: &Executor) -> CommonResult<GenesisInfo> {
 	let mut meta_txs = vec![];
 	let mut payload_txs = vec![];
 
-	let mut timestamp: Option<u32> = None;
+	let mut timestamp: Option<u64> = None;
 
 	for tx in &spec.genesis.txs {
 		let tx = build_tx(tx, &executor, &mut timestamp)?;
@@ -60,7 +60,7 @@ pub fn build_genesis(spec: &Spec, executor: &Executor) -> CommonResult<GenesisIn
 fn build_tx(
 	tx: &Tx,
 	executor: &Executor,
-	timestamp: &mut Option<u32>,
+	timestamp: &mut Option<u64>,
 ) -> CommonResult<Transaction> {
 	let module = &tx.module;
 	let method = &tx.method;
@@ -84,7 +84,7 @@ fn build_tx(
 			"unknown module or method: {}.{}",
 			module, method
 		))
-			.into()),
+		.into()),
 	}
 }
 
@@ -103,7 +103,7 @@ impl<'a> TryInto<module::system::InitParams> for JsonParams<'a> {
 			.map_err(|e| errors::ErrorKind::Spec(format!("invalid json: {:?}", e)))?;
 		let timestamp = DateTime::parse_from_rfc3339(&params.timestamp)
 			.map_err(|e| errors::ErrorKind::Spec(format!("invalid time format: {:?}", e)))?;
-		let timestamp = timestamp.timestamp() as u32;
+		let timestamp = timestamp.timestamp_millis() as u64;
 		let chain_id = params.chain_id;
 		let until_gap = params.until_gap;
 		Ok(module::system::InitParams {
@@ -180,7 +180,7 @@ mod tests {
 			param,
 			module::system::InitParams {
 				chain_id: "chain-test".to_string(),
-				timestamp: 1587051962,
+				timestamp: 1587051962189,
 				until_gap: 20,
 			}
 		)
@@ -242,7 +242,7 @@ mod tests {
 								"until_gap": 20
 							}
 						"#
-							.to_string(),
+						.to_string(),
 					},
 					Tx {
 						module: "balance".to_string(),
@@ -254,7 +254,7 @@ mod tests {
 								]
 							}
 						"#
-							.to_string(),
+						.to_string(),
 					},
 				],
 			},
@@ -273,6 +273,6 @@ mod tests {
 
 		assert_eq!(meta_txs.len(), 1);
 		assert_eq!(payload_txs.len(), 1);
-		assert_eq!(timestamp, 1587051962);
+		assert_eq!(timestamp, 1587051962189);
 	}
 }

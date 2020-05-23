@@ -16,66 +16,64 @@ use std::rc::Rc;
 
 use executor_macro::{call, module};
 use executor_primitives::{
-    errors::{self, execute_error_result},
-    CallResult, Context, ContextEnv, Module as ModuleT, StorageValue, Validator, EmptyParams
+	errors::{self, execute_error_result},
+	CallResult, Context, ContextEnv, EmptyParams, Module as ModuleT, StorageValue, Validator,
 };
 use primitives::codec::{Decode, Encode};
 use primitives::errors::CommonResult;
 use primitives::{codec, Address, Call};
 
 pub struct Module<C>
-    where
-        C: Context,
+where
+	C: Context,
 {
-    env: Rc<ContextEnv>,
-    block_interval: StorageValue<u64, C>,
+	env: Rc<ContextEnv>,
+	block_interval: StorageValue<u64, C>,
 }
 
 #[module]
 impl<C: Context> Module<C> {
-    const META_MODULE: bool = true;
-    const STORAGE_KEY: &'static [u8] = b"solo";
+	const META_MODULE: bool = true;
+	const STORAGE_KEY: &'static [u8] = b"solo";
 
-    fn new(context: C) -> Self {
-        Self {
-            env: context.env(),
-            block_interval: StorageValue::new::<Self>(context.clone(), b"block_interval"),
-        }
-    }
+	fn new(context: C) -> Self {
+		Self {
+			env: context.env(),
+			block_interval: StorageValue::new::<Self>(context.clone(), b"block_interval"),
+		}
+	}
 
-    #[call(write = true)]
-    fn init(
-        &self,
-        _sender: Option<&Address>,
-        params: InitParams,
-    ) -> CommonResult<CommonResult<()>> {
-        if self.env.number != 0 {
-            return execute_error_result("not genesis");
-        }
-        self.block_interval.set(&params.block_interval)?;
-        Ok(Ok(()))
-    }
+	#[call(write = true)]
+	fn init(
+		&self,
+		_sender: Option<&Address>,
+		params: InitParams,
+	) -> CommonResult<CommonResult<()>> {
+		if self.env.number != 0 {
+			return execute_error_result("not genesis");
+		}
+		self.block_interval.set(&params.block_interval)?;
+		Ok(Ok(()))
+	}
 
-    #[call]
-    fn get_meta(
-        &self,
-        _sender: Option<&Address>,
-        _params: EmptyParams,
-    ) -> CommonResult<CommonResult<Meta>> {
-        let block_interval = match self.block_interval.get()? {
-            Some(block_interval) => block_interval,
-            None => return execute_error_result("unexpected none"),
-        };
-        let meta = Meta{
-            block_interval,
-        };
-        Ok(Ok(meta))
-    }
+	#[call]
+	fn get_meta(
+		&self,
+		_sender: Option<&Address>,
+		_params: EmptyParams,
+	) -> CommonResult<CommonResult<Meta>> {
+		let block_interval = match self.block_interval.get()? {
+			Some(block_interval) => block_interval,
+			None => return execute_error_result("unexpected none"),
+		};
+		let meta = Meta { block_interval };
+		Ok(Ok(meta))
+	}
 }
 
 pub type InitParams = Meta;
 
 #[derive(Encode, Decode, Debug, PartialEq)]
 pub struct Meta {
-    pub block_interval: u64,
+	pub block_interval: u64,
 }

@@ -65,14 +65,14 @@ pub struct Transaction {
 #[derive(Clone, Encode, Decode, PartialEq, Hash)]
 pub struct Hash(pub Vec<u8>);
 
-pub type BlockNumber = u32;
+pub type BlockNumber = u64;
 
 pub type Balance = u64;
 
 #[derive(Clone, Debug, Encode, Decode, PartialEq)]
 pub struct Header {
 	pub number: BlockNumber,
-	pub timestamp: u32,
+	pub timestamp: u64,
 	pub parent_hash: Hash,
 	pub meta_txs_root: Hash,
 	pub meta_state_root: Hash,

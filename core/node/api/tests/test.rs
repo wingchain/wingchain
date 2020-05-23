@@ -78,16 +78,16 @@ fn get_cases(chain: &Arc<Chain>) -> Vec<(String, String)> {
 		(
 			r#"{"jsonrpc": "2.0", "method": "chain_getBlockByNumber", "params": ["best"], "id": 1}"#
 				.to_string(),
-			format!(r#"{{"jsonrpc":"2.0","result":{{"hash":"0xe456b860a5abd866f5e0bad84ec6bffabb747e768fbd10737e78518cfd52e11b","header":{{"number":"0x00000000","timestamp":"0x5ea93208","parent_hash":"0x0000000000000000000000000000000000000000000000000000000000000000","meta_txs_root":"0x52c0c57619733d1d868c7205b22f846a40bcd5f6db8036258a8b709581d53332","meta_state_root":"0xd32e910c0ce3159430977a9e09978c2976e692274a1f13a3085a7efca9909dd4","payload_txs_root":"0xc73b1740e53645a26e1926f9d910e560a99a601d14680deb6dc31eb26f321edc","payload_executed_gap":"0x01","payload_executed_state_root":"0x0000000000000000000000000000000000000000000000000000000000000000"}},"body":{{"meta_txs":["0xe38d8dc492025d55450b4d773c97cb187d1acd90e081e679dbd91874a287dd3a"],"payload_txs":["0x6745417d545c3e0f7d610cadfd1ee8d450a92e89fa74bb75777950a779f2aa94"]}}}},"id":1}}"#, ),
+			format!(r#"{{"jsonrpc":"2.0","result":{{"hash":"0x70a9ef34965b2cc61637e07324770ef547446f81fb63f2377a4c28c16c3c94c0","header":{{"number":"0x0000000000000000","timestamp":"0x00000171c4eb7136","parent_hash":"0x0000000000000000000000000000000000000000000000000000000000000000","meta_txs_root":"0x17462939e972f9cfe72553b9f56c18cd94ec8955a44a6012a350d9e4ac5f4a83","meta_state_root":"0x5e594917a6e59ef9260b411384550d016fc2314b209fdc1be3f401461c2a8cce","payload_txs_root":"0xc73b1740e53645a26e1926f9d910e560a99a601d14680deb6dc31eb26f321edc","payload_executed_gap":"0x01","payload_executed_state_root":"0x0000000000000000000000000000000000000000000000000000000000000000"}},"body":{{"meta_txs":["0x172006405359c1a2c08417272186e71e30b11db45f59a5f12c50ec7e658112df"],"payload_txs":["0x6745417d545c3e0f7d610cadfd1ee8d450a92e89fa74bb75777950a779f2aa94"]}}}},"id":1}}"#, ),
 		),
 		(
-			r#"{"jsonrpc": "2.0", "method": "chain_getTransactionByHash", "params": ["0xe38d8dc492025d55450b4d773c97cb187d1acd90e081e679dbd91874a287dd3a"], "id": 1}"#
+			r#"{"jsonrpc": "2.0", "method": "chain_getTransactionByHash", "params": ["0x172006405359c1a2c08417272186e71e30b11db45f59a5f12c50ec7e658112df"], "id": 1}"#
 				.to_string(),
-			r#"{"jsonrpc":"2.0","result":{"hash":"0xe38d8dc492025d55450b4d773c97cb187d1acd90e081e679dbd91874a287dd3a","witness":null,"call":{"module":"system","method":"init","params":"0x28636861696e2d746573740832a95e14000000"}},"id":1}"#.to_string(),
+			r#"{"jsonrpc":"2.0","result":{"hash":"0x172006405359c1a2c08417272186e71e30b11db45f59a5f12c50ec7e658112df","witness":null,"call":{"module":"system","method":"init","params":"0x28636861696e2d746573743671ebc4710100001400000000000000"}},"id":1}"#.to_string(),
 		),
 		(
-			r#"{"jsonrpc": "2.0", "method": "chain_getRawTransactionByHash", "params": ["0xe38d8dc492025d55450b4d773c97cb187d1acd90e081e679dbd91874a287dd3a"], "id": 1}"#.to_string(),
-			r#"{"jsonrpc":"2.0","result":"0x001873797374656d10696e69744c28636861696e2d746573740832a95e14000000","id":1}"#.to_string(),
+			r#"{"jsonrpc": "2.0", "method": "chain_getRawTransactionByHash", "params": ["0x172006405359c1a2c08417272186e71e30b11db45f59a5f12c50ec7e658112df"], "id": 1}"#.to_string(),
+			r#"{"jsonrpc":"2.0","result":"0x001873797374656d10696e69746c28636861696e2d746573743671ebc4710100001400000000000000","id":1}"#.to_string(),
 		),
 		(
 			format!(r#"{{"jsonrpc": "2.0", "method": "chain_sendRawTransaction", "params": ["0x{}"], "id": 1}}"#, tx_hex),
@@ -99,7 +99,7 @@ fn get_cases(chain: &Arc<Chain>) -> Vec<(String, String)> {
 					tx_hash_hex, tx_public_key_hex, tx_sig_hex, nonce_hex, until_hex, params_hex),
 		),
 		(
-			format!(r#"{{"jsonrpc": "2.0", "method": "chain_executeCall", "params": {{ "block_hash": "0xe456b860a5abd866f5e0bad84ec6bffabb747e768fbd10737e78518cfd52e11b", "sender": "0xb4decd5a5f8f2ba708f8ced72eec89f44f3be96a", "call": {{ "module":"balance", "method":"get_balance", "params": "" }} }}, "id": 1}}"#),
+			format!(r#"{{"jsonrpc": "2.0", "method": "chain_executeCall", "params": {{ "block_hash": "0x70a9ef34965b2cc61637e07324770ef547446f81fb63f2377a4c28c16c3c94c0", "sender": "0xb4decd5a5f8f2ba708f8ced72eec89f44f3be96a", "call": {{ "module":"balance", "method":"get_balance", "params": "" }} }}, "id": 1}}"#),
 			format!(r#"{{"jsonrpc":"2.0","result":"0x0a00000000000000","id":1}}"#),
 		)
 	]
@@ -112,7 +112,7 @@ fn get_tx(chain: &Arc<Chain>) -> Transaction {
 	);
 
 	let nonce = 0u32;
-	let until = 1u32;
+	let until = 1u64;
 	let tx = chain
 		.build_transaction(
 			Some((account1.0, nonce, until)),

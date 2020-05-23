@@ -17,22 +17,30 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use node_chain::Chain;
 use node_txpool::support::TxPoolSupport;
-use node_txpool::TxPool;
-use primitives::{BlockNumber, Hash, Header};
+use node_txpool::{PoolTransaction, TxPool};
 use primitives::codec::{Decode, Encode};
 use primitives::errors::CommonResult;
+use primitives::{BlockNumber, Hash, Header};
 
 #[async_trait]
 pub trait ConsensusSupport {
 	fn get_best_number(&self) -> CommonResult<Option<BlockNumber>>;
 	fn get_block_hash(&self, number: &BlockNumber) -> CommonResult<Option<Hash>>;
 	fn get_header(&self, block_hash: &Hash) -> CommonResult<Option<Header>>;
-	fn execute_call_with_block_number<P: Encode, R: Decode>(&self, block_number: &BlockNumber, module: String, method: String, params: P) -> CommonResult<R>;
+	fn execute_call_with_block_number<P: Encode, R: Decode>(
+		&self,
+		block_number: &BlockNumber,
+		module: String,
+		method: String,
+		params: P,
+	) -> CommonResult<R>;
+	// fn build_block(&self, timestamp: )
+	fn get_transactions_in_txpool(&self) -> CommonResult<Vec<Arc<PoolTransaction>>>;
 }
 
 pub struct DefaultConsensusSupport<TS>
-	where
-		TS: TxPoolSupport,
+where
+	TS: TxPoolSupport,
 {
 	chain: Arc<Chain>,
 	#[allow(dead_code)]
@@ -40,8 +48,8 @@ pub struct DefaultConsensusSupport<TS>
 }
 
 impl<TS> DefaultConsensusSupport<TS>
-	where
-		TS: TxPoolSupport,
+where
+	TS: TxPoolSupport,
 {
 	pub fn new(chain: Arc<Chain>, txpool: Arc<TxPool<TS>>) -> Self {
 		Self { chain, txpool }
@@ -50,8 +58,8 @@ impl<TS> DefaultConsensusSupport<TS>
 
 #[async_trait]
 impl<TS> ConsensusSupport for DefaultConsensusSupport<TS>
-	where
-		TS: TxPoolSupport + Send + Sync,
+where
+	TS: TxPoolSupport + Send + Sync,
 {
 	fn get_best_number(&self) -> CommonResult<Option<BlockNumber>> {
 		self.chain.get_best_number()
@@ -62,7 +70,18 @@ impl<TS> ConsensusSupport for DefaultConsensusSupport<TS>
 	fn get_header(&self, block_hash: &Hash) -> CommonResult<Option<Header>> {
 		self.chain.get_header(block_hash)
 	}
-	fn execute_call_with_block_number<P: Encode, R: Decode>(&self, block_number: &BlockNumber, module: String, method: String, params: P) -> CommonResult<R> {
-		self.chain.execute_call_with_block_number(block_number, module, method, params)
+	fn execute_call_with_block_number<P: Encode, R: Decode>(
+		&self,
+		block_number: &BlockNumber,
+		module: String,
+		method: String,
+		params: P,
+	) -> CommonResult<R> {
+		self.chain
+			.execute_call_with_block_number(block_number, module, method, params)
+	}
+	fn get_transactions_in_txpool(&self) -> CommonResult<Vec<Arc<PoolTransaction>>> {
+		let txs = (*self.txpool.get_queue().read()).clone();
+		Ok(txs)
 	}
 }

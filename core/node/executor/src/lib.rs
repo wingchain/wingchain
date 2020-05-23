@@ -392,6 +392,6 @@ enum Dispatcher {
 /// re-import modules
 pub mod module {
 	pub use module_balance as balance;
-	pub use module_system as system;
 	pub use module_solo as solo;
+	pub use module_system as system;
 }

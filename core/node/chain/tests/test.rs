@@ -116,7 +116,7 @@ fn test_chain_invalid_spec() {
 }
 
 fn expected_data(chain: &Chain) -> (Hash, Block, Executed, Transaction) {
-	let timestamp = 1588146696;
+	let timestamp = 1588146696502;
 
 	let tx = chain
 		.build_transaction(

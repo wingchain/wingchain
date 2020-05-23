@@ -17,11 +17,11 @@ use std::rc::Rc;
 use executor_macro::{call, module};
 use executor_primitives::{
 	errors::{self, execute_error_result},
-	CallResult, Context, ContextEnv, Module as ModuleT, StorageValue, Validator, EmptyParams
+	CallResult, Context, ContextEnv, EmptyParams, Module as ModuleT, StorageValue, Validator,
 };
 use primitives::codec::{Decode, Encode};
 use primitives::errors::CommonResult;
-use primitives::{codec, Address, Call, BlockNumber};
+use primitives::{codec, Address, BlockNumber, Call};
 
 pub struct Module<C>
 where
@@ -29,7 +29,7 @@ where
 {
 	env: Rc<ContextEnv>,
 	chain_id: StorageValue<String, C>,
-	timestamp: StorageValue<u32, C>,
+	timestamp: StorageValue<u64, C>,
 	until_gap: StorageValue<BlockNumber, C>,
 }
 
@@ -80,10 +80,10 @@ impl<C: Context> Module<C> {
 			Some(until_gap) => until_gap,
 			None => return execute_error_result("unexpected none"),
 		};
-		let meta = Meta{
+		let meta = Meta {
 			chain_id,
 			timestamp,
-			until_gap
+			until_gap,
 		};
 		Ok(Ok(meta))
 	}
@@ -94,6 +94,6 @@ pub type InitParams = Meta;
 #[derive(Encode, Decode, Debug, PartialEq)]
 pub struct Meta {
 	pub chain_id: String,
-	pub timestamp: u32,
+	pub timestamp: u64,
 	pub until_gap: BlockNumber,
 }

@@ -28,7 +28,7 @@ pub use node_executor::module;
 pub use node_executor::CallResult;
 use node_executor::{Context, ContextEnv, ContextEssence, Executor};
 use node_statedb::{StateDB, TrieRoot};
-use primitives::codec::{Encode, Decode};
+use primitives::codec::{Decode, Encode};
 use primitives::errors::CommonResult;
 use primitives::{
 	codec, Address, Block, BlockNumber, Body, Call, DBKey, Executed, FullBlock, Hash, Header,
@@ -166,7 +166,7 @@ impl Chain {
 
 		let executed_number = match best_number {
 			0 => None,
-			_ => Some(best_number - header.payload_executed_gap as u32),
+			_ => Some(best_number - header.payload_executed_gap as u64),
 		};
 
 		Ok(executed_number)
@@ -294,13 +294,29 @@ impl Chain {
 		self.executor.execute_call(&context, sender, call)
 	}
 
-	pub fn execute_call_with_block_number<P: Encode, R: Decode>(&self, block_number: &BlockNumber, module: String, method: String, params: P) -> CommonResult<R> {
-		let block_hash = self.get_block_hash(block_number)?
-			.ok_or(errors::ErrorKind::Data(format!("unknown block number: {}", block_number)))?;
+	pub fn execute_call_with_block_number<P: Encode, R: Decode>(
+		&self,
+		block_number: &BlockNumber,
+		module: String,
+		method: String,
+		params: P,
+	) -> CommonResult<R> {
+		let block_hash = self
+			.get_block_hash(block_number)?
+			.ok_or(errors::ErrorKind::Data(format!(
+				"unknown block number: {}",
+				block_number
+			)))?;
 		self.execute_call_with_block_hash(&block_hash, module, method, params)
 	}
 
-	pub fn execute_call_with_block_hash<P: Encode, R: Decode>(&self, block_hash: &Hash, module: String, method: String, params: P) -> CommonResult<R> {
+	pub fn execute_call_with_block_hash<P: Encode, R: Decode>(
+		&self,
+		block_hash: &Hash,
+		module: String,
+		method: String,
+		params: P,
+	) -> CommonResult<R> {
 		let call = self.build_transaction(None, module, method, params)?.call;
 		let result = self.execute_call(&block_hash, None, &call)??;
 		let result = codec::decode(&result.0)?;

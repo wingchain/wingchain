@@ -130,7 +130,6 @@ async fn test_txpool_validate() {
 	let result = txpool.insert(tx.clone()).await;
 	assert!(format!("{}", result.unwrap_err()).contains("Error: Invalid tx witness"));
 
-
 	let tx = chain
 		.build_transaction(
 			Some((account1.0.clone(), 0, 21)),

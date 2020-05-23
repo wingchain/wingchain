@@ -45,7 +45,7 @@ fn test_executor() {
 
 	let trie_root = Arc::new(TrieRoot::new(hasher.clone()).unwrap());
 
-	let timestamp = 1588146696;
+	let timestamp = 1588146696502;
 
 	let (account1, account2) = test_accounts(dsa.clone(), address.clone());
 
@@ -127,7 +127,7 @@ fn test_executor() {
 	// block 1
 
 	let nonce = 0u32;
-	let until = 1u32;
+	let until = 1u64;
 
 	// invalid tx
 	let tx = executor.build_tx(

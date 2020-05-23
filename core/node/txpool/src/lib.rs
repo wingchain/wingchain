@@ -20,11 +20,11 @@ use parking_lot::RwLock;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 use node_executor::module;
-use primitives::{Hash, Transaction};
+use node_executor_primitives::EmptyParams;
 use primitives::errors::CommonResult;
+use primitives::{Hash, Transaction};
 
 use crate::support::TxPoolSupport;
-use node_executor_primitives::EmptyParams;
 
 pub mod errors;
 pub mod support;
@@ -41,8 +41,8 @@ pub struct PoolTransaction {
 }
 
 pub struct TxPool<S>
-	where
-		S: TxPoolSupport,
+where
+	S: TxPoolSupport,
 {
 	config: TxPoolConfig,
 	system_meta: module::system::Meta,
@@ -53,8 +53,8 @@ pub struct TxPool<S>
 }
 
 impl<S> TxPool<S>
-	where
-		S: TxPoolSupport,
+where
+	S: TxPoolSupport,
 {
 	pub fn new(config: TxPoolConfig, support: Arc<S>) -> CommonResult<Self> {
 		let map = CHashMap::with_capacity(config.pool_capacity);
@@ -175,5 +175,10 @@ async fn process_buffer(
 
 fn get_system_meta<S: TxPoolSupport>(support: Arc<S>) -> CommonResult<module::system::Meta> {
 	let block_number = support.get_best_number()?.expect("qed");
-	support.execute_call_with_block_number(&block_number, "system".to_string(), "get_meta".to_string(), EmptyParams)
+	support.execute_call_with_block_number(
+		&block_number,
+		"system".to_string(),
+		"get_meta".to_string(),
+		EmptyParams,
+	)
 }

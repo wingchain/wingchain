@@ -200,7 +200,9 @@ pub async fn chain_execute_call<S: ApiSupport>(
 	};
 	let call: primitives::Call = request.call.try_into()?;
 
-	let result = data.execute_call(&block_hash, sender.as_ref(), &call).await??;
+	let result = data
+		.execute_call(&block_hash, sender.as_ref(), &call)
+		.await??;
 	let result = result.0.into();
 	Ok(result)
 }
@@ -357,6 +359,12 @@ impl From<u32> for Hex {
 	}
 }
 
+impl From<u64> for Hex {
+	fn from(number: u64) -> Self {
+		Hex(format!("0x{}", hex::encode(number.to_be_bytes())))
+	}
+}
+
 impl From<i8> for Hex {
 	fn from(number: i8) -> Self {
 		Hex(format!("0x{}", hex::encode(number.to_be_bytes())))
@@ -449,13 +457,13 @@ impl TryFrom<BlockNumber> for BlockNumberEnum {
 			"executed" => BlockNumberEnum::Executed,
 			number if number.starts_with("0x") => {
 				let hex = number.trim_start_matches("0x");
-				let number = u32::from_str_radix(hex, 16).map_err(|_| {
+				let number = u64::from_str_radix(hex, 16).map_err(|_| {
 					errors::ErrorKind::InvalidParams(format!("invalid hex: {}", number))
 				})?;
 				BlockNumberEnum::Number(number)
 			}
 			number => {
-				let number = number.parse::<u32>().map_err(|_| {
+				let number = number.parse::<u64>().map_err(|_| {
 					errors::ErrorKind::InvalidParams(format!("invalid number: {}", number))
 				})?;
 				BlockNumberEnum::Number(number)

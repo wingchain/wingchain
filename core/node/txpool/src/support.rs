@@ -13,16 +13,22 @@
 // limitations under the License.
 
 use node_chain::Chain;
+use primitives::codec::{Decode, Encode};
 use primitives::errors::CommonResult;
-use primitives::{Hash, Transaction, BlockNumber};
-use primitives::codec::{Encode, Decode};
+use primitives::{BlockNumber, Hash, Transaction};
 
 pub trait TxPoolSupport {
 	fn hash_transaction(&self, tx: &Transaction) -> CommonResult<Hash>;
 	fn validate_transaction(&self, tx: &Transaction, witness_required: bool) -> CommonResult<()>;
 	fn get_best_number(&self) -> CommonResult<Option<BlockNumber>>;
 	fn get_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Transaction>>;
-	fn execute_call_with_block_number<P: Encode, R: Decode>(&self, block_number: &BlockNumber, module: String, method: String, params: P) -> CommonResult<R>;
+	fn execute_call_with_block_number<P: Encode, R: Decode>(
+		&self,
+		block_number: &BlockNumber,
+		module: String,
+		method: String,
+		params: P,
+	) -> CommonResult<R>;
 }
 
 impl TxPoolSupport for Chain {
@@ -38,7 +44,13 @@ impl TxPoolSupport for Chain {
 	fn get_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Transaction>> {
 		self.get_transaction(tx_hash)
 	}
-	fn execute_call_with_block_number<P: Encode, R: Decode>(&self, block_number: &BlockNumber, module: String, method: String, params: P) -> CommonResult<R>{
+	fn execute_call_with_block_number<P: Encode, R: Decode>(
+		&self,
+		block_number: &BlockNumber,
+		module: String,
+		method: String,
+		params: P,
+	) -> CommonResult<R> {
 		self.execute_call_with_block_number(block_number, module, method, params)
 	}
 }

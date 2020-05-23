@@ -51,10 +51,10 @@ use main_base::config::Config;
 use node_api::support::DefaultApiSupport;
 use node_api::{Api, ApiConfig};
 use node_chain::{Chain, ChainConfig};
-use node_txpool::{TxPool, TxPoolConfig};
-use primitives::errors::CommonResult;
 use node_consensus::support::DefaultConsensusSupport;
 use node_consensus_solo::Solo;
+use node_txpool::{TxPool, TxPoolConfig};
+use primitives::errors::CommonResult;
 
 pub mod errors;
 
@@ -102,7 +102,8 @@ impl Service {
 		let api = Arc::new(Api::new(api_config, api_support));
 
 		// init consensus solo
-		let consensus_support = Arc::new(DefaultConsensusSupport::new(chain.clone(), txpool.clone()));
+		let consensus_support =
+			Arc::new(DefaultConsensusSupport::new(chain.clone(), txpool.clone()));
 		let consensus = Arc::new(Solo::new(consensus_support)?);
 
 		Ok(Self {

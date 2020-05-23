@@ -17,16 +17,15 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use tempfile::tempdir;
+use tokio::time::{delay_for, Duration};
 
 use node_chain::{Chain, ChainConfig};
-use node_txpool::{TxPool, TxPoolConfig};
-use node_consensus_solo::Solo;
 use node_consensus::support::DefaultConsensusSupport;
-use tokio::time::{delay_for, Duration};
+use node_consensus_solo::Solo;
+use node_txpool::{TxPool, TxPoolConfig};
 
 #[tokio::test]
 async fn test_consensus_solo() {
-
 	let chain = get_chain();
 
 	let txpool_config = TxPoolConfig {
@@ -41,7 +40,6 @@ async fn test_consensus_solo() {
 	let _solo = Solo::new(support).unwrap();
 
 	delay_for(Duration::from_secs(10)).await;
-
 }
 
 fn get_chain() -> Arc<Chain> {
