@@ -15,18 +15,19 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use node_chain::Chain;
+use node_chain::{Chain, ChainCommitBlockParams};
 use node_txpool::support::TxPoolSupport;
-use node_txpool::{PoolTransaction, TxPool};
+use node_txpool::TxPool;
 use primitives::codec::{Decode, Encode};
 use primitives::errors::CommonResult;
-use primitives::{BlockNumber, Hash, Header};
+use primitives::{BlockNumber, BuildBlockParams, FullTransaction, Hash, Header, Transaction};
 
 #[async_trait]
 pub trait ConsensusSupport {
 	fn get_best_number(&self) -> CommonResult<Option<BlockNumber>>;
 	fn get_block_hash(&self, number: &BlockNumber) -> CommonResult<Option<Hash>>;
 	fn get_header(&self, block_hash: &Hash) -> CommonResult<Option<Header>>;
+	fn get_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Transaction>>;
 	fn execute_call_with_block_number<P: Encode, R: Decode>(
 		&self,
 		block_number: &BlockNumber,
@@ -34,8 +35,13 @@ pub trait ConsensusSupport {
 		method: String,
 		params: P,
 	) -> CommonResult<R>;
-	// fn build_block(&self, timestamp: )
-	fn get_transactions_in_txpool(&self) -> CommonResult<Vec<Arc<PoolTransaction>>>;
+	fn is_meta_tx(&self, tx: &Transaction) -> CommonResult<bool>;
+	fn build_block(
+		&self,
+		build_block_params: BuildBlockParams,
+	) -> CommonResult<ChainCommitBlockParams>;
+	fn commit_block(&self, commit_block_params: ChainCommitBlockParams) -> CommonResult<()>;
+	fn get_transactions_in_txpool(&self) -> CommonResult<Vec<Arc<FullTransaction>>>;
 }
 
 pub struct DefaultConsensusSupport<TS>
@@ -70,6 +76,9 @@ where
 	fn get_header(&self, block_hash: &Hash) -> CommonResult<Option<Header>> {
 		self.chain.get_header(block_hash)
 	}
+	fn get_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Transaction>> {
+		self.chain.get_transaction(tx_hash)
+	}
 	fn execute_call_with_block_number<P: Encode, R: Decode>(
 		&self,
 		block_number: &BlockNumber,
@@ -80,7 +89,19 @@ where
 		self.chain
 			.execute_call_with_block_number(block_number, module, method, params)
 	}
-	fn get_transactions_in_txpool(&self) -> CommonResult<Vec<Arc<PoolTransaction>>> {
+	fn is_meta_tx(&self, tx: &Transaction) -> CommonResult<bool> {
+		self.chain.is_meta_tx(tx)
+	}
+	fn build_block(
+		&self,
+		build_block_params: BuildBlockParams,
+	) -> CommonResult<ChainCommitBlockParams> {
+		self.chain.build_block(build_block_params)
+	}
+	fn commit_block(&self, commit_block_params: ChainCommitBlockParams) -> CommonResult<()> {
+		self.chain.commit_block(commit_block_params)
+	}
+	fn get_transactions_in_txpool(&self) -> CommonResult<Vec<Arc<FullTransaction>>> {
 		let txs = (*self.txpool.get_queue().read()).clone();
 		Ok(txs)
 	}

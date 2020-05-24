@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use std::fmt;
+use std::sync::Arc;
 
 use smallvec::SmallVec;
 
@@ -94,12 +95,25 @@ pub struct Block {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct FullBlock {
-	pub number: BlockNumber,
+pub struct FullTransaction {
+	pub tx: Transaction,
+	pub tx_hash: Hash,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct CommitBlockParams<T> {
 	pub block_hash: Hash,
 	pub header: Header,
 	pub body: Body,
-	pub txs: Vec<(Hash, Transaction)>,
+	pub txs: Vec<Arc<FullTransaction>>,
+	pub meta_transaction: T,
+}
+
+pub struct BuildBlockParams {
+	pub number: BlockNumber,
+	pub timestamp: u64,
+	pub meta_txs: Vec<Arc<FullTransaction>>,
+	pub payload_txs: Vec<Arc<FullTransaction>>,
 }
 
 #[derive(Clone, Debug, Encode, Decode, PartialEq)]

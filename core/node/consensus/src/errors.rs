@@ -16,11 +16,18 @@ use std::error::Error;
 use std::fmt::Debug;
 
 use primitives::errors::{CommonError, CommonErrorKind, Display};
+use primitives::Hash;
 
 #[derive(Debug, Display)]
 pub enum ErrorKind {
 	#[display(fmt = "Invalid meta: {}", _0)]
 	Meta(String),
+
+	#[display(fmt = "Duplicated tx: tx_hash: {:?}", _0)]
+	Duplicated(Hash),
+
+	#[display(fmt = "Exceed until: tx_hash: {:?}", _0)]
+	ExceedUntil(Hash),
 }
 
 impl Error for ErrorKind {}

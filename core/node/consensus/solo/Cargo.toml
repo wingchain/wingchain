@@ -21,3 +21,4 @@ node-executor-primitives = { path = "../../executor/primitives" }
 [dev-dependencies]
 tempfile = "3.1.0"
 utils-test = { path = "../../../../utils/test" }
+env_logger = "0.7.1"

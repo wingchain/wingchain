@@ -22,7 +22,7 @@ use tokio::sync::mpsc::{channel, Receiver, Sender};
 use node_executor::module;
 use node_executor_primitives::EmptyParams;
 use primitives::errors::CommonResult;
-use primitives::{Hash, Transaction};
+use primitives::{FullTransaction, Hash, Transaction};
 
 use crate::support::TxPoolSupport;
 
@@ -34,12 +34,6 @@ pub struct TxPoolConfig {
 	pub buffer_capacity: usize,
 }
 
-#[derive(Debug, PartialEq)]
-pub struct PoolTransaction {
-	pub tx: Arc<Transaction>,
-	pub tx_hash: Hash,
-}
-
 pub struct TxPool<S>
 where
 	S: TxPoolSupport,
@@ -47,9 +41,9 @@ where
 	config: TxPoolConfig,
 	system_meta: module::system::Meta,
 	support: Arc<S>,
-	map: CHashMap<Hash, Arc<PoolTransaction>>,
-	queue: Arc<RwLock<Vec<Arc<PoolTransaction>>>>,
-	buffer_tx: Sender<Arc<PoolTransaction>>,
+	map: CHashMap<Hash, Arc<FullTransaction>>,
+	queue: Arc<RwLock<Vec<Arc<FullTransaction>>>>,
+	buffer_tx: Sender<Arc<FullTransaction>>,
 }
 
 impl<S> TxPool<S>
@@ -80,11 +74,11 @@ where
 		Ok(tx_pool)
 	}
 
-	pub fn get_queue(&self) -> &Arc<RwLock<Vec<Arc<PoolTransaction>>>> {
+	pub fn get_queue(&self) -> &Arc<RwLock<Vec<Arc<FullTransaction>>>> {
 		&self.queue
 	}
 
-	pub fn get_map(&self) -> &CHashMap<Hash, Arc<PoolTransaction>> {
+	pub fn get_map(&self) -> &CHashMap<Hash, Arc<FullTransaction>> {
 		&self.map
 	}
 
@@ -96,8 +90,8 @@ where
 		self.validate_transaction(&tx_hash, &tx)?;
 		self.check_chain_exist(&tx_hash)?;
 
-		let pool_tx = Arc::new(PoolTransaction {
-			tx: Arc::new(tx),
+		let pool_tx = Arc::new(FullTransaction {
+			tx,
 			tx_hash: tx_hash.clone(),
 		});
 
@@ -161,8 +155,8 @@ where
 }
 
 async fn process_buffer(
-	buffer_rx: Receiver<Arc<PoolTransaction>>,
-	queue: Arc<RwLock<Vec<Arc<PoolTransaction>>>>,
+	buffer_rx: Receiver<Arc<FullTransaction>>,
+	queue: Arc<RwLock<Vec<Arc<FullTransaction>>>>,
 ) {
 	let mut buffer_rx = buffer_rx;
 	loop {

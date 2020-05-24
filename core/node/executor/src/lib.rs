@@ -19,6 +19,8 @@ use std::sync::Arc;
 
 use crypto::address::{Address as AddressT, AddressImpl};
 use crypto::dsa::{Dsa, DsaImpl, KeyPair, Verifier};
+use crypto::hash::Hash as HashT;
+use crypto::hash::HashImpl;
 use node_db::DBTransaction;
 use node_executor_macro::dispatcher;
 pub use node_executor_primitives::CallResult;
@@ -29,8 +31,8 @@ use node_executor_primitives::{
 use node_statedb::{StateDB, StateDBGetter, StateDBStmt, TrieRoot};
 use primitives::codec::Encode;
 use primitives::{
-	codec, errors::CommonResult, BlockNumber, Nonce, PublicKey, SecretKey, Signature,
-	TransactionForHash, Witness,
+	codec, errors::CommonResult, BlockNumber, FullTransaction, Nonce, PublicKey, SecretKey,
+	Signature, TransactionForHash, Witness,
 };
 use primitives::{Address, Call, DBKey, DBValue, Hash, Params, Transaction};
 
@@ -84,11 +86,11 @@ struct ContextInner<'a> {
 	meta_statedb: Arc<StateDB>,
 	meta_state_root: Rc<Hash>,
 	meta_state: ContextState<'a>,
-	meta_txs: RefCell<Vec<Arc<Transaction>>>,
+	meta_txs: RefCell<Vec<Arc<FullTransaction>>>,
 	payload_statedb: Arc<StateDB>,
 	payload_state_root: Rc<Hash>,
 	payload_state: ContextState<'a>,
-	payload_txs: RefCell<Vec<Arc<Transaction>>>,
+	payload_txs: RefCell<Vec<Arc<FullTransaction>>>,
 	// to mark the context has already started to executed payload txs
 	payload_phase: Cell<bool>,
 }
@@ -171,12 +173,12 @@ impl<'a> Context<'a> {
 		Ok((Hash(root), transaction))
 	}
 
-	pub fn get_meta_txs(&self) -> CommonResult<(Hash, Vec<Arc<Transaction>>)> {
+	pub fn get_meta_txs(&self) -> CommonResult<(Hash, Vec<Arc<FullTransaction>>)> {
 		let txs = self.inner.meta_txs.borrow().clone();
 
 		let input = txs
 			.iter()
-			.map(|x| codec::encode(&TransactionForHash::new(&**x)))
+			.map(|x| codec::encode(&TransactionForHash::new(&x.tx)))
 			.collect::<Result<Vec<Vec<u8>>, _>>()?;
 		let txs_root = self.inner.trie_root.calc_ordered_trie_root(input);
 
@@ -192,16 +194,25 @@ impl<'a> Context<'a> {
 		Ok((Hash(root), transaction))
 	}
 
-	pub fn get_payload_txs(&self) -> CommonResult<(Hash, Vec<Arc<Transaction>>)> {
+	pub fn get_payload_txs(&self) -> CommonResult<(Hash, Vec<Arc<FullTransaction>>)> {
 		let txs = self.inner.payload_txs.borrow().clone();
 
 		let input = txs
 			.iter()
-			.map(|x| codec::encode(&TransactionForHash::new(&**x)))
+			.map(|x| codec::encode(&TransactionForHash::new(&x.tx)))
 			.collect::<Result<Vec<Vec<u8>>, _>>()?;
 		let txs_root = self.inner.trie_root.calc_ordered_trie_root(input);
 
 		Ok((Hash(txs_root), txs))
+	}
+
+	pub fn get_txs_root(&self, txs: &Vec<Arc<FullTransaction>>) -> CommonResult<Hash> {
+		let input = txs
+			.iter()
+			.map(|x| codec::encode(&TransactionForHash::new(&x.tx)))
+			.collect::<Result<Vec<Vec<u8>>, _>>()?;
+		let txs_root = self.inner.trie_root.calc_ordered_trie_root(input);
+		Ok(Hash(txs_root))
 	}
 }
 
@@ -220,17 +231,19 @@ impl ValidatorT for Validator {
 }
 
 pub struct Executor {
+	hash: Arc<HashImpl>,
 	dsa: Arc<DsaImpl>,
 	address: Arc<AddressImpl>,
 	validator: Validator,
 }
 
 impl Executor {
-	pub fn new(dsa: Arc<DsaImpl>, address: Arc<AddressImpl>) -> Self {
+	pub fn new(hash: Arc<HashImpl>, dsa: Arc<DsaImpl>, address: Arc<AddressImpl>) -> Self {
 		let validator = Validator {
 			address: address.clone(),
 		};
 		Self {
+			hash,
 			dsa,
 			address,
 			validator,
@@ -331,9 +344,14 @@ impl Executor {
 		Dispatcher::execute_call::<Context>(module, context, sender, call)
 	}
 
-	pub fn execute_txs(&self, context: &Context, txs: Vec<Arc<Transaction>>) -> CommonResult<()> {
+	pub fn execute_txs(
+		&self,
+		context: &Context,
+		txs: Vec<Arc<FullTransaction>>,
+	) -> CommonResult<()> {
 		let mut txs_is_meta: Option<bool> = None;
 		for tx in &txs {
+			let tx = &tx.tx;
 			let call = &tx.call;
 			let module = &call.module;
 
@@ -363,6 +381,10 @@ impl Executor {
 				Dispatcher::execute_call::<Context>(module, context, sender.as_ref(), &call)?;
 		}
 
+		if txs_is_meta == Some(false) {
+			context.inner.payload_phase.set(true);
+		}
+
 		if context.inner.payload_phase.get() && txs_is_meta == Some(true) {
 			return Err(errors::ErrorKind::InvalidTxs(
 				"meta after payload not allowed".to_string(),
@@ -378,6 +400,26 @@ impl Executor {
 		}
 
 		Ok(())
+	}
+
+	pub fn hash_transaction(&self, tx: &Transaction) -> CommonResult<Hash> {
+		let transaction_for_hash = TransactionForHash::new(tx);
+		self.hash(&transaction_for_hash)
+	}
+
+	pub fn hash<D: Encode>(&self, data: &D) -> CommonResult<Hash> {
+		let encoded = codec::encode(data)?;
+		Ok(self.hash_slice(&encoded))
+	}
+
+	pub fn default_hash(&self) -> Hash {
+		Hash(vec![0u8; self.hash.length().into()])
+	}
+
+	fn hash_slice(&self, data: &[u8]) -> Hash {
+		let mut out = vec![0u8; self.hash.length().into()];
+		self.hash.hash(&mut out, data);
+		Hash(out)
 	}
 }
 

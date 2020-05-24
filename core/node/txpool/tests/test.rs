@@ -20,7 +20,8 @@ use tempfile::tempdir;
 use tokio::time::Duration;
 
 use node_chain::{module, Chain, ChainConfig};
-use node_txpool::{PoolTransaction, TxPool, TxPoolConfig};
+use node_txpool::{TxPool, TxPoolConfig};
+use primitives::FullTransaction;
 use utils_test::test_accounts;
 
 #[tokio::test]
@@ -49,8 +50,8 @@ async fn test_txpool() {
 		)
 		.unwrap();
 
-	let expected_queue = vec![Arc::new(PoolTransaction {
-		tx: Arc::new(tx.clone()),
+	let expected_queue = vec![Arc::new(FullTransaction {
+		tx: tx.clone(),
 		tx_hash: chain.hash_transaction(&tx.clone()).unwrap(),
 	})];
 

@@ -21,17 +21,11 @@ use serde::Deserialize;
 use main_base::spec::{Spec, Tx};
 use node_executor::{module, Executor};
 use primitives::errors::{CommonError, CommonResult};
-use primitives::{Address, BlockNumber, Transaction};
+use primitives::{Address, BlockNumber, BuildBlockParams, FullTransaction, Transaction};
 
 use crate::errors;
 
-pub struct GenesisInfo {
-	pub meta_txs: Vec<Arc<Transaction>>,
-	pub payload_txs: Vec<Arc<Transaction>>,
-	pub timestamp: u64,
-}
-
-pub fn build_genesis(spec: &Spec, executor: &Executor) -> CommonResult<GenesisInfo> {
+pub fn build_genesis(spec: &Spec, executor: &Executor) -> CommonResult<BuildBlockParams> {
 	let mut meta_txs = vec![];
 	let mut payload_txs = vec![];
 
@@ -40,6 +34,8 @@ pub fn build_genesis(spec: &Spec, executor: &Executor) -> CommonResult<GenesisIn
 	for tx in &spec.genesis.txs {
 		let tx = build_tx(tx, &executor, &mut timestamp)?;
 		let is_meta = executor.is_meta_tx(&tx)?;
+		let tx_hash = executor.hash_transaction(&tx)?;
+		let tx = FullTransaction { tx, tx_hash };
 		match is_meta {
 			true => meta_txs.push(Arc::new(tx)),
 			false => payload_txs.push(Arc::new(tx)),
@@ -50,10 +46,13 @@ pub fn build_genesis(spec: &Spec, executor: &Executor) -> CommonResult<GenesisIn
 		"no timestamp specified".to_string(),
 	))?;
 
-	Ok(GenesisInfo {
+	let number = 0;
+
+	Ok(BuildBlockParams {
+		number,
+		timestamp,
 		meta_txs,
 		payload_txs,
-		timestamp,
 	})
 }
 
@@ -157,9 +156,8 @@ impl<'a> TryInto<module::solo::InitParams> for JsonParams<'a> {
 mod tests {
 	use crypto::address::AddressImpl;
 	use crypto::dsa::DsaImpl;
+	use crypto::hash::HashImpl;
 	use main_base::spec::{Basic, Genesis};
-
-	use crate::genesis::GenesisInfo;
 
 	use super::*;
 
@@ -261,18 +259,21 @@ mod tests {
 		};
 
 		let executor = Executor::new(
+			Arc::new(HashImpl::Blake2b256),
 			Arc::new(DsaImpl::Ed25519),
 			Arc::new(AddressImpl::Blake2b160),
 		);
 
-		let GenesisInfo {
+		let BuildBlockParams {
+			number,
+			timestamp,
 			meta_txs,
 			payload_txs,
-			timestamp,
 		} = build_genesis(&spec, &executor).unwrap();
 
+		assert_eq!(number, 0);
+		assert_eq!(timestamp, 1587051962189);
 		assert_eq!(meta_txs.len(), 1);
 		assert_eq!(payload_txs.len(), 1);
-		assert_eq!(timestamp, 1587051962189);
 	}
 }

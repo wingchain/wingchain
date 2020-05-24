@@ -17,7 +17,6 @@ use std::sync::Arc;
 use std::task::Context;
 use std::time::{Duration, SystemTime};
 
-use futures::future::Either;
 use futures::prelude::*;
 use futures::task::Poll;
 use futures::{Future, Stream, TryStreamExt};
@@ -25,10 +24,11 @@ use log::info;
 use log::warn;
 use tokio::time::{delay_for, Delay};
 
-use node_consensus::support::ConsensusSupport;
+use node_consensus::{errors, support::ConsensusSupport};
 use node_executor::module;
 use node_executor_primitives::EmptyParams;
 use primitives::errors::CommonResult;
+use primitives::{BuildBlockParams, FullTransaction};
 
 pub struct Solo<S>
 where
@@ -59,21 +59,15 @@ where
 
 async fn start<S>(meta: module::solo::Meta, support: Arc<S>) -> CommonResult<()>
 where
-	S: ConsensusSupport + Send + Sync + 'static,
+	S: ConsensusSupport,
 {
 	let task = Scheduler::new(meta.block_interval)
 		.try_for_each(move |schedule_info| {
-			println!("{:?}", schedule_info.timestamp);
-
-			let txs = match support.get_transactions_in_txpool() {
-				Ok(txs) => txs,
-				Err(e) => {
-					warn!("Unable to get transactions in txpool: {}", e,);
-					return Either::Right(future::ready(Ok(())));
-				}
-			};
-
-			Either::Left(future::ready(Ok(())))
+			work(schedule_info, support.clone())
+				.map_err(|e| {
+					warn!("Encountered consensus error: {:?}", e);
+				})
+				.or_else(|_| future::ready(Ok(())))
 		})
 		.then(|res| {
 			if let Err(err) = res {
@@ -82,6 +76,81 @@ where
 			future::ready(Ok(()))
 		});
 	task.await
+}
+
+async fn work<S>(schedule_info: ScheduleInfo, support: Arc<S>) -> CommonResult<()>
+where
+	S: ConsensusSupport,
+{
+	let best_number = match support.get_best_number() {
+		Ok(number) => number.expect("qed"),
+		Err(e) => {
+			warn!("Unable to get best number: {}", e);
+			return Ok(());
+		}
+	};
+
+	let number = best_number + 1;
+	let timestamp = schedule_info.timestamp;
+
+	let txs = match support.get_transactions_in_txpool() {
+		Ok(txs) => txs,
+		Err(e) => {
+			warn!("Unable to get transactions in txpool: {}", e);
+			return Ok(());
+		}
+	};
+	let mut invalid_txs = vec![];
+	let mut meta_txs = vec![];
+	let mut payload_txs = vec![];
+
+	for tx in &txs {
+		if validate_transaction(tx, &support, number).is_err() {
+			invalid_txs.push(tx.clone());
+			continue;
+		}
+		let is_meta = support.is_meta_tx(&*(&tx.tx)).expect("qed");
+		match is_meta {
+			true => {
+				meta_txs.push(tx.clone());
+			}
+			false => {
+				payload_txs.push(tx.clone());
+			}
+		}
+	}
+
+	let build_block_params = BuildBlockParams {
+		number,
+		timestamp,
+		meta_txs,
+		payload_txs,
+	};
+
+	let commit_block_params = support.build_block(build_block_params)?;
+
+	support.commit_block(commit_block_params)?;
+
+	Ok(())
+}
+
+fn validate_transaction<S>(
+	tx: &Arc<FullTransaction>,
+	support: &Arc<S>,
+	number: u64,
+) -> CommonResult<()>
+where
+	S: ConsensusSupport,
+{
+	if support.get_transaction(&tx.tx_hash)?.is_some() {
+		return Err(errors::ErrorKind::Duplicated(tx.tx_hash.clone()).into());
+	}
+	let witness = tx.tx.witness.as_ref().expect("qed");
+	if witness.until < number {
+		return Err(errors::ErrorKind::ExceedUntil(tx.tx_hash.clone()).into());
+	}
+
+	Ok(())
 }
 
 fn get_solo_meta<S: ConsensusSupport>(support: Arc<S>) -> CommonResult<module::solo::Meta> {

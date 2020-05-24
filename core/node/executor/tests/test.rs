@@ -22,7 +22,7 @@ use node_db::DB;
 use node_executor::{module, Context, ContextEssence, Executor};
 use node_executor_primitives::ContextEnv;
 use node_statedb::{StateDB, TrieRoot};
-use primitives::{codec, Address, DBKey, Hash, Params, Transaction, TransactionForHash};
+use primitives::{codec, Address, DBKey, FullTransaction, Hash, Params, TransactionForHash};
 use utils_test::test_accounts;
 
 #[test]
@@ -49,35 +49,46 @@ fn test_executor() {
 
 	let (account1, account2) = test_accounts(dsa.clone(), address.clone());
 
-	let executor = Executor::new(dsa, address);
+	let executor = Executor::new(hasher, dsa, address);
 
 	// block 0
-	let block_0_meta_txs = vec![Arc::new(
-		executor
-			.build_tx(
-				None,
-				"system".to_string(),
-				"init".to_string(),
-				module::system::InitParams {
-					chain_id: "chain-test".to_string(),
-					timestamp,
-					until_gap: 20,
-				},
-			)
-			.unwrap(),
-	)];
-	let block_0_payload_txs = vec![Arc::new(
-		executor
-			.build_tx(
-				None,
-				"balance".to_string(),
-				"init".to_string(),
-				module::balance::InitParams {
-					endow: vec![(account1.3, 10)],
-				},
-			)
-			.unwrap(),
-	)];
+	let block_0_meta_txs = vec![executor
+		.build_tx(
+			None,
+			"system".to_string(),
+			"init".to_string(),
+			module::system::InitParams {
+				chain_id: "chain-test".to_string(),
+				timestamp,
+				until_gap: 20,
+			},
+		)
+		.unwrap()];
+	let block_0_payload_txs = vec![executor
+		.build_tx(
+			None,
+			"balance".to_string(),
+			"init".to_string(),
+			module::balance::InitParams {
+				endow: vec![(account1.3, 10)],
+			},
+		)
+		.unwrap()];
+
+	let block_0_meta_txs = block_0_meta_txs
+		.into_iter()
+		.map(|tx| {
+			let tx_hash = executor.hash_transaction(&tx).unwrap();
+			Arc::new(FullTransaction { tx, tx_hash })
+		})
+		.collect::<Vec<_>>();
+	let block_0_payload_txs = block_0_payload_txs
+		.into_iter()
+		.map(|tx| {
+			let tx_hash = executor.hash_transaction(&tx).unwrap();
+			Arc::new(FullTransaction { tx, tx_hash })
+		})
+		.collect::<Vec<_>>();
 
 	let number = 0;
 
@@ -207,7 +218,13 @@ fn test_executor() {
 
 	let block_1_meta_txs = vec![];
 
-	let block_1_payload_txs = vec![Arc::new(tx)];
+	let block_1_payload_txs = vec![tx]
+		.into_iter()
+		.map(|tx| {
+			let tx_hash = executor.hash_transaction(&tx).unwrap();
+			Arc::new(FullTransaction { tx, tx_hash })
+		})
+		.collect::<Vec<_>>();
 
 	let number = 1;
 	let timestamp = timestamp + 1;
@@ -249,16 +266,16 @@ fn test_executor() {
 	);
 }
 
-fn expected_txs_root(txs: &Vec<Arc<Transaction>>) -> Hash {
+fn expected_txs_root(txs: &Vec<Arc<FullTransaction>>) -> Hash {
 	let trie_root = TrieRoot::new(Arc::new(HashImpl::Blake2b256)).unwrap();
 	let txs = txs
 		.into_iter()
-		.map(|x| codec::encode(&TransactionForHash::new(&**x)).unwrap());
+		.map(|x| codec::encode(&TransactionForHash::new(&x.tx)).unwrap());
 	Hash(trie_root.calc_ordered_trie_root(txs))
 }
 
-fn expected_block_0_meta_state_root(txs: &Vec<Arc<Transaction>>) -> Hash {
-	let tx = &txs[0]; // use the last tx
+fn expected_block_0_meta_state_root(txs: &Vec<Arc<FullTransaction>>) -> Hash {
+	let tx = &txs[0].tx; // use the last tx
 	let params: module::system::InitParams = codec::decode(&tx.call.params.0[..]).unwrap();
 
 	let data = vec![
@@ -295,8 +312,8 @@ fn expected_block_0_meta_state_root(txs: &Vec<Arc<Transaction>>) -> Hash {
 	Hash(state_root)
 }
 
-fn expected_block_0_payload_state_root(txs: &Vec<Arc<Transaction>>) -> Hash {
-	let tx = &txs[0]; // use the last tx
+fn expected_block_0_payload_state_root(txs: &Vec<Arc<FullTransaction>>) -> Hash {
+	let tx = &txs[0].tx; // use the last tx
 	let params: module::balance::InitParams = codec::decode(&tx.call.params.0[..]).unwrap();
 
 	let (account, balance) = &params.endow[0];
@@ -333,10 +350,10 @@ fn expected_block_0_payload_state_root(txs: &Vec<Arc<Transaction>>) -> Hash {
 }
 
 fn expected_block_1_payload_state_root(
-	block_0_txs: Vec<Arc<Transaction>>,
-	block_1_txs: Vec<Arc<Transaction>>,
+	block_0_txs: Vec<Arc<FullTransaction>>,
+	block_1_txs: Vec<Arc<FullTransaction>>,
 ) -> Hash {
-	let tx = &block_0_txs[0]; // use the last tx
+	let tx = &block_0_txs[0].tx; // use the last tx
 	let params: module::balance::InitParams = codec::decode(&tx.call.params.0[..]).unwrap();
 	let (account1, balance) = &params.endow[0];
 
@@ -371,7 +388,7 @@ fn expected_block_1_payload_state_root(
 
 	db.write(transaction).unwrap();
 
-	let tx = &block_1_txs[0]; // use the last tx
+	let tx = &block_1_txs[0].tx; // use the last tx
 	let params: module::balance::TransferParams = codec::decode(&tx.call.params.0[..]).unwrap();
 
 	let (account2, value) = (&params.recipient, params.value);

@@ -26,6 +26,8 @@ use node_txpool::{TxPool, TxPoolConfig};
 
 #[tokio::test]
 async fn test_consensus_solo() {
+	env_logger::init();
+
 	let chain = get_chain();
 
 	let txpool_config = TxPoolConfig {

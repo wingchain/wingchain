@@ -94,7 +94,7 @@ fn gen_transfer_tx(
 	account1: &(SecretKey, PublicKey, KeyPairImpl, Address),
 	account2: &(SecretKey, PublicKey, KeyPairImpl, Address),
 ) -> Transaction {
-	let until = 1u32;
+	let until = 1u64;
 	let tx = chain
 		.build_transaction(
 			Some((account1.0.clone(), nonce, until)),
@@ -129,7 +129,8 @@ method = "init"
 params = '''
 {
     "chain_id": "chain-test",
-    "timestamp": "2020-04-29T15:51:36.502+08:00"
+    "timestamp": "2020-04-29T15:51:36.502+08:00",
+	"until_gap" : 20
 }
 '''
 

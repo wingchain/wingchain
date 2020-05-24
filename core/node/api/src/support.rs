@@ -92,7 +92,7 @@ where
 	}
 	async fn get_transaction_in_txpool(&self, tx_hash: &Hash) -> CommonResult<Option<Transaction>> {
 		let tx = match self.txpool.get_map().get(tx_hash) {
-			Some(tx) => (*(*tx).tx).clone(),
+			Some(tx) => tx.tx.clone(),
 			None => return Ok(None),
 		};
 		Ok(Some(tx))

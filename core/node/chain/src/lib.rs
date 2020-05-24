@@ -17,11 +17,11 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use log::info;
+use log::{debug, info};
 
 use crypto::address::AddressImpl;
 use crypto::dsa::DsaImpl;
-use crypto::hash::{Hash as HashT, HashImpl};
+use crypto::hash::HashImpl;
 use main_base::spec::Spec;
 use node_db::{DBTransaction, DB};
 pub use node_executor::module;
@@ -31,14 +31,16 @@ use node_statedb::{StateDB, TrieRoot};
 use primitives::codec::{Decode, Encode};
 use primitives::errors::CommonResult;
 use primitives::{
-	codec, Address, Block, BlockNumber, Body, Call, DBKey, Executed, FullBlock, Hash, Header,
-	Nonce, SecretKey, Transaction, TransactionForHash,
+	codec, Address, Block, BlockNumber, Body, BuildBlockParams, Call, CommitBlockParams, DBKey,
+	Executed, Hash, Header, Nonce, SecretKey, Transaction,
 };
 
-use crate::genesis::{build_genesis, GenesisInfo};
+use crate::genesis::build_genesis;
 
 pub mod errors;
 mod genesis;
+
+pub type ChainCommitBlockParams = CommitBlockParams<DBTransaction>;
 
 pub struct ChainConfig {
 	pub home: PathBuf,
@@ -81,7 +83,7 @@ impl Chain {
 		)?);
 		let trie_root = Arc::new(TrieRoot::new(hash.clone())?);
 
-		let executor = Executor::new(dsa.clone(), address.clone());
+		let executor = Executor::new(hash.clone(), dsa.clone(), address.clone());
 
 		let basic = Arc::new(Basic { hash, dsa, address });
 
@@ -105,13 +107,11 @@ impl Chain {
 	}
 
 	pub fn hash_transaction(&self, tx: &Transaction) -> CommonResult<Hash> {
-		let transaction_for_hash = TransactionForHash::new(tx);
-		self.hash(&transaction_for_hash)
+		self.executor.hash_transaction(tx)
 	}
 
 	pub fn hash<D: Encode>(&self, data: &D) -> CommonResult<Hash> {
-		let encoded = codec::encode(data)?;
-		Ok(self.hash_slice(&encoded))
+		self.executor.hash(data)
 	}
 
 	pub fn validate_transaction(
@@ -257,7 +257,7 @@ impl Chain {
 			None => {
 				return Err(
 					errors::ErrorKind::Data(format!("unknown block hash: {}", block_hash)).into(),
-				)
+				);
 			}
 		};
 
@@ -268,7 +268,7 @@ impl Chain {
 					"not executed block hash: {}",
 					block_hash
 				))
-				.into())
+				.into());
 			}
 		};
 
@@ -323,10 +323,151 @@ impl Chain {
 		Ok(result)
 	}
 
-	fn hash_slice(&self, data: &[u8]) -> Hash {
-		let mut out = vec![0u8; self.basic.hash.length().into()];
-		self.basic.hash.hash(&mut out, data);
-		Hash(out)
+	pub fn is_meta_tx(&self, tx: &Transaction) -> CommonResult<bool> {
+		self.executor.is_meta_tx(tx)
+	}
+
+	pub fn build_block(
+		&self,
+		build_block_params: BuildBlockParams,
+	) -> CommonResult<ChainCommitBlockParams> {
+		let number = build_block_params.number;
+		let timestamp = build_block_params.timestamp;
+		let parent_number = number - 1;
+		let parent_hash = match self.get_block_hash(&parent_number)? {
+			Some(parent_hash) => parent_hash,
+			None => {
+				return Err(errors::ErrorKind::Data(format!(
+					"invalid block number: {}",
+					parent_number
+				))
+				.into())
+			}
+		};
+		let env = ContextEnv { number, timestamp };
+
+		let parent_header = match self.get_header(&parent_hash)? {
+			Some(header) => header,
+			None => {
+				return Err(
+					errors::ErrorKind::Data(format!("invalid block hash: {}", parent_hash)).into(),
+				)
+			}
+		};
+		let meta_state_root = parent_header.meta_state_root.clone();
+		let executed_gap = parent_header.payload_executed_gap;
+
+		let mut actual_executed_hash = parent_hash.clone();
+		let mut actual_executed_header = parent_header;
+		let mut actual_executed_gap = 0;
+		let mut actual_executed: Option<Executed> = None;
+		while actual_executed_gap <= executed_gap {
+			actual_executed = self.get_executed(&actual_executed_hash)?;
+			if actual_executed.is_none() {
+				actual_executed_hash = actual_executed_header.parent_hash;
+				actual_executed_header = match self.get_header(&actual_executed_hash)? {
+					Some(header) => header,
+					None => {
+						return Err(errors::ErrorKind::Data(format!(
+							"invalid block hash: {}",
+							actual_executed_hash
+						))
+						.into())
+					}
+				};
+				actual_executed_gap = actual_executed_gap + 1;
+				continue;
+			}
+			break;
+		}
+
+		let actual_executed = match actual_executed {
+			Some(actual_executed) => actual_executed,
+			None => return Err(errors::ErrorKind::Data(format!("executed not found")).into()),
+		};
+
+		let block_executed_gap = actual_executed_gap + 1;
+		let block_executed = actual_executed;
+
+		let context_essence = ContextEssence::new(
+			env,
+			self.trie_root.clone(),
+			self.meta_statedb.clone(),
+			meta_state_root,
+			self.payload_statedb.clone(),
+			block_executed.payload_executed_state_root.clone(),
+		)?;
+
+		let context = Context::new(&context_essence)?;
+
+		self.executor
+			.execute_txs(&context, build_block_params.meta_txs)?;
+
+		let (meta_state_root, meta_transaction) = context.get_meta_update()?;
+		let (meta_txs_root, meta_txs) = context.get_meta_txs()?;
+
+		let payload_txs_root = context.get_txs_root(&build_block_params.payload_txs)?;
+		let payload_txs = build_block_params.payload_txs;
+
+		let meta_tx_hashes = meta_txs
+			.iter()
+			.map(|x| x.tx_hash.clone())
+			.collect::<Vec<_>>();
+		let payload_tx_hashes = payload_txs
+			.iter()
+			.map(|x| x.tx_hash.clone())
+			.collect::<Vec<_>>();
+
+		let header = Header {
+			number,
+			timestamp,
+			parent_hash,
+			meta_txs_root,
+			meta_state_root,
+			payload_txs_root,
+			payload_executed_gap: block_executed_gap,
+			payload_executed_state_root: block_executed.payload_executed_state_root,
+		};
+
+		let block_hash = self.hash(&header)?;
+
+		let txs = meta_txs
+			.into_iter()
+			.chain(payload_txs.into_iter())
+			.collect::<Vec<_>>();
+
+		let block = ChainCommitBlockParams {
+			block_hash,
+			header,
+			body: Body {
+				meta_txs: meta_tx_hashes,
+				payload_txs: payload_tx_hashes,
+			},
+			txs,
+			meta_transaction,
+		};
+
+		Ok(block)
+	}
+
+	pub fn commit_block(&self, commit_block_params: ChainCommitBlockParams) -> CommonResult<()> {
+		debug!("Commit block params: {:?}", commit_block_params);
+
+		let mut transaction = DBTransaction::new();
+
+		let number = commit_block_params.header.number;
+		let block_hash = commit_block_params.block_hash.clone();
+
+		commit_block(&mut transaction, commit_block_params)?;
+
+		self.db.write(transaction)?;
+
+		info!(
+			"Block committed: block number: {}, block hash: {:?}",
+			number, block_hash
+		);
+
+		Ok(())
 	}
 
 	fn get_spec(config: &ChainConfig) -> CommonResult<(bool, DB, Spec)> {
@@ -372,15 +513,15 @@ impl Chain {
 		let spec: Spec = toml::from_str(&spec_str)
 			.map_err(|e| errors::ErrorKind::Spec(format!("failed to parse spec file: {:?}", e)))?;
 
-		let GenesisInfo {
+		let BuildBlockParams {
+			number,
+			timestamp,
 			meta_txs,
 			payload_txs,
-			timestamp,
 		} = build_genesis(&spec, &self.executor)?;
 
-		let zero_hash = Hash(vec![0u8; self.basic.hash.length().into()]);
+		let zero_hash = self.executor.default_hash();
 
-		let number = 0;
 		let env = ContextEnv { number, timestamp };
 
 		let context_essence = ContextEssence::new(
@@ -403,38 +544,13 @@ impl Chain {
 		let (payload_state_root, payload_transaction) = context.get_payload_update()?;
 		let (payload_txs_root, payload_txs) = context.get_payload_txs()?;
 
-		drop(context);
-
-		// In common case, before reaching consensus and beginning to commit the new block, we should deref and clone Arc<Transaction>,
-		// however, for genesis block, we're sure Arc<Transaction> is released, and we can use try_unwrap.
-		let meta_txs = meta_txs
-			.into_iter()
-			.map(Arc::try_unwrap)
-			.collect::<Result<Vec<Transaction>, _>>()
-			.expect("qed");
-		let payload_txs = payload_txs
-			.into_iter()
-			.map(Arc::try_unwrap)
-			.collect::<Result<Vec<Transaction>, _>>()
-			.expect("qed");
-
-		let meta_txs = meta_txs
-			.into_iter()
-			.map(|x| self.hash_transaction(&x).map(|hash| (hash, x)))
-			.collect::<CommonResult<Vec<_>>>()?;
-
-		let payload_txs = payload_txs
-			.into_iter()
-			.map(|x| self.hash_transaction(&x).map(|hash| (hash, x)))
-			.collect::<CommonResult<Vec<_>>>()?;
-
 		let meta_tx_hashes = meta_txs
 			.iter()
-			.map(|(tx_hash, _)| tx_hash.clone())
+			.map(|x| x.tx_hash.clone())
 			.collect::<Vec<_>>();
 		let payload_tx_hashes = payload_txs
 			.iter()
-			.map(|(tx_hash, _)| tx_hash.clone())
+			.map(|x| x.tx_hash.clone())
 			.collect::<Vec<_>>();
 
 		let header = Header {
@@ -455,15 +571,15 @@ impl Chain {
 			.chain(payload_txs.into_iter())
 			.collect::<Vec<_>>();
 
-		let block = FullBlock {
-			number,
-			block_hash,
+		let block = ChainCommitBlockParams {
+			block_hash: block_hash.clone(),
 			header,
 			body: Body {
 				meta_txs: meta_tx_hashes,
 				payload_txs: payload_tx_hashes,
 			},
 			txs,
+			meta_transaction,
 		};
 
 		let executed = Executed {
@@ -472,11 +588,11 @@ impl Chain {
 
 		let mut transaction = DBTransaction::new();
 
-		commit_block(&mut transaction, &block, meta_transaction)?;
+		commit_block(&mut transaction, block)?;
 
 		commit_executed(
 			&mut transaction,
-			&block.block_hash,
+			&block_hash,
 			&executed,
 			payload_transaction,
 		)?;
@@ -485,7 +601,7 @@ impl Chain {
 
 		self.db.write(transaction)?;
 
-		info!("Genesis block inited: block hash: {:?}", block.block_hash);
+		info!("Genesis block inited: block hash: {:?}", block_hash);
 
 		Ok(())
 	}
@@ -493,11 +609,10 @@ impl Chain {
 
 fn commit_block(
 	transaction: &mut DBTransaction,
-	block: &FullBlock,
-	meta_transaction: DBTransaction,
+	block: ChainCommitBlockParams,
 ) -> CommonResult<()> {
 	// 1. meta state
-	transaction.extend(meta_transaction);
+	transaction.extend(block.meta_transaction);
 
 	let block_hash = &block.block_hash;
 
@@ -521,7 +636,9 @@ fn commit_block(
 	);
 
 	// 4. txs
-	for (tx_hash, tx) in &block.txs {
+	for tx in &block.txs {
+		let tx_hash = &tx.tx_hash;
+		let tx = &tx.tx;
 		transaction.put_owned(
 			node_db::columns::TX,
 			DBKey::from_slice(&tx_hash.0),
@@ -532,7 +649,7 @@ fn commit_block(
 	// 5. block hash
 	transaction.put_owned(
 		node_db::columns::BLOCK_HASH,
-		DBKey::from_slice(&codec::encode(&block.number)?),
+		DBKey::from_slice(&codec::encode(&block.header.number)?),
 		codec::encode(&block.block_hash)?,
 	);
 
@@ -540,7 +657,7 @@ fn commit_block(
 	transaction.put_owned(
 		node_db::columns::GLOBAL,
 		DBKey::from_slice(node_db::global_key::BEST_NUMBER),
-		codec::encode(&block.number)?,
+		codec::encode(&block.header.number)?,
 	);
 	Ok(())
 }
