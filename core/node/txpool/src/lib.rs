@@ -171,6 +171,7 @@ fn get_system_meta<S: TxPoolSupport>(support: Arc<S>) -> CommonResult<module::sy
 	let block_number = support.get_best_number()?.expect("qed");
 	support.execute_call_with_block_number(
 		&block_number,
+		None,
 		"system".to_string(),
 		"get_meta".to_string(),
 		EmptyParams,

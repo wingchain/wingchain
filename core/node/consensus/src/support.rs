@@ -20,7 +20,9 @@ use node_txpool::support::TxPoolSupport;
 use node_txpool::TxPool;
 use primitives::codec::{Decode, Encode};
 use primitives::errors::CommonResult;
-use primitives::{BlockNumber, BuildBlockParams, FullTransaction, Hash, Header, Transaction};
+use primitives::{
+	Address, BlockNumber, BuildBlockParams, FullTransaction, Hash, Header, Transaction,
+};
 
 #[async_trait]
 pub trait ConsensusSupport {
@@ -31,6 +33,7 @@ pub trait ConsensusSupport {
 	fn execute_call_with_block_number<P: Encode, R: Decode>(
 		&self,
 		block_number: &BlockNumber,
+		sender: Option<&Address>,
 		module: String,
 		method: String,
 		params: P,
@@ -40,7 +43,7 @@ pub trait ConsensusSupport {
 		&self,
 		build_block_params: BuildBlockParams,
 	) -> CommonResult<ChainCommitBlockParams>;
-	fn commit_block(&self, commit_block_params: ChainCommitBlockParams) -> CommonResult<()>;
+	async fn commit_block(&self, commit_block_params: ChainCommitBlockParams) -> CommonResult<()>;
 	fn get_transactions_in_txpool(&self) -> CommonResult<Vec<Arc<FullTransaction>>>;
 }
 
@@ -82,12 +85,13 @@ where
 	fn execute_call_with_block_number<P: Encode, R: Decode>(
 		&self,
 		block_number: &BlockNumber,
+		sender: Option<&Address>,
 		module: String,
 		method: String,
 		params: P,
 	) -> CommonResult<R> {
 		self.chain
-			.execute_call_with_block_number(block_number, module, method, params)
+			.execute_call_with_block_number(block_number, sender, module, method, params)
 	}
 	fn is_meta_tx(&self, tx: &Transaction) -> CommonResult<bool> {
 		self.chain.is_meta_tx(tx)
@@ -98,8 +102,8 @@ where
 	) -> CommonResult<ChainCommitBlockParams> {
 		self.chain.build_block(build_block_params)
 	}
-	fn commit_block(&self, commit_block_params: ChainCommitBlockParams) -> CommonResult<()> {
-		self.chain.commit_block(commit_block_params)
+	async fn commit_block(&self, commit_block_params: ChainCommitBlockParams) -> CommonResult<()> {
+		self.chain.commit_block(commit_block_params).await
 	}
 	fn get_transactions_in_txpool(&self) -> CommonResult<Vec<Arc<FullTransaction>>> {
 		let txs = (*self.txpool.get_queue().read()).clone();

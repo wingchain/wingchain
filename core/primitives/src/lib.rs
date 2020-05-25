@@ -105,14 +105,34 @@ pub struct CommitBlockParams<T> {
 	pub block_hash: Hash,
 	pub header: Header,
 	pub body: Body,
-	pub txs: Vec<Arc<FullTransaction>>,
+	pub meta_txs: Vec<Arc<FullTransaction>>,
+	pub payload_txs: Vec<Arc<FullTransaction>>,
 	pub meta_transaction: T,
 }
 
+#[derive(Debug, PartialEq)]
 pub struct BuildBlockParams {
 	pub number: BlockNumber,
 	pub timestamp: u64,
 	pub meta_txs: Vec<Arc<FullTransaction>>,
+	pub payload_txs: Vec<Arc<FullTransaction>>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct CommitExecuteParams<T> {
+	pub block_hash: Hash,
+	pub number: BlockNumber,
+	pub executed: Executed,
+	pub payload_transaction: T,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct BuildExecuteParams {
+	pub number: BlockNumber,
+	pub timestamp: u64,
+	pub block_hash: Hash,
+	pub meta_state_root: Hash,
+	pub payload_state_root: Hash,
 	pub payload_txs: Vec<Arc<FullTransaction>>,
 }
 

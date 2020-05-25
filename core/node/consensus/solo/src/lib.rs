@@ -129,7 +129,7 @@ where
 
 	let commit_block_params = support.build_block(build_block_params)?;
 
-	support.commit_block(commit_block_params)?;
+	support.commit_block(commit_block_params).await?;
 
 	Ok(())
 }
@@ -157,6 +157,7 @@ fn get_solo_meta<S: ConsensusSupport>(support: Arc<S>) -> CommonResult<module::s
 	let block_number = support.get_best_number()?.expect("qed");
 	support.execute_call_with_block_number(
 		&block_number,
+		None,
 		"solo".to_string(),
 		"get_meta".to_string(),
 		EmptyParams,

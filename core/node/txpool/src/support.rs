@@ -15,7 +15,7 @@
 use node_chain::Chain;
 use primitives::codec::{Decode, Encode};
 use primitives::errors::CommonResult;
-use primitives::{BlockNumber, Hash, Transaction};
+use primitives::{Address, BlockNumber, Hash, Transaction};
 
 pub trait TxPoolSupport {
 	fn hash_transaction(&self, tx: &Transaction) -> CommonResult<Hash>;
@@ -25,6 +25,7 @@ pub trait TxPoolSupport {
 	fn execute_call_with_block_number<P: Encode, R: Decode>(
 		&self,
 		block_number: &BlockNumber,
+		sender: Option<&Address>,
 		module: String,
 		method: String,
 		params: P,
@@ -47,10 +48,11 @@ impl TxPoolSupport for Chain {
 	fn execute_call_with_block_number<P: Encode, R: Decode>(
 		&self,
 		block_number: &BlockNumber,
+		sender: Option<&Address>,
 		module: String,
 		method: String,
 		params: P,
 	) -> CommonResult<R> {
-		self.execute_call_with_block_number(block_number, module, method, params)
+		self.execute_call_with_block_number(block_number, sender, module, method, params)
 	}
 }

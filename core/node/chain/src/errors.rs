@@ -23,6 +23,9 @@ pub enum ErrorKind {
 
 	#[display(fmt = "Data error: {}", _0)]
 	Data(String),
+
+	#[display(fmt = "Execute queue error: {}", _0)]
+	ExecuteQueue(String),
 }
 
 impl Error for ErrorKind {}
