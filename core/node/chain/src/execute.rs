@@ -79,14 +79,82 @@ fn process_task(task: ExecuteTask, backend: &Arc<Backend>) -> CommonResult<()> {
 	debug!("Execute task: {:?}", task);
 
 	let number = task.number;
-	let block_hash = task.block_hash.clone();
 
-	let executed = backend.get_executed(&task.parent_hash).map_err(|e| {
-		errors::ErrorKind::ExecuteQueue(format!(
-			"Unable to get executed: block number: {}, block hash: {}, {}",
-			number, block_hash, e
-		))
-	})?;
+	let executed_number = backend
+		.get_executed_number()?
+		.ok_or(errors::ErrorKind::ExecuteQueue(format!(
+			"Unable to get executed_number"
+		)))?;
+
+	for current_number in (executed_number + 1)..number {
+		process_number(current_number, None, backend)?;
+	}
+	process_number(number, Some(task), backend)?;
+
+	Ok(())
+}
+
+fn process_number(
+	current_number: BlockNumber,
+	task: Option<ExecuteTask>,
+	backend: &Arc<Backend>,
+) -> CommonResult<()> {
+	let current_task = match task {
+		Some(task) if task.number == current_number => task,
+		_ => {
+			let block_hash =
+				backend
+					.get_block_hash(&current_number)?
+					.ok_or(errors::ErrorKind::ExecuteQueue(format!(
+						"Unable to get block hash: {}",
+						current_number
+					)))?;
+			let block = backend
+				.get_block(&block_hash)?
+				.ok_or(errors::ErrorKind::ExecuteQueue(format!(
+					"Unable to get block header: {}",
+					block_hash
+				)))?;
+			let payload_txs = block
+				.body
+				.payload_txs
+				.into_iter()
+				.map(|tx_hash| {
+					backend.get_transaction(&tx_hash).and_then(|x| {
+						x.ok_or(
+							errors::ErrorKind::ExecuteQueue(format!(
+								"Unable to get transaction: {}",
+								tx_hash
+							))
+							.into(),
+						)
+						.map(|tx| Arc::new(FullTransaction { tx, tx_hash }))
+					})
+				})
+				.collect::<CommonResult<Vec<_>>>()?;
+			let task = ExecuteTask {
+				number: current_number,
+				timestamp: block.header.timestamp,
+				block_hash,
+				parent_hash: block.header.parent_hash,
+				meta_state_root: block.header.meta_state_root,
+				payload_txs,
+			};
+			task
+		}
+	};
+
+	let number = current_task.number;
+	let block_hash = current_task.block_hash.clone();
+
+	let executed = backend
+		.get_executed(&current_task.parent_hash)
+		.map_err(|e| {
+			errors::ErrorKind::ExecuteQueue(format!(
+				"Unable to get executed: block number: {}, block hash: {}, {}",
+				number, block_hash, e
+			))
+		})?;
 
 	let executed = match executed {
 		Some(executed) => executed,
@@ -95,17 +163,17 @@ fn process_task(task: ExecuteTask, backend: &Arc<Backend>) -> CommonResult<()> {
 				"Block not executed: block number: {}, block hash: {}",
 				number, block_hash
 			))
-			.into())
+			.into());
 		}
 	};
 
 	let build_execute_params = BuildExecuteParams {
-		number: task.number,
-		timestamp: task.timestamp,
-		block_hash: task.block_hash,
-		meta_state_root: task.meta_state_root,
+		number: current_task.number,
+		timestamp: current_task.timestamp,
+		block_hash: current_task.block_hash,
+		meta_state_root: current_task.meta_state_root,
 		payload_state_root: executed.payload_executed_state_root,
-		payload_txs: task.payload_txs,
+		payload_txs: current_task.payload_txs,
 	};
 
 	let commit_execute_params = backend.build_execute(build_execute_params).map_err(|e| {

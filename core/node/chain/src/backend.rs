@@ -128,6 +128,14 @@ impl Backend {
 		)
 	}
 
+	pub fn get_executed_number(&self) -> CommonResult<Option<BlockNumber>> {
+		self.db.get_with(
+			node_db::columns::GLOBAL,
+			node_db::global_key::EXECUTED_NUMBER,
+			|x| codec::decode(&x[..]),
+		)
+	}
+
 	pub fn get_confirmed_executed_number(&self) -> CommonResult<Option<BlockNumber>> {
 		let confirmed_number = match self.get_confirmed_number()? {
 			Some(confirmed_number) => confirmed_number,
@@ -343,40 +351,36 @@ impl Backend {
 			}
 		};
 		let meta_state_root = parent_header.meta_state_root.clone();
-		let executed_gap = parent_header.payload_executed_gap;
 
-		// TODO save executed_number
-		let mut actual_executed_hash = parent_hash.clone();
-		let mut actual_executed_header = parent_header;
-		let mut actual_executed_gap = 0;
-		let mut actual_executed: Option<Executed> = None;
-		while actual_executed_gap <= executed_gap {
-			actual_executed = self.get_executed(&actual_executed_hash)?;
-			if actual_executed.is_none() {
-				actual_executed_hash = actual_executed_header.parent_hash;
-				actual_executed_header = match self.get_header(&actual_executed_hash)? {
-					Some(header) => header,
-					None => {
-						return Err(errors::ErrorKind::Data(format!(
-							"invalid block hash: {}",
-							actual_executed_hash
-						))
-						.into());
-					}
-				};
-				actual_executed_gap = actual_executed_gap + 1;
-				continue;
+		let executed_number = match self.get_executed_number()? {
+			Some(actual_executed_number) => actual_executed_number,
+			None => {
+				return Err(errors::ErrorKind::Data(format!("executed number not found")).into())
 			}
-			break;
-		}
-
-		let actual_executed = match actual_executed {
+		};
+		let executed_block_hash = match self.get_block_hash(&executed_number)? {
+			Some(executed_block_hash) => executed_block_hash,
+			None => {
+				return Err(errors::ErrorKind::Data(format!(
+					"invalid block number: {}",
+					executed_number
+				))
+				.into());
+			}
+		};
+		let executed = match self.get_executed(&executed_block_hash)? {
 			Some(actual_executed) => actual_executed,
-			None => return Err(errors::ErrorKind::Data(format!("executed not found")).into()),
+			None => {
+				return Err(errors::ErrorKind::Data(format!(
+					"executed not found, block_hash: {}",
+					executed_block_hash
+				))
+				.into())
+			}
 		};
 
-		let block_executed_gap = actual_executed_gap + 1;
-		let block_executed = actual_executed;
+		let block_executed_gap = (number - executed_number) as i8;
+		let block_executed = executed;
 
 		let context_essence = ContextEssence::new(
 			env,
