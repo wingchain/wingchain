@@ -120,25 +120,25 @@ impl Backend {
 		self.basic.clone()
 	}
 
-	pub fn get_best_number(&self) -> CommonResult<Option<BlockNumber>> {
+	pub fn get_confirmed_number(&self) -> CommonResult<Option<BlockNumber>> {
 		self.db.get_with(
 			node_db::columns::GLOBAL,
-			node_db::global_key::BEST_NUMBER,
+			node_db::global_key::CONFIRMED_NUMBER,
 			|x| codec::decode(&x[..]),
 		)
 	}
 
-	pub fn get_executed_number(&self) -> CommonResult<Option<BlockNumber>> {
-		let best_number = match self.get_best_number()? {
-			Some(best_number) => best_number,
+	pub fn get_confirmed_executed_number(&self) -> CommonResult<Option<BlockNumber>> {
+		let confirmed_number = match self.get_confirmed_number()? {
+			Some(confirmed_number) => confirmed_number,
 			None => return Ok(None),
 		};
 
 		let block_hash = self
-			.get_block_hash(&best_number)?
+			.get_block_hash(&confirmed_number)?
 			.ok_or(errors::ErrorKind::Data(format!(
 				"missing block hash: number: {}",
-				best_number
+				confirmed_number
 			)))?;
 
 		let header = self
@@ -148,12 +148,12 @@ impl Backend {
 				block_hash
 			)))?;
 
-		let executed_number = match best_number {
+		let confirmed_executed_number = match confirmed_number {
 			0 => None,
-			_ => Some(best_number - header.payload_executed_gap as u64),
+			_ => Some(confirmed_number - header.payload_executed_gap as u64),
 		};
 
-		Ok(executed_number)
+		Ok(confirmed_executed_number)
 	}
 
 	pub fn get_block_hash(&self, number: &BlockNumber) -> CommonResult<Option<Hash>> {
@@ -345,6 +345,7 @@ impl Backend {
 		let meta_state_root = parent_header.meta_state_root.clone();
 		let executed_gap = parent_header.payload_executed_gap;
 
+		// TODO save executed_number
 		let mut actual_executed_hash = parent_hash.clone();
 		let mut actual_executed_header = parent_header;
 		let mut actual_executed_gap = 0;
@@ -520,7 +521,10 @@ impl Backend {
 		let db_path = config.home.join(main_base::DATA).join(main_base::DB);
 		let db = DB::open(&db_path)?;
 		let genesis_inited = db
-			.get(node_db::columns::GLOBAL, node_db::global_key::BEST_NUMBER)?
+			.get(
+				node_db::columns::GLOBAL,
+				node_db::global_key::CONFIRMED_NUMBER,
+			)?
 			.is_some();
 		let spec = match genesis_inited {
 			true => {
@@ -706,10 +710,10 @@ fn commit_block(
 		codec::encode(&commit_block_params.block_hash)?,
 	);
 
-	// 6. number
+	// 6. best number
 	transaction.put_owned(
 		node_db::columns::GLOBAL,
-		DBKey::from_slice(node_db::global_key::BEST_NUMBER),
+		DBKey::from_slice(node_db::global_key::CONFIRMED_NUMBER),
 		codec::encode(&commit_block_params.header.number)?,
 	);
 	Ok(())
@@ -727,6 +731,13 @@ fn commit_executed(
 		node_db::columns::EXECUTED,
 		DBKey::from_slice(&commit_execute_params.block_hash.0),
 		codec::encode(&commit_execute_params.executed)?,
+	);
+
+	// 3. executed number
+	transaction.put_owned(
+		node_db::columns::GLOBAL,
+		DBKey::from_slice(node_db::global_key::EXECUTED_NUMBER),
+		codec::encode(&commit_execute_params.number)?,
 	);
 	Ok(())
 }

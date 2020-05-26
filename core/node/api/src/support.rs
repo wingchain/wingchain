@@ -24,8 +24,8 @@ use primitives::{Address, Block, BlockNumber, Call, Hash, Header, Transaction};
 #[async_trait]
 pub trait ApiSupport {
 	async fn hash_transaction(&self, tx: &Transaction) -> CommonResult<Hash>;
-	async fn get_best_number(&self) -> CommonResult<Option<BlockNumber>>;
-	async fn get_executed_number(&self) -> CommonResult<Option<BlockNumber>>;
+	async fn get_confirmed_number(&self) -> CommonResult<Option<BlockNumber>>;
+	async fn get_confirmed_executed_number(&self) -> CommonResult<Option<BlockNumber>>;
 	async fn get_block_hash(&self, number: &BlockNumber) -> CommonResult<Option<Hash>>;
 	async fn get_block(&self, block_hash: &Hash) -> CommonResult<Option<Block>>;
 	async fn get_header(&self, block_hash: &Hash) -> CommonResult<Option<Header>>;
@@ -66,11 +66,11 @@ where
 	async fn hash_transaction(&self, tx: &Transaction) -> CommonResult<Hash> {
 		self.chain.hash_transaction(tx)
 	}
-	async fn get_best_number(&self) -> CommonResult<Option<BlockNumber>> {
-		self.chain.get_best_number()
+	async fn get_confirmed_number(&self) -> CommonResult<Option<BlockNumber>> {
+		self.chain.get_confirmed_number()
 	}
-	async fn get_executed_number(&self) -> CommonResult<Option<BlockNumber>> {
-		self.chain.get_executed_number()
+	async fn get_confirmed_executed_number(&self) -> CommonResult<Option<BlockNumber>> {
+		self.chain.get_confirmed_executed_number()
 	}
 	async fn get_block_hash(&self, number: &BlockNumber) -> CommonResult<Option<Hash>> {
 		self.chain.get_block_hash(number)

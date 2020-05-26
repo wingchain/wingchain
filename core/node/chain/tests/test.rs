@@ -48,13 +48,13 @@ async fn test_chain() {
 
 	let chain = Chain::new(config).unwrap();
 
-	let best_number = chain.get_best_number().unwrap();
+	let confirmed_number = chain.get_confirmed_number().unwrap();
 
-	assert_eq!(best_number, Some(0));
+	assert_eq!(confirmed_number, Some(0));
 
-	let executed_number = chain.get_executed_number().unwrap();
+	let confirmed_executed_number = chain.get_confirmed_executed_number().unwrap();
 
-	assert_eq!(executed_number, None);
+	assert_eq!(confirmed_executed_number, None);
 
 	let (expected_block_hash, expected_block, expected_executed, expected_tx) =
 		expected_data(&chain, &account1.3);

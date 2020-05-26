@@ -134,15 +134,15 @@ where
 		self.support.validate_transaction(&tx, true)?;
 		let witness = tx.witness.as_ref().expect("qed");
 
-		let best_number = self.support.get_best_number()?.expect("qed");
+		let confirmed_number = self.support.get_confirmed_number()?.expect("qed");
 		let until_gap = self.system_meta.until_gap;
-		let max_until = best_number + until_gap;
+		let max_until = confirmed_number + until_gap;
 
 		if witness.until > max_until {
 			return Err(errors::ErrorKind::InvalidUntil(tx_hash.clone()).into());
 		}
 
-		if witness.until <= best_number {
+		if witness.until <= confirmed_number {
 			return Err(errors::ErrorKind::ExceedUntil(tx_hash.clone()).into());
 		}
 
@@ -168,7 +168,7 @@ async fn process_buffer(
 }
 
 fn get_system_meta<S: TxPoolSupport>(support: Arc<S>) -> CommonResult<module::system::Meta> {
-	let block_number = support.get_best_number()?.expect("qed");
+	let block_number = support.get_confirmed_number()?.expect("qed");
 	support.execute_call_with_block_number(
 		&block_number,
 		None,

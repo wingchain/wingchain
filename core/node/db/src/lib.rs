@@ -242,8 +242,10 @@ pub mod columns {
 }
 
 pub mod global_key {
-	/// The best number of the chain
-	pub const BEST_NUMBER: &[u8] = b"best_number";
+	/// The confirmed number of the chain
+	pub const CONFIRMED_NUMBER: &[u8] = b"confirmed_number";
+	/// The executed number of the chain
+	pub const EXECUTED_NUMBER: &[u8] = b"executed_number";
 	/// spec
 	pub const SPEC: &[u8] = b"spec";
 }

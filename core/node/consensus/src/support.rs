@@ -26,7 +26,7 @@ use primitives::{
 
 #[async_trait]
 pub trait ConsensusSupport {
-	fn get_best_number(&self) -> CommonResult<Option<BlockNumber>>;
+	fn get_confirmed_number(&self) -> CommonResult<Option<BlockNumber>>;
 	fn get_block_hash(&self, number: &BlockNumber) -> CommonResult<Option<Hash>>;
 	fn get_header(&self, block_hash: &Hash) -> CommonResult<Option<Header>>;
 	fn get_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Transaction>>;
@@ -70,8 +70,8 @@ impl<TS> ConsensusSupport for DefaultConsensusSupport<TS>
 where
 	TS: TxPoolSupport + Send + Sync,
 {
-	fn get_best_number(&self) -> CommonResult<Option<BlockNumber>> {
-		self.chain.get_best_number()
+	fn get_confirmed_number(&self) -> CommonResult<Option<BlockNumber>> {
+		self.chain.get_confirmed_number()
 	}
 	fn get_block_hash(&self, number: &BlockNumber) -> CommonResult<Option<Hash>> {
 		self.chain.get_block_hash(number)

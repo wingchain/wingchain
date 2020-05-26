@@ -155,12 +155,12 @@ impl Chain {
 		self.backend.get_basic()
 	}
 
-	pub fn get_best_number(&self) -> CommonResult<Option<BlockNumber>> {
-		self.backend.get_best_number()
+	pub fn get_confirmed_number(&self) -> CommonResult<Option<BlockNumber>> {
+		self.backend.get_confirmed_number()
 	}
 
-	pub fn get_executed_number(&self) -> CommonResult<Option<BlockNumber>> {
-		self.backend.get_executed_number()
+	pub fn get_confirmed_executed_number(&self) -> CommonResult<Option<BlockNumber>> {
+		self.backend.get_confirmed_executed_number()
 	}
 
 	pub fn execute_call(

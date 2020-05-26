@@ -83,7 +83,7 @@ fn get_cases(chain: &Arc<Chain>) -> Vec<(String, String)> {
 
 	vec![
 		(
-			r#"{"jsonrpc": "2.0", "method": "chain_getBlockByNumber", "params": ["best"], "id": 1}"#
+			r#"{"jsonrpc": "2.0", "method": "chain_getBlockByNumber", "params": ["confirmed"], "id": 1}"#
 				.to_string(),
 			format!(r#"{{"jsonrpc":"2.0","result":{{"hash":"0x70a9ef34965b2cc61637e07324770ef547446f81fb63f2377a4c28c16c3c94c0","header":{{"number":"0x0000000000000000","timestamp":"0x00000171c4eb7136","parent_hash":"0x0000000000000000000000000000000000000000000000000000000000000000","meta_txs_root":"0x17462939e972f9cfe72553b9f56c18cd94ec8955a44a6012a350d9e4ac5f4a83","meta_state_root":"0x5e594917a6e59ef9260b411384550d016fc2314b209fdc1be3f401461c2a8cce","payload_txs_root":"0xc73b1740e53645a26e1926f9d910e560a99a601d14680deb6dc31eb26f321edc","payload_executed_gap":"0x01","payload_executed_state_root":"0x0000000000000000000000000000000000000000000000000000000000000000"}},"body":{{"meta_txs":["0x172006405359c1a2c08417272186e71e30b11db45f59a5f12c50ec7e658112df"],"payload_txs":["0x6745417d545c3e0f7d610cadfd1ee8d450a92e89fa74bb75777950a779f2aa94"]}}}},"id":1}}"#, ),
 		),

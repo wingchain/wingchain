@@ -82,7 +82,7 @@ async fn work<S>(schedule_info: ScheduleInfo, support: Arc<S>) -> CommonResult<(
 where
 	S: ConsensusSupport,
 {
-	let best_number = match support.get_best_number() {
+	let confirmed_number = match support.get_confirmed_number() {
 		Ok(number) => number.expect("qed"),
 		Err(e) => {
 			warn!("Unable to get best number: {}", e);
@@ -90,7 +90,7 @@ where
 		}
 	};
 
-	let number = best_number + 1;
+	let number = confirmed_number + 1;
 	let timestamp = schedule_info.timestamp;
 
 	let txs = match support.get_transactions_in_txpool() {
@@ -154,7 +154,7 @@ where
 }
 
 fn get_solo_meta<S: ConsensusSupport>(support: Arc<S>) -> CommonResult<module::solo::Meta> {
-	let block_number = support.get_best_number()?.expect("qed");
+	let block_number = support.get_confirmed_number()?.expect("qed");
 	support.execute_call_with_block_number(
 		&block_number,
 		None,

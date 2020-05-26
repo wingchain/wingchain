@@ -20,7 +20,7 @@ use primitives::{Address, BlockNumber, Hash, Transaction};
 pub trait TxPoolSupport {
 	fn hash_transaction(&self, tx: &Transaction) -> CommonResult<Hash>;
 	fn validate_transaction(&self, tx: &Transaction, witness_required: bool) -> CommonResult<()>;
-	fn get_best_number(&self) -> CommonResult<Option<BlockNumber>>;
+	fn get_confirmed_number(&self) -> CommonResult<Option<BlockNumber>>;
 	fn get_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Transaction>>;
 	fn execute_call_with_block_number<P: Encode, R: Decode>(
 		&self,
@@ -39,8 +39,8 @@ impl TxPoolSupport for Chain {
 	fn validate_transaction(&self, tx: &Transaction, witness_required: bool) -> CommonResult<()> {
 		self.validate_transaction(tx, witness_required)
 	}
-	fn get_best_number(&self) -> CommonResult<Option<BlockNumber>> {
-		self.get_best_number()
+	fn get_confirmed_number(&self) -> CommonResult<Option<BlockNumber>> {
+		self.get_confirmed_number()
 	}
 	fn get_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Transaction>> {
 		self.get_transaction(tx_hash)
