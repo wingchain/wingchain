@@ -24,13 +24,14 @@ use crypto::hash::HashImpl;
 use main_base::spec::Spec;
 use node_db::{DBTransaction, DB};
 use node_executor::{Context, ContextEssence, Executor};
-use node_executor_primitives::{CallResult, ContextEnv};
+use node_executor_primitives::ContextEnv;
 use node_statedb::{StateDB, TrieRoot};
 use primitives::codec::{self, Decode, Encode};
 use primitives::errors::CommonResult;
+use primitives::types::CallResult;
 use primitives::{
 	Address, Block, BlockNumber, Body, BuildBlockParams, BuildExecuteParams, Call, DBKey, Executed,
-	Hash, Header, Nonce, SecretKey, Transaction,
+	Hash, Header, Nonce, SecretKey, Transaction, TransactionResult,
 };
 
 use crate::genesis::build_genesis;
@@ -243,7 +244,7 @@ impl Backend {
 		block_hash: &Hash,
 		sender: Option<&Address>,
 		call: &Call,
-	) -> CommonResult<CommonResult<CallResult>> {
+	) -> CommonResult<TransactionResult> {
 		let header = match self.get_header(block_hash)? {
 			Some(header) => header,
 			None => {
@@ -293,7 +294,7 @@ impl Backend {
 		module: String,
 		method: String,
 		params: P,
-	) -> CommonResult<R> {
+	) -> CommonResult<CallResult<R>> {
 		let block_hash = self
 			.get_block_hash(block_number)?
 			.ok_or(errors::ErrorKind::Data(format!(
@@ -310,10 +311,13 @@ impl Backend {
 		module: String,
 		method: String,
 		params: P,
-	) -> CommonResult<R> {
+	) -> CommonResult<CallResult<R>> {
 		let call = self.build_transaction(None, module, method, params)?.call;
-		let result = self.execute_call(&block_hash, sender, &call)??;
-		let result = codec::decode(&result.0)?;
+		let result = self.execute_call(&block_hash, sender, &call)?;
+		let result: CallResult<R> = match result {
+			Ok(result) => Ok(codec::decode(&result)?),
+			Err(e) => Err(e),
+		};
 		Ok(result)
 	}
 

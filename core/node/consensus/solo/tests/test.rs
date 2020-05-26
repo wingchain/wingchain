@@ -117,6 +117,7 @@ async fn test_consensus_solo() {
 			"get_balance".to_string(),
 			node_executor_primitives::EmptyParams,
 		)
+		.unwrap()
 		.unwrap();
 	assert_eq!(balance, 9);
 
@@ -134,6 +135,7 @@ async fn test_consensus_solo() {
 			"get_balance".to_string(),
 			node_executor_primitives::EmptyParams,
 		)
+		.unwrap()
 		.unwrap();
 	assert_eq!(balance, 7);
 	let block2 = chain
@@ -150,6 +152,7 @@ async fn test_consensus_solo() {
 			"get_balance".to_string(),
 			node_executor_primitives::EmptyParams,
 		)
+		.unwrap()
 		.unwrap();
 	assert_eq!(balance, 4);
 	let block3 = chain

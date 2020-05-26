@@ -15,11 +15,11 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use node_chain::{CallResult, Chain};
+use node_chain::Chain;
 use node_txpool::support::TxPoolSupport;
 use node_txpool::TxPool;
 use primitives::errors::CommonResult;
-use primitives::{Address, Block, BlockNumber, Call, Hash, Header, Transaction};
+use primitives::{Address, Block, BlockNumber, Call, Hash, Header, Transaction, TransactionResult};
 
 #[async_trait]
 pub trait ApiSupport {
@@ -38,7 +38,7 @@ pub trait ApiSupport {
 		block_hash: &Hash,
 		sender: Option<&Address>,
 		call: &Call,
-	) -> CommonResult<CommonResult<CallResult>>;
+	) -> CommonResult<TransactionResult>;
 }
 
 pub struct DefaultApiSupport<TS>
@@ -102,7 +102,7 @@ where
 		block_hash: &Hash,
 		sender: Option<&Address>,
 		call: &Call,
-	) -> CommonResult<CommonResult<CallResult>> {
+	) -> CommonResult<TransactionResult> {
 		self.chain.execute_call(block_hash, sender, call)
 	}
 }

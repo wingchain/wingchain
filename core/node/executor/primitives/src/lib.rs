@@ -17,7 +17,7 @@ use std::rc::Rc;
 
 use codec::{Decode, Encode};
 use primitives::errors::CommonResult;
-use primitives::{codec, Address, BlockNumber, Call, DBValue};
+use primitives::{codec, Address, BlockNumber, Call, DBValue, Event, TransactionResult};
 
 pub mod errors;
 
@@ -43,7 +43,7 @@ where
 		&self,
 		sender: Option<&Address>,
 		call: &Call,
-	) -> CommonResult<CommonResult<CallResult>>;
+	) -> CommonResult<TransactionResult>;
 }
 
 pub struct ContextEnv {
@@ -57,6 +57,8 @@ pub trait Context: Clone {
 	fn meta_set(&self, key: &[u8], value: Option<DBValue>) -> CommonResult<()>;
 	fn payload_get(&self, key: &[u8]) -> CommonResult<Option<DBValue>>;
 	fn payload_set(&self, key: &[u8], value: Option<DBValue>) -> CommonResult<()>;
+	fn emit_event<E: Encode>(&self, event: E) -> CommonResult<()>;
+	fn drain_events(&self) -> CommonResult<Vec<Event>>;
 }
 
 pub trait Validator {
@@ -190,15 +192,6 @@ fn context_delete<C: Context>(context: &C, meta_module: bool, key: &[u8]) -> Com
 	match meta_module {
 		true => context.meta_set(key, None),
 		false => context.payload_set(key, None),
-	}
-}
-
-pub struct CallResult(pub Vec<u8>);
-
-impl CallResult {
-	pub fn from<E: Encode>(data: &E) -> CommonResult<Self> {
-		let vec = codec::encode(data)?;
-		Ok(Self(vec))
 	}
 }
 

@@ -202,8 +202,13 @@ pub async fn chain_execute_call<S: ApiSupport>(
 
 	let result = data
 		.execute_call(&block_hash, sender.as_ref(), &call)
-		.await??;
-	let result = result.0.into();
+		.await?;
+
+	let result: CommonResult<Vec<u8>> = result.map_err(|e| errors::ErrorKind::CallError(e).into());
+	let result = result?;
+
+	let result = result.into();
+
 	Ok(result)
 }
 

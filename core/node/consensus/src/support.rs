@@ -20,6 +20,7 @@ use node_txpool::support::TxPoolSupport;
 use node_txpool::TxPool;
 use primitives::codec::{Decode, Encode};
 use primitives::errors::CommonResult;
+use primitives::types::CallResult;
 use primitives::{
 	Address, BlockNumber, BuildBlockParams, FullTransaction, Hash, Header, Transaction,
 };
@@ -37,7 +38,7 @@ pub trait ConsensusSupport {
 		module: String,
 		method: String,
 		params: P,
-	) -> CommonResult<R>;
+	) -> CommonResult<CallResult<R>>;
 	fn is_meta_tx(&self, tx: &Transaction) -> CommonResult<bool>;
 	fn build_block(
 		&self,
@@ -89,7 +90,7 @@ where
 		module: String,
 		method: String,
 		params: P,
-	) -> CommonResult<R> {
+	) -> CommonResult<CallResult<R>> {
 		self.chain
 			.execute_call_with_block_number(block_number, sender, module, method, params)
 	}

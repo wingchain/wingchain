@@ -90,7 +90,7 @@ pub fn dispatcher(_attr: TokenStream, item: TokenStream) -> TokenStream {
 					other => Err(errors::ErrorKind::InvalidTxModule(other.to_string()).into()),
 				}
 			}
-			fn execute_call<C: ContextT>(module: &str, context: &C, sender: Option<&Address>, call: &Call) -> CommonResult<CommonResult<CallResult>>{
+			fn execute_call<C: ContextT>(module: &str, context: &C, sender: Option<&Address>, call: &Call) -> CommonResult<TransactionResult>{
 				match module {
 					#(#execute_call_ts_vec),*,
 					other => Err(errors::ErrorKind::InvalidTxModule(other.to_string()).into()),
@@ -158,9 +158,18 @@ pub fn module(_attr: TokenStream, item: TokenStream) -> TokenStream {
 						Err(_) => return Err(errors::ErrorKind::InvalidTxParams("codec error".to_string()).into()),
 					};
 					let result = self.#method_ident(sender, params);
-					let result = result.map(|x|x.and_then(|x|{
-						CallResult::from(&x)
-					}));
+
+					// CallResult to TransactionResult
+					let result = match result {
+						Ok(result) => {
+							let result = match result {
+								Ok(result) => Ok(codec::encode(&result)?),
+								Err(e) => Err(e),
+							};
+							Ok(result)
+						},
+						Err(e) => Err(e),
+					};
 					result
 				}
 			}
@@ -196,7 +205,7 @@ pub fn module(_attr: TokenStream, item: TokenStream) -> TokenStream {
 				}
 			}
 
-			fn execute_call(&self, sender: Option<&Address>, call: &Call) -> CommonResult<CommonResult<CallResult>> {
+			fn execute_call(&self, sender: Option<&Address>, call: &Call) -> CommonResult<TransactionResult> {
 				let params = &call.params.0[..];
 				let method = call.method.as_str();
 				match method {

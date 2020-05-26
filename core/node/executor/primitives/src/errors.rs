@@ -15,7 +15,7 @@
 use std::error::Error;
 use std::fmt::Debug;
 
-use primitives::errors::{CommonError, CommonErrorKind, CommonResult, Display};
+use primitives::errors::{CommonError, CommonErrorKind, Display};
 
 #[derive(Debug, Display)]
 pub enum ErrorKind {
@@ -47,8 +47,4 @@ impl From<ErrorKind> for CommonError {
 	fn from(error: ErrorKind) -> Self {
 		CommonError::new(CommonErrorKind::Executor, Box::new(error))
 	}
-}
-
-pub fn execute_error_result<T>(message: &str) -> CommonResult<CommonResult<T>> {
-	Ok(Err(ErrorKind::ExecuteError(message.to_string()).into()))
 }

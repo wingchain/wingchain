@@ -16,12 +16,12 @@ use std::rc::Rc;
 
 use executor_macro::{call, module};
 use executor_primitives::{
-	errors::{self, execute_error_result},
-	CallResult, Context, ContextEnv, EmptyParams, Module as ModuleT, StorageValue, Validator,
+	errors, Context, ContextEnv, EmptyParams, Module as ModuleT, StorageValue, Validator,
 };
 use primitives::codec::{Decode, Encode};
 use primitives::errors::CommonResult;
-use primitives::{codec, Address, BlockNumber, Call};
+use primitives::types::CallResult;
+use primitives::{codec, Address, BlockNumber, Call, TransactionResult};
 
 pub struct Module<C>
 where
@@ -48,13 +48,9 @@ impl<C: Context> Module<C> {
 	}
 
 	#[call(write = true)]
-	fn init(
-		&self,
-		_sender: Option<&Address>,
-		params: InitParams,
-	) -> CommonResult<CommonResult<()>> {
+	fn init(&self, _sender: Option<&Address>, params: InitParams) -> CommonResult<CallResult<()>> {
 		if self.env.number != 0 {
-			return execute_error_result("not genesis");
+			return Ok(Err("not genesis".to_string()));
 		}
 		self.chain_id.set(&params.chain_id)?;
 		self.timestamp.set(&params.timestamp)?;
@@ -67,18 +63,18 @@ impl<C: Context> Module<C> {
 		&self,
 		_sender: Option<&Address>,
 		_params: EmptyParams,
-	) -> CommonResult<CommonResult<Meta>> {
+	) -> CommonResult<CallResult<Meta>> {
 		let chain_id = match self.chain_id.get()? {
 			Some(chain_id) => chain_id,
-			None => return execute_error_result("unexpected none"),
+			None => return Ok(Err("unexpected none".to_string())),
 		};
 		let timestamp = match self.timestamp.get()? {
 			Some(timestamp) => timestamp,
-			None => return execute_error_result("unexpected none"),
+			None => return Ok(Err("unexpected none".to_string())),
 		};
 		let until_gap = match self.until_gap.get()? {
 			Some(until_gap) => until_gap,
-			None => return execute_error_result("unexpected none"),
+			None => return Ok(Err("unexpected none".to_string())),
 		};
 		let meta = Meta {
 			chain_id,

@@ -23,7 +23,6 @@ use crypto::hash::Hash as HashT;
 use crypto::hash::HashImpl;
 use node_db::DBTransaction;
 use node_executor_macro::dispatcher;
-pub use node_executor_primitives::CallResult;
 pub use node_executor_primitives::ContextEnv;
 use node_executor_primitives::{
 	errors, Context as ContextT, Module as ModuleT, Validator as ValidatorT,
@@ -31,13 +30,14 @@ use node_executor_primitives::{
 use node_statedb::{StateDB, StateDBGetter, StateDBStmt, TrieRoot};
 use primitives::codec::Encode;
 use primitives::{
-	codec, errors::CommonResult, BlockNumber, FullTransaction, Nonce, PublicKey, SecretKey,
-	Signature, TransactionForHash, Witness,
+	codec, errors::CommonResult, BlockNumber, Event, FullTransaction, Nonce, PublicKey, Receipt,
+	SecretKey, Signature, TransactionForHash, TransactionResult, Witness,
 };
 use primitives::{Address, Call, DBKey, DBValue, Hash, Params, Transaction};
 
 const META_TXS_SIZE: usize = 64;
 const PAYLOAD_TXS_SIZE: usize = 512;
+const EVENT_SIZE: usize = 4;
 
 pub struct ContextEssence {
 	env: Rc<ContextEnv>,
@@ -91,6 +91,7 @@ struct ContextInner<'a> {
 	payload_state_root: Rc<Hash>,
 	payload_state: ContextState<'a>,
 	payload_txs: RefCell<Vec<Arc<FullTransaction>>>,
+	events: RefCell<Vec<Event>>,
 	// to mark the context has already started to executed payload txs
 	payload_phase: Cell<bool>,
 }
@@ -140,6 +141,16 @@ impl<'a> ContextT for Context<'a> {
 		buffer.insert(DBKey::from_slice(key), value);
 		Ok(())
 	}
+	fn emit_event<E: Encode>(&self, event: E) -> CommonResult<()> {
+		let mut events = self.inner.events.borrow_mut();
+		events.push(Event::from(&event)?);
+		Ok(())
+	}
+	fn drain_events(&self) -> CommonResult<Vec<Event>> {
+		let mut events = self.inner.events.borrow_mut();
+		let events = events.drain(..).collect();
+		Ok(events)
+	}
 }
 
 impl<'a> Context<'a> {
@@ -158,6 +169,7 @@ impl<'a> Context<'a> {
 			payload_state_root: context_essence.payload_state_root.clone(),
 			payload_state,
 			payload_txs: RefCell::new(Vec::with_capacity(PAYLOAD_TXS_SIZE)),
+			events: RefCell::new(Vec::with_capacity(EVENT_SIZE)),
 			payload_phase: Cell::new(false),
 		});
 
@@ -339,7 +351,7 @@ impl Executor {
 		context: &Context,
 		sender: Option<&Address>,
 		call: &Call,
-	) -> CommonResult<CommonResult<CallResult>> {
+	) -> CommonResult<TransactionResult> {
 		let module = &call.module;
 		Dispatcher::execute_call::<Context>(module, context, sender, call)
 	}
@@ -377,8 +389,16 @@ impl Executor {
 				Address(address)
 			});
 
-			let _result =
+			let result =
 				Dispatcher::execute_call::<Context>(module, context, sender.as_ref(), &call)?;
+			let events = context.drain_events()?;
+
+			let _receipt = Receipt {
+				block_number: context.env().number,
+				events,
+				executed: true,
+				result,
+			};
 		}
 
 		if txs_is_meta == Some(false) {

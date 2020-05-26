@@ -20,12 +20,12 @@ use crypto::dsa::DsaImpl;
 use crypto::hash::HashImpl;
 use node_db::DBTransaction;
 pub use node_executor::module;
-pub use node_executor::CallResult;
 use primitives::codec::{Decode, Encode};
 use primitives::errors::CommonResult;
+use primitives::types::CallResult;
 use primitives::{
 	Address, Block, BlockNumber, BuildBlockParams, Call, CommitBlockParams, CommitExecuteParams,
-	Executed, Hash, Header, Nonce, SecretKey, Transaction,
+	Executed, Hash, Header, Nonce, SecretKey, Transaction, TransactionResult,
 };
 
 use crate::backend::Backend;
@@ -168,7 +168,7 @@ impl Chain {
 		block_hash: &Hash,
 		sender: Option<&Address>,
 		call: &Call,
-	) -> CommonResult<CommonResult<CallResult>> {
+	) -> CommonResult<TransactionResult> {
 		self.backend.execute_call(block_hash, sender, call)
 	}
 
@@ -179,7 +179,7 @@ impl Chain {
 		module: String,
 		method: String,
 		params: P,
-	) -> CommonResult<R> {
+	) -> CommonResult<CallResult<R>> {
 		self.backend
 			.execute_call_with_block_number(block_number, sender, module, method, params)
 	}

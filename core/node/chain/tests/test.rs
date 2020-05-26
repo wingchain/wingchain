@@ -96,8 +96,7 @@ async fn test_chain() {
 	let result = chain
 		.execute_call(&block_hash, Some(&sender), &call)
 		.unwrap()
-		.unwrap()
-		.0;
+		.unwrap();
 	let result: Balance = codec::decode(&result).unwrap();
 	assert_eq!(10, result);
 }

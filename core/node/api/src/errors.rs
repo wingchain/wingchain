@@ -24,6 +24,9 @@ pub enum ErrorKind {
 
 	#[display(fmt = "Invalid params: {}", _0)]
 	InvalidParams(String),
+
+	#[display(fmt = "Call error: {}", _0)]
+	CallError(String),
 }
 
 impl Error for ErrorKind {}
