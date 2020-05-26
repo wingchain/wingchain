@@ -21,25 +21,21 @@ use serde::Deserialize;
 use main_base::spec::{Spec, Tx};
 use node_executor::{module, Executor};
 use primitives::errors::{CommonError, CommonResult};
-use primitives::{Address, Transaction};
+use primitives::{Address, BlockNumber, BuildBlockParams, FullTransaction, Transaction};
 
 use crate::errors;
 
-pub struct GenesisInfo {
-	pub meta_txs: Vec<Arc<Transaction>>,
-	pub payload_txs: Vec<Arc<Transaction>>,
-	pub timestamp: u32,
-}
-
-pub fn build_genesis(spec: &Spec, executor: &Executor) -> CommonResult<GenesisInfo> {
+pub fn build_genesis(spec: &Spec, executor: &Executor) -> CommonResult<BuildBlockParams> {
 	let mut meta_txs = vec![];
 	let mut payload_txs = vec![];
 
-	let mut timestamp: Option<u32> = None;
+	let mut timestamp: Option<u64> = None;
 
 	for tx in &spec.genesis.txs {
 		let tx = build_tx(tx, &executor, &mut timestamp)?;
 		let is_meta = executor.is_meta_tx(&tx)?;
+		let tx_hash = executor.hash_transaction(&tx)?;
+		let tx = FullTransaction { tx, tx_hash };
 		match is_meta {
 			true => meta_txs.push(Arc::new(tx)),
 			false => payload_txs.push(Arc::new(tx)),
@@ -50,17 +46,20 @@ pub fn build_genesis(spec: &Spec, executor: &Executor) -> CommonResult<GenesisIn
 		"no timestamp specified".to_string(),
 	))?;
 
-	Ok(GenesisInfo {
+	let number = 0;
+
+	Ok(BuildBlockParams {
+		number,
+		timestamp,
 		meta_txs,
 		payload_txs,
-		timestamp,
 	})
 }
 
 fn build_tx(
 	tx: &Tx,
 	executor: &Executor,
-	timestamp: &mut Option<u32>,
+	timestamp: &mut Option<u64>,
 ) -> CommonResult<Transaction> {
 	let module = &tx.module;
 	let method = &tx.method;
@@ -74,6 +73,10 @@ fn build_tx(
 		}
 		("balance", "init") => {
 			let params: module::balance::InitParams = JsonParams(params).try_into()?;
+			executor.build_tx(None, module.clone(), method.clone(), params)
+		}
+		("solo", "init") => {
+			let params: module::solo::InitParams = JsonParams(params).try_into()?;
 			executor.build_tx(None, module.clone(), method.clone(), params)
 		}
 		_ => Err(errors::ErrorKind::Spec(format!(
@@ -93,16 +96,19 @@ impl<'a> TryInto<module::system::InitParams> for JsonParams<'a> {
 		pub struct InitParams {
 			pub chain_id: String,
 			pub timestamp: String,
+			pub until_gap: BlockNumber,
 		}
 		let params = serde_json::from_str::<InitParams>(self.0)
 			.map_err(|e| errors::ErrorKind::Spec(format!("invalid json: {:?}", e)))?;
 		let timestamp = DateTime::parse_from_rfc3339(&params.timestamp)
 			.map_err(|e| errors::ErrorKind::Spec(format!("invalid time format: {:?}", e)))?;
-		let timestamp = timestamp.timestamp() as u32;
+		let timestamp = timestamp.timestamp_millis() as u64;
 		let chain_id = params.chain_id;
+		let until_gap = params.until_gap;
 		Ok(module::system::InitParams {
 			chain_id,
 			timestamp,
+			until_gap,
 		})
 	}
 }
@@ -131,13 +137,27 @@ impl<'a> TryInto<module::balance::InitParams> for JsonParams<'a> {
 	}
 }
 
+impl<'a> TryInto<module::solo::InitParams> for JsonParams<'a> {
+	type Error = CommonError;
+	fn try_into(self) -> Result<module::solo::InitParams, Self::Error> {
+		#[derive(Deserialize)]
+		pub struct InitParams {
+			pub block_interval: u64,
+		}
+		let params = serde_json::from_str::<InitParams>(self.0)
+			.map_err(|e| errors::ErrorKind::Spec(format!("invalid json: {:?}", e)))?;
+		let block_interval = params.block_interval;
+
+		Ok(module::solo::InitParams { block_interval })
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use crypto::address::AddressImpl;
 	use crypto::dsa::DsaImpl;
+	use crypto::hash::HashImpl;
 	use main_base::spec::{Basic, Genesis};
-
-	use crate::genesis::GenesisInfo;
 
 	use super::*;
 
@@ -146,7 +166,8 @@ mod tests {
 		let str = r#"
 		{
 			"chain_id": "chain-test",
-			"timestamp": "2020-04-16T23:46:02.189+08:00"
+			"timestamp": "2020-04-16T23:46:02.189+08:00",
+			"until_gap": 20
 		}
 		"#;
 		let json_params = JsonParams(&str);
@@ -157,7 +178,8 @@ mod tests {
 			param,
 			module::system::InitParams {
 				chain_id: "chain-test".to_string(),
-				timestamp: 1587051962,
+				timestamp: 1587051962189,
+				until_gap: 20,
 			}
 		)
 	}
@@ -214,7 +236,8 @@ mod tests {
 						params: r#"
 							{
 								"chain_id": "chain-test",
-								"timestamp": "2020-04-16T23:46:02.189+08:00"
+								"timestamp": "2020-04-16T23:46:02.189+08:00",
+								"until_gap": 20
 							}
 						"#
 						.to_string(),
@@ -236,18 +259,21 @@ mod tests {
 		};
 
 		let executor = Executor::new(
+			Arc::new(HashImpl::Blake2b256),
 			Arc::new(DsaImpl::Ed25519),
 			Arc::new(AddressImpl::Blake2b160),
 		);
 
-		let GenesisInfo {
+		let BuildBlockParams {
+			number,
+			timestamp,
 			meta_txs,
 			payload_txs,
-			timestamp,
 		} = build_genesis(&spec, &executor).unwrap();
 
+		assert_eq!(number, 0);
+		assert_eq!(timestamp, 1587051962189);
 		assert_eq!(meta_txs.len(), 1);
 		assert_eq!(payload_txs.len(), 1);
-		assert_eq!(timestamp, 1587051962);
 	}
 }

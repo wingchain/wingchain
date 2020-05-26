@@ -1,0 +1,25 @@
+[package]
+name = "node-consensus-solo"
+version = "0.1.0"
+authors = ["developer <developer@wingchain.cn>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+tokio ={ version = "0.2.17", features = ["rt-core", "time", "sync", "stream", "macros"] }
+futures = "0.3"
+log = "0.4.8"
+
+node-consensus = { path = ".." }
+primitives = { path = "../../../primitives" }
+node-chain = { path = "../../chain" }
+node-txpool = { path = "../../txpool" }
+node-executor = { path = "../../executor" }
+node-executor-primitives = { path = "../../executor/primitives" }
+
+[dev-dependencies]
+tempfile = "3.1.0"
+utils-test = { path = "../../../../utils/test" }
+crypto = { path = "../../../crypto" }
+env_logger = "0.7.1"

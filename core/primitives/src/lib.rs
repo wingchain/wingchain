@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use std::fmt;
+use std::sync::Arc;
 
 use smallvec::SmallVec;
 
@@ -65,14 +66,14 @@ pub struct Transaction {
 #[derive(Clone, Encode, Decode, PartialEq, Hash)]
 pub struct Hash(pub Vec<u8>);
 
-pub type BlockNumber = u32;
+pub type BlockNumber = u64;
 
 pub type Balance = u64;
 
 #[derive(Clone, Debug, Encode, Decode, PartialEq)]
 pub struct Header {
 	pub number: BlockNumber,
-	pub timestamp: u32,
+	pub timestamp: u64,
 	pub parent_hash: Hash,
 	pub meta_txs_root: Hash,
 	pub meta_state_root: Hash,
@@ -94,12 +95,45 @@ pub struct Block {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct FullBlock {
-	pub number: BlockNumber,
+pub struct FullTransaction {
+	pub tx: Transaction,
+	pub tx_hash: Hash,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct CommitBlockParams<T> {
 	pub block_hash: Hash,
 	pub header: Header,
 	pub body: Body,
-	pub txs: Vec<(Hash, Transaction)>,
+	pub meta_txs: Vec<Arc<FullTransaction>>,
+	pub payload_txs: Vec<Arc<FullTransaction>>,
+	pub meta_transaction: T,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct BuildBlockParams {
+	pub number: BlockNumber,
+	pub timestamp: u64,
+	pub meta_txs: Vec<Arc<FullTransaction>>,
+	pub payload_txs: Vec<Arc<FullTransaction>>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct CommitExecuteParams<T> {
+	pub block_hash: Hash,
+	pub number: BlockNumber,
+	pub executed: Executed,
+	pub payload_transaction: T,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct BuildExecuteParams {
+	pub number: BlockNumber,
+	pub timestamp: u64,
+	pub block_hash: Hash,
+	pub meta_state_root: Hash,
+	pub payload_state_root: Hash,
+	pub payload_txs: Vec<Arc<FullTransaction>>,
 }
 
 #[derive(Clone, Debug, Encode, Decode, PartialEq)]

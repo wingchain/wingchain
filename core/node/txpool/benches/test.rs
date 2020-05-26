@@ -25,7 +25,8 @@ use futures::future::join_all;
 use tempfile::tempdir;
 use tokio::runtime::Runtime;
 
-use crypto::dsa::KeyPairImpl;
+use crypto::address::AddressImpl;
+use crypto::dsa::{DsaImpl, KeyPairImpl};
 use node_chain::{module, Chain, ChainConfig};
 use node_txpool::{TxPool, TxPoolConfig};
 use primitives::{Address, PublicKey, SecretKey, Transaction};
@@ -35,12 +36,21 @@ const TXS_SIZE: usize = 2000;
 
 #[bench]
 fn bench_txpool_insert_transfer(b: &mut Bencher) {
-	let chain = get_chain();
-	let txs = gen_transfer_txs(&chain, TXS_SIZE);
-	bench_txpool_insert_txs(b, chain, txs);
+	let dsa = Arc::new(DsaImpl::Ed25519);
+	let address = Arc::new(AddressImpl::Blake2b160);
+
+	let (account1, account2) = test_accounts(dsa, address);
+
+	let mut rt = Runtime::new().unwrap();
+	let chain = rt.block_on(async {
+		let chain = get_chain(&account1.3);
+		chain
+	});
+	let txs = gen_transfer_txs(&chain, TXS_SIZE, &account1, &account2);
+	bench_txpool_insert_txs(b, &account1.3, txs);
 }
 
-fn bench_txpool_insert_txs(b: &mut Bencher, chain: Arc<Chain>, txs: Vec<Transaction>) {
+fn bench_txpool_insert_txs(b: &mut Bencher, address: &Address, txs: Vec<Transaction>) {
 	b.iter(|| {
 		black_box({
 			let config = TxPoolConfig {
@@ -50,6 +60,7 @@ fn bench_txpool_insert_txs(b: &mut Bencher, chain: Arc<Chain>, txs: Vec<Transact
 
 			let mut rt = Runtime::new().unwrap();
 			rt.block_on(async {
+				let chain = get_chain(address);
 				let txpool = TxPool::new(config, chain.clone()).unwrap();
 				let futures = txs
 					.iter()
@@ -62,24 +73,12 @@ fn bench_txpool_insert_txs(b: &mut Bencher, chain: Arc<Chain>, txs: Vec<Transact
 	});
 }
 
-fn get_chain() -> Arc<Chain> {
-	let path = tempdir().expect("could not create a temp dir");
-	let home = path.into_path();
-
-	init(&home);
-
-	let chain_config = ChainConfig { home };
-
-	let chain = Arc::new(Chain::new(chain_config).unwrap());
-	chain
-}
-
-fn gen_transfer_txs(chain: &Arc<Chain>, size: usize) -> Vec<Transaction> {
-	let (account1, account2) = test_accounts(
-		chain.get_basic().dsa.clone(),
-		chain.get_basic().address.clone(),
-	);
-
+fn gen_transfer_txs(
+	chain: &Arc<Chain>,
+	size: usize,
+	account1: &(SecretKey, PublicKey, KeyPairImpl, Address),
+	account2: &(SecretKey, PublicKey, KeyPairImpl, Address),
+) -> Vec<Transaction> {
 	let mut txs = Vec::with_capacity(size);
 	for nonce in 0..size {
 		let tx = gen_transfer_tx(&chain, nonce as u32, &account1, &account2);
@@ -94,7 +93,7 @@ fn gen_transfer_tx(
 	account1: &(SecretKey, PublicKey, KeyPairImpl, Address),
 	account2: &(SecretKey, PublicKey, KeyPairImpl, Address),
 ) -> Transaction {
-	let until = 1u32;
+	let until = 1u64;
 	let tx = chain
 		.build_transaction(
 			Some((account1.0.clone(), nonce, until)),
@@ -110,12 +109,26 @@ fn gen_transfer_tx(
 	tx
 }
 
-fn init(home: &PathBuf) {
+fn get_chain(address: &Address) -> Arc<Chain> {
+	let path = tempdir().expect("could not create a temp dir");
+	let home = path.into_path();
+
+	init(&home, address);
+
+	let chain_config = ChainConfig { home };
+
+	let chain = Arc::new(Chain::new(chain_config).unwrap());
+
+	chain
+}
+
+fn init(home: &PathBuf, address: &Address) {
 	let config_path = home.join("config");
 
 	fs::create_dir_all(&config_path).unwrap();
 
-	let spec = r#"
+	let spec = format!(
+		r#"
 [basic]
 hash = "blake2b_256"
 dsa = "ed25519"
@@ -127,23 +140,26 @@ address = "blake2b_160"
 module = "system"
 method = "init"
 params = '''
-{
+{{
     "chain_id": "chain-test",
-    "timestamp": "2020-04-29T15:51:36.502+08:00"
-}
+    "timestamp": "2020-04-29T15:51:36.502+08:00",
+    "until_gap": 20
+}}
 '''
 
 [[genesis.txs]]
 module = "balance"
 method = "init"
 params = '''
-{
+{{
     "endow": [
-    	["b4decd5a5f8f2ba708f8ced72eec89f44f3be96a", 10]
+    	["{}", 10]
     ]
-}
+}}
 '''
-	"#;
+	"#,
+		address
+	);
 
 	fs::write(config_path.join("spec.toml"), &spec).unwrap();
 }

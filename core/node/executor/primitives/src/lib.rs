@@ -48,7 +48,7 @@ where
 
 pub struct ContextEnv {
 	pub number: BlockNumber,
-	pub timestamp: u32,
+	pub timestamp: u64,
 }
 
 pub trait Context: Clone {
@@ -201,3 +201,6 @@ impl CallResult {
 		Ok(Self(vec))
 	}
 }
+
+#[derive(Encode, Decode)]
+pub struct EmptyParams;

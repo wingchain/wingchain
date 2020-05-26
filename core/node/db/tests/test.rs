@@ -27,7 +27,11 @@ fn test_db() {
 	let db = DB::open(&path).unwrap();
 
 	let mut transaction = db.transaction();
-	transaction.put(columns::GLOBAL, &global_key::BEST_NUMBER, &vec![1, 0, 0, 0]);
+	transaction.put(
+		columns::GLOBAL,
+		&global_key::CONFIRMED_NUMBER,
+		&vec![1, 0, 0, 0],
+	);
 	transaction.put(columns::BLOCK_HASH, &vec![1, 0, 0, 0], b"header");
 	transaction.put(columns::HEADER, b"header", b"header_value");
 	transaction.put_owned(
@@ -39,7 +43,7 @@ fn test_db() {
 	db.write(transaction).unwrap();
 
 	assert_eq!(
-		db.get(columns::GLOBAL, &global_key::BEST_NUMBER)
+		db.get(columns::GLOBAL, &global_key::CONFIRMED_NUMBER)
 			.unwrap()
 			.unwrap(),
 		vec![1u8, 0u8, 0u8, 0u8]
@@ -68,7 +72,11 @@ fn test_existing_db() {
 	let db = DB::open(&path).unwrap();
 
 	let mut transaction = db.transaction();
-	transaction.put(columns::GLOBAL, &global_key::BEST_NUMBER, &vec![1, 0, 0, 0]);
+	transaction.put(
+		columns::GLOBAL,
+		&global_key::CONFIRMED_NUMBER,
+		&vec![1, 0, 0, 0],
+	);
 
 	db.write(transaction).unwrap();
 
@@ -76,7 +84,7 @@ fn test_existing_db() {
 
 	let db = DB::open(&path).unwrap();
 	assert_eq!(
-		db.get(columns::GLOBAL, &global_key::BEST_NUMBER)
+		db.get(columns::GLOBAL, &global_key::CONFIRMED_NUMBER)
 			.unwrap()
 			.unwrap(),
 		vec![1u8, 0u8, 0u8, 0u8]
@@ -98,13 +106,21 @@ fn test_db_concurrent() {
 
 	let thread1 = thread::spawn(move || {
 		let mut transaction = db1.transaction();
-		transaction.put(columns::GLOBAL, &global_key::BEST_NUMBER, &vec![1, 0, 0, 0]);
+		transaction.put(
+			columns::GLOBAL,
+			&global_key::CONFIRMED_NUMBER,
+			&vec![1, 0, 0, 0],
+		);
 		db1.write(transaction).unwrap();
 	});
 
 	let thread2 = thread::spawn(move || {
 		let mut transaction = db2.transaction();
-		transaction.put(columns::GLOBAL, &global_key::BEST_NUMBER, &vec![2, 0, 0, 0]);
+		transaction.put(
+			columns::GLOBAL,
+			&global_key::CONFIRMED_NUMBER,
+			&vec![2, 0, 0, 0],
+		);
 		db2.write(transaction).unwrap();
 	});
 
@@ -112,7 +128,7 @@ fn test_db_concurrent() {
 	thread2.join().unwrap();
 
 	let result = db
-		.get(columns::GLOBAL, &global_key::BEST_NUMBER)
+		.get(columns::GLOBAL, &global_key::CONFIRMED_NUMBER)
 		.unwrap()
 		.unwrap();
 

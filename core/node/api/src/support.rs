@@ -24,8 +24,8 @@ use primitives::{Address, Block, BlockNumber, Call, Hash, Header, Transaction};
 #[async_trait]
 pub trait ApiSupport {
 	async fn hash_transaction(&self, tx: &Transaction) -> CommonResult<Hash>;
-	async fn get_best_number(&self) -> CommonResult<Option<BlockNumber>>;
-	async fn get_executed_number(&self) -> CommonResult<Option<BlockNumber>>;
+	async fn get_confirmed_number(&self) -> CommonResult<Option<BlockNumber>>;
+	async fn get_confirmed_executed_number(&self) -> CommonResult<Option<BlockNumber>>;
 	async fn get_block_hash(&self, number: &BlockNumber) -> CommonResult<Option<Hash>>;
 	async fn get_block(&self, block_hash: &Hash) -> CommonResult<Option<Block>>;
 	async fn get_header(&self, block_hash: &Hash) -> CommonResult<Option<Header>>;
@@ -36,7 +36,7 @@ pub trait ApiSupport {
 	async fn execute_call(
 		&self,
 		block_hash: &Hash,
-		sender: &Address,
+		sender: Option<&Address>,
 		call: &Call,
 	) -> CommonResult<CommonResult<CallResult>>;
 }
@@ -66,11 +66,11 @@ where
 	async fn hash_transaction(&self, tx: &Transaction) -> CommonResult<Hash> {
 		self.chain.hash_transaction(tx)
 	}
-	async fn get_best_number(&self) -> CommonResult<Option<BlockNumber>> {
-		self.chain.get_best_number()
+	async fn get_confirmed_number(&self) -> CommonResult<Option<BlockNumber>> {
+		self.chain.get_confirmed_number()
 	}
-	async fn get_executed_number(&self) -> CommonResult<Option<BlockNumber>> {
-		self.chain.get_executed_number()
+	async fn get_confirmed_executed_number(&self) -> CommonResult<Option<BlockNumber>> {
+		self.chain.get_confirmed_executed_number()
 	}
 	async fn get_block_hash(&self, number: &BlockNumber) -> CommonResult<Option<Hash>> {
 		self.chain.get_block_hash(number)
@@ -92,7 +92,7 @@ where
 	}
 	async fn get_transaction_in_txpool(&self, tx_hash: &Hash) -> CommonResult<Option<Transaction>> {
 		let tx = match self.txpool.get_map().get(tx_hash) {
-			Some(tx) => (*(*tx).tx).clone(),
+			Some(tx) => tx.tx.clone(),
 			None => return Ok(None),
 		};
 		Ok(Some(tx))
@@ -100,7 +100,7 @@ where
 	async fn execute_call(
 		&self,
 		block_hash: &Hash,
-		sender: &Address,
+		sender: Option<&Address>,
 		call: &Call,
 	) -> CommonResult<CommonResult<CallResult>> {
 		self.chain.execute_call(block_hash, sender, call)

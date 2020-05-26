@@ -19,13 +19,21 @@ use std::sync::Arc;
 use tempfile::tempdir;
 use tokio::time::Duration;
 
+use crypto::address::AddressImpl;
+use crypto::dsa::DsaImpl;
 use node_chain::{module, Chain, ChainConfig};
-use node_txpool::{PoolTransaction, TxPool, TxPoolConfig};
+use node_txpool::{TxPool, TxPoolConfig};
+use primitives::{Address, FullTransaction};
 use utils_test::test_accounts;
 
 #[tokio::test]
 async fn test_txpool() {
-	let chain = get_chain();
+	let dsa = Arc::new(DsaImpl::Ed25519);
+	let address = Arc::new(AddressImpl::Blake2b160);
+
+	let (account1, _account2) = test_accounts(dsa, address);
+
+	let chain = get_chain(&account1.3);
 	let config = TxPoolConfig {
 		pool_capacity: 1024,
 		buffer_capacity: 256,
@@ -49,8 +57,8 @@ async fn test_txpool() {
 		)
 		.unwrap();
 
-	let expected_queue = vec![Arc::new(PoolTransaction {
-		tx: Arc::new(tx.clone()),
+	let expected_queue = vec![Arc::new(FullTransaction {
+		tx: tx.clone(),
 		tx_hash: chain.hash_transaction(&tx.clone()).unwrap(),
 	})];
 
@@ -70,7 +78,12 @@ async fn test_txpool() {
 
 #[tokio::test]
 async fn test_txpool_dup() {
-	let chain = get_chain();
+	let dsa = Arc::new(DsaImpl::Ed25519);
+	let address = Arc::new(AddressImpl::Blake2b160);
+
+	let (account1, _account2) = test_accounts(dsa, address);
+
+	let chain = get_chain(&account1.3);
 	let config = TxPoolConfig {
 		pool_capacity: 1024,
 		buffer_capacity: 256,
@@ -102,7 +115,12 @@ async fn test_txpool_dup() {
 
 #[tokio::test]
 async fn test_txpool_validate() {
-	let chain = get_chain();
+	let dsa = Arc::new(DsaImpl::Ed25519);
+	let address = Arc::new(AddressImpl::Blake2b160);
+
+	let (account1, _account2) = test_accounts(dsa, address);
+
+	let chain = get_chain(&account1.3);
 	let config = TxPoolConfig {
 		pool_capacity: 1024,
 		buffer_capacity: 256,
@@ -116,11 +134,11 @@ async fn test_txpool_validate() {
 
 	let mut tx = chain
 		.build_transaction(
-			Some((account1.0, 0, 1)),
+			Some((account1.0.clone(), 0, 1)),
 			"balance".to_string(),
 			"transfer".to_string(),
 			module::balance::TransferParams {
-				recipient: account2.3,
+				recipient: account2.3.clone(),
 				value: 2,
 			},
 		)
@@ -129,11 +147,44 @@ async fn test_txpool_validate() {
 
 	let result = txpool.insert(tx.clone()).await;
 	assert!(format!("{}", result.unwrap_err()).contains("Error: Invalid tx witness"));
+
+	let tx = chain
+		.build_transaction(
+			Some((account1.0.clone(), 0, 21)),
+			"balance".to_string(),
+			"transfer".to_string(),
+			module::balance::TransferParams {
+				recipient: account2.3.clone(),
+				value: 2,
+			},
+		)
+		.unwrap();
+	let result = txpool.insert(tx).await;
+	assert!(format!("{}", result.unwrap_err()).contains("Error: Invalid until"));
+
+	let tx = chain
+		.build_transaction(
+			Some((account1.0, 0, 0)),
+			"balance".to_string(),
+			"transfer".to_string(),
+			module::balance::TransferParams {
+				recipient: account2.3,
+				value: 2,
+			},
+		)
+		.unwrap();
+	let result = txpool.insert(tx).await;
+	assert!(format!("{}", result.unwrap_err()).contains("Error: Exceed until"));
 }
 
 #[tokio::test]
 async fn test_txpool_capacity() {
-	let chain = get_chain();
+	let dsa = Arc::new(DsaImpl::Ed25519);
+	let address = Arc::new(AddressImpl::Blake2b160);
+
+	let (account1, _account2) = test_accounts(dsa, address);
+
+	let chain = get_chain(&account1.3);
 	let config = TxPoolConfig {
 		pool_capacity: 2,
 		buffer_capacity: 256,
@@ -187,24 +238,26 @@ async fn test_txpool_capacity() {
 	assert!(format!("{}", result.unwrap_err()).contains("Error: Exceed capacity"));
 }
 
-fn get_chain() -> Arc<Chain> {
+fn get_chain(address: &Address) -> Arc<Chain> {
 	let path = tempdir().expect("could not create a temp dir");
 	let home = path.into_path();
 
-	init(&home);
+	init(&home, address);
 
 	let chain_config = ChainConfig { home };
 
 	let chain = Arc::new(Chain::new(chain_config).unwrap());
+
 	chain
 }
 
-fn init(home: &PathBuf) {
+fn init(home: &PathBuf, address: &Address) {
 	let config_path = home.join("config");
 
 	fs::create_dir_all(&config_path).unwrap();
 
-	let spec = r#"
+	let spec = format!(
+		r#"
 [basic]
 hash = "blake2b_256"
 dsa = "ed25519"
@@ -216,23 +269,26 @@ address = "blake2b_160"
 module = "system"
 method = "init"
 params = '''
-{
+{{
     "chain_id": "chain-test",
-    "timestamp": "2020-04-29T15:51:36.502+08:00"
-}
+    "timestamp": "2020-04-29T15:51:36.502+08:00",
+    "until_gap": 20
+}}
 '''
 
 [[genesis.txs]]
 module = "balance"
 method = "init"
 params = '''
-{
+{{
     "endow": [
-    	["b4decd5a5f8f2ba708f8ced72eec89f44f3be96a", 10]
+    	["{}", 10]
     ]
-}
+}}
 '''
-	"#;
+	"#,
+		address
+	);
 
 	fs::write(config_path.join("spec.toml"), &spec).unwrap();
 }

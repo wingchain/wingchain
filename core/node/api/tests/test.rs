@@ -18,11 +18,13 @@ use std::sync::Arc;
 
 use tempfile::tempdir;
 
+use crypto::address::AddressImpl;
+use crypto::dsa::DsaImpl;
 use node_api::support::DefaultApiSupport;
 use node_api::{Api, ApiConfig};
 use node_chain::{module, Chain, ChainConfig};
 use node_txpool::{TxPool, TxPoolConfig};
-use primitives::{codec, Transaction};
+use primitives::{codec, Address, Transaction};
 use utils_test::test_accounts;
 
 #[tokio::test]
@@ -33,7 +35,12 @@ async fn test_api() {
 		rpc_maxconn: 100,
 	};
 
-	let chain = get_chain();
+	let dsa = Arc::new(DsaImpl::Ed25519);
+	let address = Arc::new(AddressImpl::Blake2b160);
+
+	let (account1, _account2) = test_accounts(dsa, address);
+
+	let chain = get_chain(&account1.3);
 
 	let txpool_config = TxPoolConfig {
 		pool_capacity: 32,
@@ -76,18 +83,18 @@ fn get_cases(chain: &Arc<Chain>) -> Vec<(String, String)> {
 
 	vec![
 		(
-			r#"{"jsonrpc": "2.0", "method": "chain_getBlockByNumber", "params": ["best"], "id": 1}"#
+			r#"{"jsonrpc": "2.0", "method": "chain_getBlockByNumber", "params": ["confirmed"], "id": 1}"#
 				.to_string(),
-			format!(r#"{{"jsonrpc":"2.0","result":{{"hash":"0x56296bb9151709986b58fe3bc319b584641bfb094637c4079506bdd3358a182f","header":{{"number":"0x00000000","timestamp":"0x5ea93208","parent_hash":"0x0000000000000000000000000000000000000000000000000000000000000000","meta_txs_root":"0x456782bfe57bea3fdbb86bfa3d7ee8dc7fbe484183d944d18f9ecfb9cbaf890f","meta_state_root":"0x6401be7e6ca2bb6c4fe983256b9312044829c17857fd9aebc4fd6bf5236ebfa5","payload_txs_root":"0xc73b1740e53645a26e1926f9d910e560a99a601d14680deb6dc31eb26f321edc","payload_executed_gap":"0x01","payload_executed_state_root":"0x0000000000000000000000000000000000000000000000000000000000000000"}},"body":{{"meta_txs":["0xf27e963c5fdec44555394b68a14f013557c034ca322e0c0e7b9f4a33c91f273f"],"payload_txs":["0x6745417d545c3e0f7d610cadfd1ee8d450a92e89fa74bb75777950a779f2aa94"]}}}},"id":1}}"#, ),
+			format!(r#"{{"jsonrpc":"2.0","result":{{"hash":"0x70a9ef34965b2cc61637e07324770ef547446f81fb63f2377a4c28c16c3c94c0","header":{{"number":"0x0000000000000000","timestamp":"0x00000171c4eb7136","parent_hash":"0x0000000000000000000000000000000000000000000000000000000000000000","meta_txs_root":"0x17462939e972f9cfe72553b9f56c18cd94ec8955a44a6012a350d9e4ac5f4a83","meta_state_root":"0x5e594917a6e59ef9260b411384550d016fc2314b209fdc1be3f401461c2a8cce","payload_txs_root":"0xc73b1740e53645a26e1926f9d910e560a99a601d14680deb6dc31eb26f321edc","payload_executed_gap":"0x01","payload_executed_state_root":"0x0000000000000000000000000000000000000000000000000000000000000000"}},"body":{{"meta_txs":["0x172006405359c1a2c08417272186e71e30b11db45f59a5f12c50ec7e658112df"],"payload_txs":["0x6745417d545c3e0f7d610cadfd1ee8d450a92e89fa74bb75777950a779f2aa94"]}}}},"id":1}}"#, ),
 		),
 		(
-			r#"{"jsonrpc": "2.0", "method": "chain_getTransactionByHash", "params": ["0xf27e963c5fdec44555394b68a14f013557c034ca322e0c0e7b9f4a33c91f273f"], "id": 1}"#
+			r#"{"jsonrpc": "2.0", "method": "chain_getTransactionByHash", "params": ["0x172006405359c1a2c08417272186e71e30b11db45f59a5f12c50ec7e658112df"], "id": 1}"#
 				.to_string(),
-			r#"{"jsonrpc":"2.0","result":{"hash":"0xf27e963c5fdec44555394b68a14f013557c034ca322e0c0e7b9f4a33c91f273f","witness":null,"call":{"module":"system","method":"init","params":"0x28636861696e2d746573740832a95e"}},"id":1}"#.to_string(),
+			r#"{"jsonrpc":"2.0","result":{"hash":"0x172006405359c1a2c08417272186e71e30b11db45f59a5f12c50ec7e658112df","witness":null,"call":{"module":"system","method":"init","params":"0x28636861696e2d746573743671ebc4710100001400000000000000"}},"id":1}"#.to_string(),
 		),
 		(
-			r#"{"jsonrpc": "2.0", "method": "chain_getRawTransactionByHash", "params": ["0xf27e963c5fdec44555394b68a14f013557c034ca322e0c0e7b9f4a33c91f273f"], "id": 1}"#.to_string(),
-			r#"{"jsonrpc":"2.0","result":"0x001873797374656d10696e69743c28636861696e2d746573740832a95e","id":1}"#.to_string(),
+			r#"{"jsonrpc": "2.0", "method": "chain_getRawTransactionByHash", "params": ["0x172006405359c1a2c08417272186e71e30b11db45f59a5f12c50ec7e658112df"], "id": 1}"#.to_string(),
+			r#"{"jsonrpc":"2.0","result":"0x001873797374656d10696e69746c28636861696e2d746573743671ebc4710100001400000000000000","id":1}"#.to_string(),
 		),
 		(
 			format!(r#"{{"jsonrpc": "2.0", "method": "chain_sendRawTransaction", "params": ["0x{}"], "id": 1}}"#, tx_hex),
@@ -99,7 +106,7 @@ fn get_cases(chain: &Arc<Chain>) -> Vec<(String, String)> {
 					tx_hash_hex, tx_public_key_hex, tx_sig_hex, nonce_hex, until_hex, params_hex),
 		),
 		(
-			format!(r#"{{"jsonrpc": "2.0", "method": "chain_executeCall", "params": {{ "block_hash": "0x56296bb9151709986b58fe3bc319b584641bfb094637c4079506bdd3358a182f", "sender": "0xb4decd5a5f8f2ba708f8ced72eec89f44f3be96a", "call": {{ "module":"balance", "method":"get_balance", "params": "" }} }}, "id": 1}}"#),
+			format!(r#"{{"jsonrpc": "2.0", "method": "chain_executeCall", "params": {{ "block_hash": "0x70a9ef34965b2cc61637e07324770ef547446f81fb63f2377a4c28c16c3c94c0", "sender": "0xb4decd5a5f8f2ba708f8ced72eec89f44f3be96a", "call": {{ "module":"balance", "method":"get_balance", "params": "" }} }}, "id": 1}}"#),
 			format!(r#"{{"jsonrpc":"2.0","result":"0x0a00000000000000","id":1}}"#),
 		)
 	]
@@ -112,7 +119,7 @@ fn get_tx(chain: &Arc<Chain>) -> Transaction {
 	);
 
 	let nonce = 0u32;
-	let until = 1u32;
+	let until = 1u64;
 	let tx = chain
 		.build_transaction(
 			Some((account1.0, nonce, until)),
@@ -128,11 +135,11 @@ fn get_tx(chain: &Arc<Chain>) -> Transaction {
 	tx
 }
 
-fn get_chain() -> Arc<Chain> {
+fn get_chain(address: &Address) -> Arc<Chain> {
 	let path = tempdir().expect("could not create a temp dir");
 	let home = path.into_path();
 
-	init(&home);
+	init(&home, address);
 
 	let chain_config = ChainConfig { home };
 
@@ -141,12 +148,13 @@ fn get_chain() -> Arc<Chain> {
 	chain
 }
 
-fn init(home: &PathBuf) {
+fn init(home: &PathBuf, address: &Address) {
 	let config_path = home.join("config");
 
 	fs::create_dir_all(&config_path).unwrap();
 
-	let spec = r#"
+	let spec = format!(
+		r#"
 [basic]
 hash = "blake2b_256"
 dsa = "ed25519"
@@ -158,23 +166,26 @@ address = "blake2b_160"
 module = "system"
 method = "init"
 params = '''
-{
+{{
     "chain_id": "chain-test",
-    "timestamp": "2020-04-29T15:51:36.502+08:00"
-}
+    "timestamp": "2020-04-29T15:51:36.502+08:00",
+    "until_gap": 20
+}}
 '''
 
 [[genesis.txs]]
 module = "balance"
 method = "init"
 params = '''
-{
+{{
     "endow": [
-    	["b4decd5a5f8f2ba708f8ced72eec89f44f3be96a", 10]
+    	["{}", 10]
     ]
-}
+}}
 '''
-	"#;
+	"#,
+		address
+	);
 
 	fs::write(config_path.join("spec.toml"), &spec).unwrap();
 }

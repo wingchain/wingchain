@@ -33,8 +33,8 @@ pub async fn chain_get_header_by_number<S: ApiSupport>(
 
 	let support = data.0;
 	let number = match number_enum {
-		BlockNumberEnum::Best => support.get_best_number().await?,
-		BlockNumberEnum::Executed => support.get_executed_number().await?,
+		BlockNumberEnum::Confirmed => support.get_confirmed_number().await?,
+		BlockNumberEnum::ConfirmedExecuted => support.get_confirmed_executed_number().await?,
 		BlockNumberEnum::Number(number) => Some(number),
 	};
 
@@ -82,8 +82,8 @@ pub async fn chain_get_block_by_number<S: ApiSupport>(
 
 	let support = data.0;
 	let number = match number_enum {
-		BlockNumberEnum::Best => support.get_best_number().await?,
-		BlockNumberEnum::Executed => support.get_executed_number().await?,
+		BlockNumberEnum::Confirmed => support.get_confirmed_number().await?,
+		BlockNumberEnum::ConfirmedExecuted => support.get_confirmed_executed_number().await?,
 		BlockNumberEnum::Number(number) => Some(number),
 	};
 
@@ -194,10 +194,15 @@ pub async fn chain_execute_call<S: ApiSupport>(
 	Params(request): Params<ExecuteTransactionRequest>,
 ) -> CustomResult<Hex> {
 	let block_hash: primitives::Hash = request.block_hash.try_into()?;
-	let sender: primitives::Address = request.sender.try_into()?;
+	let sender: Option<primitives::Address> = match request.sender {
+		Some(sender) => Some(sender.try_into()?),
+		None => None,
+	};
 	let call: primitives::Call = request.call.try_into()?;
 
-	let result = data.execute_call(&block_hash, &sender, &call).await??;
+	let result = data
+		.execute_call(&block_hash, sender.as_ref(), &call)
+		.await??;
 	let result = result.0.into();
 	Ok(result)
 }
@@ -220,8 +225,8 @@ pub struct Hex(String);
 
 enum BlockNumberEnum {
 	Number(primitives::BlockNumber),
-	Best,
-	Executed,
+	Confirmed,
+	ConfirmedExecuted,
 }
 
 #[derive(Serialize)]
@@ -278,7 +283,7 @@ pub struct Call {
 #[derive(Deserialize)]
 pub struct ExecuteTransactionRequest {
 	pub block_hash: Hash,
-	pub sender: Address,
+	pub sender: Option<Address>,
 	pub call: Call,
 }
 
@@ -350,6 +355,12 @@ impl From<primitives::Call> for Call {
 
 impl From<u32> for Hex {
 	fn from(number: u32) -> Self {
+		Hex(format!("0x{}", hex::encode(number.to_be_bytes())))
+	}
+}
+
+impl From<u64> for Hex {
+	fn from(number: u64) -> Self {
 		Hex(format!("0x{}", hex::encode(number.to_be_bytes())))
 	}
 }
@@ -442,17 +453,17 @@ impl TryFrom<BlockNumber> for BlockNumberEnum {
 
 	fn try_from(value: BlockNumber) -> Result<Self, Self::Error> {
 		let result = match value.0.as_str() {
-			"best" => BlockNumberEnum::Best,
-			"executed" => BlockNumberEnum::Executed,
+			"confirmed" => BlockNumberEnum::Confirmed,
+			"confirmed_executed" => BlockNumberEnum::ConfirmedExecuted,
 			number if number.starts_with("0x") => {
 				let hex = number.trim_start_matches("0x");
-				let number = u32::from_str_radix(hex, 16).map_err(|_| {
+				let number = u64::from_str_radix(hex, 16).map_err(|_| {
 					errors::ErrorKind::InvalidParams(format!("invalid hex: {}", number))
 				})?;
 				BlockNumberEnum::Number(number)
 			}
 			number => {
-				let number = number.parse::<u32>().map_err(|_| {
+				let number = number.parse::<u64>().map_err(|_| {
 					errors::ErrorKind::InvalidParams(format!("invalid number: {}", number))
 				})?;
 				BlockNumberEnum::Number(number)

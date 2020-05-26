@@ -21,29 +21,25 @@ use executor_primitives::{
 };
 use primitives::codec::{Decode, Encode};
 use primitives::errors::CommonResult;
-use primitives::{codec, Address, BlockNumber, Call};
+use primitives::{codec, Address, Call};
 
 pub struct Module<C>
 where
 	C: Context,
 {
 	env: Rc<ContextEnv>,
-	chain_id: StorageValue<String, C>,
-	timestamp: StorageValue<u64, C>,
-	until_gap: StorageValue<BlockNumber, C>,
+	block_interval: StorageValue<u64, C>,
 }
 
 #[module]
 impl<C: Context> Module<C> {
 	const META_MODULE: bool = true;
-	const STORAGE_KEY: &'static [u8] = b"system";
+	const STORAGE_KEY: &'static [u8] = b"solo";
 
 	fn new(context: C) -> Self {
 		Self {
 			env: context.env(),
-			chain_id: StorageValue::new::<Self>(context.clone(), b"chain_id"),
-			timestamp: StorageValue::new::<Self>(context.clone(), b"timestamp"),
-			until_gap: StorageValue::new::<Self>(context, b"until_gap"),
+			block_interval: StorageValue::new::<Self>(context.clone(), b"block_interval"),
 		}
 	}
 
@@ -56,9 +52,7 @@ impl<C: Context> Module<C> {
 		if self.env.number != 0 {
 			return execute_error_result("not genesis");
 		}
-		self.chain_id.set(&params.chain_id)?;
-		self.timestamp.set(&params.timestamp)?;
-		self.until_gap.set(&params.until_gap)?;
+		self.block_interval.set(&params.block_interval)?;
 		Ok(Ok(()))
 	}
 
@@ -68,23 +62,11 @@ impl<C: Context> Module<C> {
 		_sender: Option<&Address>,
 		_params: EmptyParams,
 	) -> CommonResult<CommonResult<Meta>> {
-		let chain_id = match self.chain_id.get()? {
-			Some(chain_id) => chain_id,
+		let block_interval = match self.block_interval.get()? {
+			Some(block_interval) => block_interval,
 			None => return execute_error_result("unexpected none"),
 		};
-		let timestamp = match self.timestamp.get()? {
-			Some(timestamp) => timestamp,
-			None => return execute_error_result("unexpected none"),
-		};
-		let until_gap = match self.until_gap.get()? {
-			Some(until_gap) => until_gap,
-			None => return execute_error_result("unexpected none"),
-		};
-		let meta = Meta {
-			chain_id,
-			timestamp,
-			until_gap,
-		};
+		let meta = Meta { block_interval };
 		Ok(Ok(meta))
 	}
 }
@@ -93,7 +75,5 @@ pub type InitParams = Meta;
 
 #[derive(Encode, Decode, Debug, PartialEq)]
 pub struct Meta {
-	pub chain_id: String,
-	pub timestamp: u64,
-	pub until_gap: BlockNumber,
+	pub block_interval: u64,
 }

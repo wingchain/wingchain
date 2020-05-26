@@ -1,5 +1,5 @@
 [package]
-name = "node-executor-primitives"
+name = "module-solo"
 version = "0.1.0"
 authors = ["developer <developer@wingchain.cn>"]
 edition = "2018"
@@ -9,4 +9,6 @@ edition = "2018"
 [dependencies]
 scale-codec = { package = "parity-scale-codec", version = "1.3.0", features = ["derive"] }
 
-primitives = { path = "../../../primitives" }
+primitives = { path = "../../primitives" }
+executor-primitives = { package = "node-executor-primitives", path = "../../node/executor/primitives" }
+executor-macro = { package = "node-executor-macro", path = "../../node/executor/executor-macro" }

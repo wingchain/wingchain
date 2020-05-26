@@ -19,8 +19,10 @@ use log::info;
 use parking_lot::RwLock;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
+use node_executor::module;
+use node_executor_primitives::EmptyParams;
 use primitives::errors::CommonResult;
-use primitives::{Hash, Transaction};
+use primitives::{FullTransaction, Hash, Transaction};
 
 use crate::support::TxPoolSupport;
 
@@ -32,21 +34,16 @@ pub struct TxPoolConfig {
 	pub buffer_capacity: usize,
 }
 
-#[derive(Debug, PartialEq)]
-pub struct PoolTransaction {
-	pub tx: Arc<Transaction>,
-	pub tx_hash: Hash,
-}
-
 pub struct TxPool<S>
 where
 	S: TxPoolSupport,
 {
 	config: TxPoolConfig,
+	system_meta: module::system::Meta,
 	support: Arc<S>,
-	map: CHashMap<Hash, Arc<PoolTransaction>>,
-	queue: Arc<RwLock<Vec<Arc<PoolTransaction>>>>,
-	buffer_tx: Sender<Arc<PoolTransaction>>,
+	map: CHashMap<Hash, Arc<FullTransaction>>,
+	queue: Arc<RwLock<Vec<Arc<FullTransaction>>>>,
+	buffer_tx: Sender<Arc<FullTransaction>>,
 }
 
 impl<S> TxPool<S>
@@ -59,8 +56,11 @@ where
 
 		let (buffer_tx, buffer_rx) = channel(config.buffer_capacity);
 
+		let system_meta = get_system_meta(support.clone())?;
+
 		let tx_pool = Self {
 			config,
+			system_meta,
 			support,
 			map,
 			queue: queue.clone(),
@@ -74,23 +74,24 @@ where
 		Ok(tx_pool)
 	}
 
-	pub fn get_queue(&self) -> &Arc<RwLock<Vec<Arc<PoolTransaction>>>> {
+	pub fn get_queue(&self) -> &Arc<RwLock<Vec<Arc<FullTransaction>>>> {
 		&self.queue
 	}
 
-	pub fn get_map(&self) -> &CHashMap<Hash, Arc<PoolTransaction>> {
+	pub fn get_map(&self) -> &CHashMap<Hash, Arc<FullTransaction>> {
 		&self.map
 	}
 
 	pub async fn insert(&self, tx: Transaction) -> CommonResult<()> {
 		self.check_capacity()?;
 		let tx_hash = self.support.hash_transaction(&tx)?;
-		self.check_exist(&tx_hash)?;
 
-		self.support.validate_transaction(&tx, true)?;
+		self.check_pool_exist(&tx_hash)?;
+		self.validate_transaction(&tx_hash, &tx)?;
+		self.check_chain_exist(&tx_hash)?;
 
-		let pool_tx = Arc::new(PoolTransaction {
-			tx: Arc::new(tx),
+		let pool_tx = Arc::new(FullTransaction {
+			tx,
 			tx_hash: tx_hash.clone(),
 		});
 
@@ -115,10 +116,36 @@ where
 		Ok(())
 	}
 
-	fn check_exist(&self, tx_hash: &Hash) -> CommonResult<()> {
+	fn check_pool_exist(&self, tx_hash: &Hash) -> CommonResult<()> {
 		if self.contain(tx_hash) {
 			return Err(errors::ErrorKind::Duplicated(tx_hash.clone()).into());
 		}
+		Ok(())
+	}
+
+	fn check_chain_exist(&self, tx_hash: &Hash) -> CommonResult<()> {
+		if self.support.get_transaction(&tx_hash)?.is_some() {
+			return Err(errors::ErrorKind::Duplicated(tx_hash.clone()).into());
+		}
+		Ok(())
+	}
+
+	fn validate_transaction(&self, tx_hash: &Hash, tx: &Transaction) -> CommonResult<()> {
+		self.support.validate_transaction(&tx, true)?;
+		let witness = tx.witness.as_ref().expect("qed");
+
+		let confirmed_number = self.support.get_confirmed_number()?.expect("qed");
+		let until_gap = self.system_meta.until_gap;
+		let max_until = confirmed_number + until_gap;
+
+		if witness.until > max_until {
+			return Err(errors::ErrorKind::InvalidUntil(tx_hash.clone()).into());
+		}
+
+		if witness.until <= confirmed_number {
+			return Err(errors::ErrorKind::ExceedUntil(tx_hash.clone()).into());
+		}
+
 		Ok(())
 	}
 
@@ -128,8 +155,8 @@ where
 }
 
 async fn process_buffer(
-	buffer_rx: Receiver<Arc<PoolTransaction>>,
-	queue: Arc<RwLock<Vec<Arc<PoolTransaction>>>>,
+	buffer_rx: Receiver<Arc<FullTransaction>>,
+	queue: Arc<RwLock<Vec<Arc<FullTransaction>>>>,
 ) {
 	let mut buffer_rx = buffer_rx;
 	loop {
@@ -138,4 +165,15 @@ async fn process_buffer(
 			queue.write().push(tx);
 		}
 	}
+}
+
+fn get_system_meta<S: TxPoolSupport>(support: Arc<S>) -> CommonResult<module::system::Meta> {
+	let block_number = support.get_confirmed_number()?.expect("qed");
+	support.execute_call_with_block_number(
+		&block_number,
+		None,
+		"system".to_string(),
+		"get_meta".to_string(),
+		EmptyParams,
+	)
 }

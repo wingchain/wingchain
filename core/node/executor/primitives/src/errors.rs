@@ -49,6 +49,6 @@ impl From<ErrorKind> for CommonError {
 	}
 }
 
-pub fn execute_error_result(message: &str) -> CommonResult<CommonResult<()>> {
+pub fn execute_error_result<T>(message: &str) -> CommonResult<CommonResult<T>> {
 	Ok(Err(ErrorKind::ExecuteError(message.to_string()).into()))
 }

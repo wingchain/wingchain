@@ -17,7 +17,7 @@ use std::rc::Rc;
 use executor_macro::{call, module};
 use executor_primitives::{
 	errors::{self, execute_error_result},
-	CallResult, Context, ContextEnv, Module as ModuleT, StorageMap, Validator,
+	CallResult, Context, ContextEnv, EmptyParams, Module as ModuleT, StorageMap, Validator,
 };
 use primitives::codec::{Decode, Encode};
 use primitives::errors::CommonResult;
@@ -123,9 +123,6 @@ impl<C: Context> Module<C> {
 pub struct InitParams {
 	pub endow: Vec<(Address, Balance)>,
 }
-
-#[derive(Encode, Decode)]
-pub struct EmptyParams;
 
 #[derive(Encode, Decode)]
 pub struct TransferParams {
