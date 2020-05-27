@@ -25,7 +25,7 @@ use primitives::errors::CommonResult;
 use primitives::types::CallResult;
 use primitives::{
 	Address, Block, BlockNumber, BuildBlockParams, Call, CommitBlockParams, CommitExecuteParams,
-	Executed, Hash, Header, Nonce, SecretKey, Transaction, TransactionResult,
+	Executed, Hash, Header, Nonce, Receipt, SecretKey, Transaction, TransactionResult,
 };
 
 use crate::backend::Backend;
@@ -90,6 +90,10 @@ impl Chain {
 
 	pub fn get_raw_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Vec<u8>>> {
 		self.backend.get_raw_transaction(tx_hash)
+	}
+
+	pub fn get_receipt(&self, tx_hash: &Hash) -> CommonResult<Option<Receipt>> {
+		self.backend.get_receipt(tx_hash)
 	}
 
 	pub fn is_meta_tx(&self, tx: &Transaction) -> CommonResult<bool> {

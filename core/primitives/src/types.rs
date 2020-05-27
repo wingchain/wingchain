@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::codec::{Decode, Encode};
 use smallvec::alloc::sync::Arc;
 use smallvec::SmallVec;
+
+use crate::codec::{Decode, Encode};
 
 #[derive(Clone, Encode, Decode, PartialEq)]
 pub struct Address(pub Vec<u8>);
@@ -55,7 +56,7 @@ pub struct Transaction {
 	pub call: Call,
 }
 
-#[derive(Clone, Encode, Decode, PartialEq, Hash)]
+#[derive(Clone, Encode, Decode, Eq, PartialEq, Hash)]
 pub struct Hash(pub Vec<u8>);
 
 pub type BlockNumber = u64;
@@ -69,9 +70,11 @@ pub struct Header {
 	pub parent_hash: Hash,
 	pub meta_txs_root: Hash,
 	pub meta_state_root: Hash,
+	pub meta_receipts_root: Hash,
 	pub payload_txs_root: Hash,
 	pub payload_executed_gap: i8,
 	pub payload_executed_state_root: Hash,
+	pub payload_executed_receipts_root: Hash,
 }
 
 #[derive(Clone, Debug, Encode, Decode, PartialEq)]
@@ -92,16 +95,23 @@ pub struct FullTransaction {
 	pub tx_hash: Hash,
 }
 
+#[derive(Debug, PartialEq)]
+pub struct FullReceipt {
+	pub receipt: Receipt,
+	pub tx_hash: Hash,
+}
+
 pub type CallResult<T> = Result<T, String>;
 
 pub type TransactionResult = Result<Vec<u8>, String>;
 
+#[derive(Clone, Encode, Decode, Debug, PartialEq)]
 pub struct Event(pub Vec<u8>);
 
+#[derive(Encode, Decode, Debug, PartialEq)]
 pub struct Receipt {
 	pub block_number: BlockNumber,
 	pub events: Vec<Event>,
-	pub executed: bool,
 	pub result: TransactionResult,
 }
 
@@ -111,6 +121,7 @@ pub struct CommitBlockParams<T> {
 	pub header: Header,
 	pub body: Body,
 	pub meta_txs: Vec<Arc<FullTransaction>>,
+	pub meta_receipts: Vec<Arc<FullReceipt>>,
 	pub payload_txs: Vec<Arc<FullTransaction>>,
 	pub meta_transaction: T,
 }
@@ -128,6 +139,7 @@ pub struct CommitExecuteParams<T> {
 	pub block_hash: Hash,
 	pub number: BlockNumber,
 	pub executed: Executed,
+	pub payload_receipts: Vec<Arc<FullReceipt>>,
 	pub payload_transaction: T,
 }
 
@@ -144,6 +156,7 @@ pub struct BuildExecuteParams {
 #[derive(Clone, Debug, Encode, Decode, PartialEq)]
 pub struct Executed {
 	pub payload_executed_state_root: Hash,
+	pub payload_executed_receipts_root: Hash,
 }
 
 pub type DBKey = SmallVec<[u8; 32]>;

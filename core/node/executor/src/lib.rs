@@ -29,13 +29,14 @@ use node_executor_primitives::{
 };
 use node_statedb::{StateDB, StateDBGetter, StateDBStmt, TrieRoot};
 use primitives::codec::Encode;
+use primitives::types::FullReceipt;
 use primitives::{
 	codec, errors::CommonResult, BlockNumber, Event, FullTransaction, Nonce, PublicKey, Receipt,
 	SecretKey, Signature, TransactionForHash, TransactionResult, Witness,
 };
 use primitives::{Address, Call, DBKey, DBValue, Hash, Params, Transaction};
 
-const META_TXS_SIZE: usize = 64;
+const META_TXS_SIZE: usize = 16;
 const PAYLOAD_TXS_SIZE: usize = 512;
 const EVENT_SIZE: usize = 4;
 
@@ -87,10 +88,12 @@ struct ContextInner<'a> {
 	meta_state_root: Rc<Hash>,
 	meta_state: ContextState<'a>,
 	meta_txs: RefCell<Vec<Arc<FullTransaction>>>,
+	meta_receipts: RefCell<Vec<Arc<FullReceipt>>>,
 	payload_statedb: Arc<StateDB>,
 	payload_state_root: Rc<Hash>,
 	payload_state: ContextState<'a>,
 	payload_txs: RefCell<Vec<Arc<FullTransaction>>>,
+	payload_receipts: RefCell<Vec<Arc<FullReceipt>>>,
 	events: RefCell<Vec<Event>>,
 	// to mark the context has already started to executed payload txs
 	payload_phase: Cell<bool>,
@@ -165,10 +168,12 @@ impl<'a> Context<'a> {
 			meta_state_root: context_essence.meta_state_root.clone(),
 			meta_state,
 			meta_txs: RefCell::new(Vec::with_capacity(META_TXS_SIZE)),
+			meta_receipts: RefCell::new(Vec::with_capacity(META_TXS_SIZE)),
 			payload_statedb: context_essence.payload_statedb.clone(),
 			payload_state_root: context_essence.payload_state_root.clone(),
 			payload_state,
 			payload_txs: RefCell::new(Vec::with_capacity(PAYLOAD_TXS_SIZE)),
+			payload_receipts: RefCell::new(Vec::with_capacity(PAYLOAD_TXS_SIZE)),
 			events: RefCell::new(Vec::with_capacity(EVENT_SIZE)),
 			payload_phase: Cell::new(false),
 		});
@@ -197,6 +202,18 @@ impl<'a> Context<'a> {
 		Ok((Hash(txs_root), txs))
 	}
 
+	pub fn get_meta_receipts(&self) -> CommonResult<(Hash, Vec<Arc<FullReceipt>>)> {
+		let receipts = self.inner.meta_receipts.borrow().clone();
+
+		let input = receipts
+			.iter()
+			.map(|x| codec::encode(&x.receipt))
+			.collect::<Result<Vec<Vec<u8>>, _>>()?;
+		let receipts_root = self.inner.trie_root.calc_ordered_trie_root(input);
+
+		Ok((Hash(receipts_root), receipts))
+	}
+
 	pub fn get_payload_update(&self) -> CommonResult<(Hash, DBTransaction)> {
 		let buffer = self.inner.payload_state.buffer.borrow();
 		let (root, transaction) = self
@@ -204,6 +221,18 @@ impl<'a> Context<'a> {
 			.payload_statedb
 			.prepare_update(&self.inner.payload_state_root.0, buffer.iter())?;
 		Ok((Hash(root), transaction))
+	}
+
+	pub fn get_payload_receipts(&self) -> CommonResult<(Hash, Vec<Arc<FullReceipt>>)> {
+		let receipts = self.inner.payload_receipts.borrow().clone();
+
+		let input = receipts
+			.iter()
+			.map(|x| codec::encode(&x.receipt))
+			.collect::<Result<Vec<Vec<u8>>, _>>()?;
+		let receipts_root = self.inner.trie_root.calc_ordered_trie_root(input);
+
+		Ok((Hash(receipts_root), receipts))
 	}
 
 	pub fn get_payload_txs(&self) -> CommonResult<(Hash, Vec<Arc<FullTransaction>>)> {
@@ -362,7 +391,11 @@ impl Executor {
 		txs: Vec<Arc<FullTransaction>>,
 	) -> CommonResult<()> {
 		let mut txs_is_meta: Option<bool> = None;
+
+		let mut receipts = Vec::with_capacity(META_TXS_SIZE);
+
 		for tx in &txs {
+			let tx_hash = &tx.tx_hash;
 			let tx = &tx.tx;
 			let call = &tx.call;
 			let module = &call.module;
@@ -393,12 +426,16 @@ impl Executor {
 				Dispatcher::execute_call::<Context>(module, context, sender.as_ref(), &call)?;
 			let events = context.drain_events()?;
 
-			let _receipt = Receipt {
+			let receipt = Receipt {
 				block_number: context.env().number,
 				events,
-				executed: true,
 				result,
 			};
+			let full_receipt = FullReceipt {
+				receipt,
+				tx_hash: tx_hash.clone(),
+			};
+			receipts.push(Arc::new(full_receipt));
 		}
 
 		if txs_is_meta == Some(false) {
@@ -416,6 +453,20 @@ impl Executor {
 		match txs_is_meta {
 			Some(true) => context.inner.meta_txs.borrow_mut().append(&mut txs),
 			Some(false) => context.inner.payload_txs.borrow_mut().append(&mut txs),
+			_ => (),
+		}
+
+		match txs_is_meta {
+			Some(true) => context
+				.inner
+				.meta_receipts
+				.borrow_mut()
+				.append(&mut receipts),
+			Some(false) => context
+				.inner
+				.payload_receipts
+				.borrow_mut()
+				.append(&mut receipts),
 			_ => (),
 		}
 

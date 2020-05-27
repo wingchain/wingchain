@@ -201,7 +201,7 @@ impl DBTransaction {
 
 pub mod columns {
 	/// column names, which should be corresponding to the following const
-	pub const COLUMN_NAMES: [&str; 9] = [
+	pub const COLUMN_NAMES: [&str; 10] = [
 		"global",
 		"block_hash",
 		"header",
@@ -210,6 +210,7 @@ pub mod columns {
 		"payload_state",
 		"payload_txs",
 		"tx",
+		"receipt",
 		"executed",
 	];
 
@@ -237,8 +238,11 @@ pub mod columns {
 	/// transaction hash to transaction
 	pub const TX: u32 = 7;
 
+	/// transaction hash to receipt
+	pub const RECEIPT: u32 = 8;
+
 	/// block hash to executed
-	pub const EXECUTED: u32 = 8;
+	pub const EXECUTED: u32 = 9;
 }
 
 pub mod global_key {

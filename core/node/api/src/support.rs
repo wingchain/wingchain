@@ -19,7 +19,9 @@ use node_chain::Chain;
 use node_txpool::support::TxPoolSupport;
 use node_txpool::TxPool;
 use primitives::errors::CommonResult;
-use primitives::{Address, Block, BlockNumber, Call, Hash, Header, Transaction, TransactionResult};
+use primitives::{
+	Address, Block, BlockNumber, Call, Hash, Header, Receipt, Transaction, TransactionResult,
+};
 
 #[async_trait]
 pub trait ApiSupport {
@@ -31,6 +33,7 @@ pub trait ApiSupport {
 	async fn get_header(&self, block_hash: &Hash) -> CommonResult<Option<Header>>;
 	async fn get_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Transaction>>;
 	async fn get_raw_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Vec<u8>>>;
+	async fn get_receipt(&self, tx_hash: &Hash) -> CommonResult<Option<Receipt>>;
 	async fn insert_transaction(&self, transaction: Transaction) -> CommonResult<()>;
 	async fn get_transaction_in_txpool(&self, tx_hash: &Hash) -> CommonResult<Option<Transaction>>;
 	async fn execute_call(
@@ -86,6 +89,9 @@ where
 	}
 	async fn get_raw_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Vec<u8>>> {
 		self.chain.get_raw_transaction(tx_hash)
+	}
+	async fn get_receipt(&self, tx_hash: &Hash) -> CommonResult<Option<Receipt>> {
+		self.chain.get_receipt(tx_hash)
 	}
 	async fn insert_transaction(&self, tx: Transaction) -> CommonResult<()> {
 		self.txpool.insert(tx).await

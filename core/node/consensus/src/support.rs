@@ -24,6 +24,7 @@ use primitives::types::CallResult;
 use primitives::{
 	Address, BlockNumber, BuildBlockParams, FullTransaction, Hash, Header, Transaction,
 };
+use std::collections::HashSet;
 
 #[async_trait]
 pub trait ConsensusSupport {
@@ -46,6 +47,7 @@ pub trait ConsensusSupport {
 	) -> CommonResult<ChainCommitBlockParams>;
 	async fn commit_block(&self, commit_block_params: ChainCommitBlockParams) -> CommonResult<()>;
 	fn get_transactions_in_txpool(&self) -> CommonResult<Vec<Arc<FullTransaction>>>;
+	fn remove_transactions_in_txpool(&self, tx_hash_set: &HashSet<Hash>) -> CommonResult<()>;
 }
 
 pub struct DefaultConsensusSupport<TS>
@@ -109,5 +111,8 @@ where
 	fn get_transactions_in_txpool(&self) -> CommonResult<Vec<Arc<FullTransaction>>> {
 		let txs = (*self.txpool.get_queue().read()).clone();
 		Ok(txs)
+	}
+	fn remove_transactions_in_txpool(&self, tx_hash_set: &HashSet<Hash>) -> CommonResult<()> {
+		self.txpool.remove(tx_hash_set)
 	}
 }

@@ -27,7 +27,7 @@ use node_consensus::support::DefaultConsensusSupport;
 use node_consensus_solo::Solo;
 use node_executor::module;
 use node_txpool::{TxPool, TxPoolConfig};
-use primitives::{Address, Balance};
+use primitives::{codec, Address, Balance, Event, Receipt};
 use utils_test::test_accounts;
 
 #[tokio::test]
@@ -97,7 +97,7 @@ async fn test_consensus_solo() {
 			"balance".to_string(),
 			"transfer".to_string(),
 			module::balance::TransferParams {
-				recipient: account2.3,
+				recipient: account2.3.clone(),
 				value: 3,
 			},
 		)
@@ -160,6 +160,21 @@ async fn test_consensus_solo() {
 		.unwrap()
 		.unwrap();
 	assert_eq!(block3.body.payload_txs[0], tx3_hash);
+
+	let tx3_receipt = chain.get_receipt(&tx3_hash).unwrap().unwrap();
+	assert_eq!(
+		tx3_receipt,
+		Receipt {
+			block_number: 3,
+			events: vec![Event::from(&module::balance::TransferEvent {
+				sender: account1.3,
+				recipient: account2.3,
+				value: 3,
+			})
+			.unwrap()],
+			result: Ok(codec::encode(&()).unwrap()),
+		}
+	);
 }
 
 fn get_chain(address: &Address) -> Arc<Chain> {

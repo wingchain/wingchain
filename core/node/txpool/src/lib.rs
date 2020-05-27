@@ -25,6 +25,7 @@ use primitives::errors::CommonResult;
 use primitives::{FullTransaction, Hash, Transaction};
 
 use crate::support::TxPoolSupport;
+use std::collections::HashSet;
 
 pub mod errors;
 pub mod support;
@@ -104,6 +105,19 @@ where
 		if let Err(_e) = result {
 			self.map.remove(&tx_hash);
 			return Err(errors::ErrorKind::Insert(tx_hash).into());
+		}
+
+		Ok(())
+	}
+
+	pub fn remove(&self, tx_hash_set: &HashSet<Hash>) -> CommonResult<()> {
+		{
+			let mut queue = self.queue.write();
+			queue.retain(|x| !tx_hash_set.contains(&x.tx_hash));
+		}
+
+		{
+			self.map.retain(|k, _v| !tx_hash_set.contains(k));
 		}
 
 		Ok(())

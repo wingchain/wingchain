@@ -20,8 +20,7 @@ use std::time::{Duration, SystemTime};
 use futures::prelude::*;
 use futures::task::Poll;
 use futures::{Future, Stream, TryStreamExt};
-use log::info;
-use log::warn;
+use log::{debug, info, warn};
 use tokio::time::{delay_for, Delay};
 
 use node_consensus::{errors, support::ConsensusSupport};
@@ -29,6 +28,7 @@ use node_executor::module;
 use node_executor_primitives::EmptyParams;
 use primitives::errors::CommonResult;
 use primitives::{BuildBlockParams, FullTransaction};
+use std::collections::HashSet;
 
 pub struct Solo<S>
 where
@@ -100,6 +100,9 @@ where
 			return Ok(());
 		}
 	};
+
+	debug!("Txpool txs count: {}", txs.len());
+
 	let mut invalid_txs = vec![];
 	let mut meta_txs = vec![];
 	let mut payload_txs = vec![];
@@ -119,6 +122,7 @@ where
 			}
 		}
 	}
+	debug!("Invalid txs count: {}", invalid_txs.len());
 
 	let build_block_params = BuildBlockParams {
 		number,
@@ -130,6 +134,13 @@ where
 	let commit_block_params = support.build_block(build_block_params)?;
 
 	support.commit_block(commit_block_params).await?;
+
+	let tx_hash_set = txs
+		.iter()
+		.map(|x| x.tx_hash.clone())
+		.collect::<HashSet<_>>();
+
+	support.remove_transactions_in_txpool(&tx_hash_set)?;
 
 	Ok(())
 }

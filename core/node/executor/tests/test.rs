@@ -22,7 +22,11 @@ use node_db::DB;
 use node_executor::{module, Context, ContextEssence, Executor};
 use node_executor_primitives::ContextEnv;
 use node_statedb::{StateDB, TrieRoot};
-use primitives::{codec, Address, DBKey, FullTransaction, Hash, Params, TransactionForHash};
+use primitives::types::FullReceipt;
+use primitives::{
+	codec, Address, Balance, DBKey, Event, FullTransaction, Hash, Params, Receipt,
+	TransactionForHash,
+};
 use utils_test::test_accounts;
 
 #[test]
@@ -70,7 +74,7 @@ fn test_executor() {
 			"balance".to_string(),
 			"init".to_string(),
 			module::balance::InitParams {
-				endow: vec![(account1.3, 10)],
+				endow: vec![(account1.3.clone(), 10)],
 			},
 		)
 		.unwrap()];
@@ -120,6 +124,9 @@ fn test_executor() {
 	let (meta_txs_root, _txs) = context.get_meta_txs().unwrap();
 	let (payload_txs_root, _txs) = context.get_payload_txs().unwrap();
 
+	let (meta_receipts_root, meta_receipts) = context.get_meta_receipts().unwrap();
+	let (payload_receipts_root, payload_receipts) = context.get_payload_receipts().unwrap();
+
 	assert_eq!(meta_txs_root, expected_txs_root(&block_0_meta_txs));
 	assert_eq!(payload_txs_root, expected_txs_root(&block_0_payload_txs));
 	assert_eq!(
@@ -130,12 +137,101 @@ fn test_executor() {
 		payload_state_root,
 		expected_block_0_payload_state_root(&block_0_payload_txs)
 	);
+	assert_eq!(
+		(meta_receipts_root, meta_receipts),
+		expected_block_0_receipts_root(&block_0_meta_txs)
+	);
+	assert_eq!(
+		(payload_receipts_root, payload_receipts),
+		expected_block_0_receipts_root(&block_0_payload_txs)
+	);
 
 	// commit
 	db.write(meta_transaction).unwrap();
 	db.write(payload_transaction).unwrap();
 
 	// block 1
+
+	let nonce = 0u32;
+	let until = 1u64;
+
+	let tx = executor
+		.build_tx(
+			Some((account1.0.clone(), nonce, until)),
+			"balance".to_string(),
+			"transfer".to_string(),
+			module::balance::TransferParams {
+				recipient: account2.3.clone(),
+				value: 2,
+			},
+		)
+		.unwrap();
+	executor.validate_tx(&tx, true).unwrap();
+
+	let block_1_meta_txs = vec![];
+
+	let block_1_payload_txs = vec![tx]
+		.into_iter()
+		.map(|tx| {
+			let tx_hash = executor.hash_transaction(&tx).unwrap();
+			Arc::new(FullTransaction { tx, tx_hash })
+		})
+		.collect::<Vec<_>>();
+
+	let number = 1;
+	let timestamp = timestamp + 1;
+
+	let env = ContextEnv { number, timestamp };
+
+	let context_essence = ContextEssence::new(
+		env,
+		trie_root.clone(),
+		meta_statedb.clone(),
+		meta_state_root,
+		payload_statedb.clone(),
+		payload_state_root,
+	)
+	.unwrap();
+	let context = Context::new(&context_essence).unwrap();
+
+	executor
+		.execute_txs(&context, block_1_meta_txs.clone())
+		.unwrap();
+	executor
+		.execute_txs(&context, block_1_payload_txs.clone())
+		.unwrap();
+	let (meta_state_root, _meta_transaction) = context.get_meta_update().unwrap();
+	let (payload_state_root, _payload_transaction) = context.get_payload_update().unwrap();
+
+	let (meta_txs_root, _txs) = context.get_meta_txs().unwrap();
+	let (payload_txs_root, _txs) = context.get_payload_txs().unwrap();
+	let (payload_receipts_root, payload_receipts) = context.get_payload_receipts().unwrap();
+
+	assert_eq!(meta_txs_root, expected_txs_root(&block_1_meta_txs));
+	assert_eq!(payload_txs_root, expected_txs_root(&block_1_payload_txs));
+	assert_eq!(
+		meta_state_root,
+		expected_block_0_meta_state_root(&block_0_meta_txs)
+	);
+	assert_eq!(
+		payload_state_root,
+		expected_block_1_payload_state_root(&block_0_payload_txs, &block_1_payload_txs)
+	);
+	assert_eq!(
+		(payload_receipts_root, payload_receipts),
+		expected_block_1_receipts_root(&block_1_payload_txs, account1.3, account2.3, 2)
+	);
+}
+
+#[test]
+fn test_executor_validate_tx() {
+	let hasher = Arc::new(HashImpl::Blake2b256);
+	let dsa = Arc::new(DsaImpl::Ed25519);
+	let address = Arc::new(AddressImpl::Blake2b160);
+
+	let (account1, account2) = test_accounts(dsa.clone(), address.clone());
+
+	let executor = Executor::new(hasher, dsa, address);
 
 	let nonce = 0u32;
 	let until = 1u64;
@@ -200,70 +296,7 @@ fn test_executor() {
 		tx
 	};
 	let result = executor.validate_tx(&tx, true);
-	// assert_eq!(format!("{}", result.unwrap_err()), "".to_string());
 	assert!(format!("{}", result.unwrap_err()).contains("Error: Invalid tx witness"));
-
-	let tx = executor
-		.build_tx(
-			Some((account1.0, nonce, until)),
-			"balance".to_string(),
-			"transfer".to_string(),
-			module::balance::TransferParams {
-				recipient: account2.3,
-				value: 2,
-			},
-		)
-		.unwrap();
-	executor.validate_tx(&tx, true).unwrap();
-
-	let block_1_meta_txs = vec![];
-
-	let block_1_payload_txs = vec![tx]
-		.into_iter()
-		.map(|tx| {
-			let tx_hash = executor.hash_transaction(&tx).unwrap();
-			Arc::new(FullTransaction { tx, tx_hash })
-		})
-		.collect::<Vec<_>>();
-
-	let number = 1;
-	let timestamp = timestamp + 1;
-
-	let env = ContextEnv { number, timestamp };
-
-	let context_essence = ContextEssence::new(
-		env,
-		trie_root.clone(),
-		meta_statedb.clone(),
-		meta_state_root,
-		payload_statedb.clone(),
-		payload_state_root,
-	)
-	.unwrap();
-	let context = Context::new(&context_essence).unwrap();
-
-	executor
-		.execute_txs(&context, block_1_meta_txs.clone())
-		.unwrap();
-	executor
-		.execute_txs(&context, block_1_payload_txs.clone())
-		.unwrap();
-	let (meta_state_root, _meta_transaction) = context.get_meta_update().unwrap();
-	let (payload_state_root, _payload_transaction) = context.get_payload_update().unwrap();
-
-	let (meta_txs_root, _txs) = context.get_meta_txs().unwrap();
-	let (payload_txs_root, _txs) = context.get_payload_txs().unwrap();
-
-	assert_eq!(meta_txs_root, expected_txs_root(&block_1_meta_txs));
-	assert_eq!(payload_txs_root, expected_txs_root(&block_1_payload_txs));
-	assert_eq!(
-		meta_state_root,
-		expected_block_0_meta_state_root(&block_0_meta_txs)
-	);
-	assert_eq!(
-		payload_state_root,
-		expected_block_1_payload_state_root(block_0_payload_txs, block_1_payload_txs)
-	);
 }
 
 fn expected_txs_root(txs: &Vec<Arc<FullTransaction>>) -> Hash {
@@ -272,6 +305,31 @@ fn expected_txs_root(txs: &Vec<Arc<FullTransaction>>) -> Hash {
 		.into_iter()
 		.map(|x| codec::encode(&TransactionForHash::new(&x.tx)).unwrap());
 	Hash(trie_root.calc_ordered_trie_root(txs))
+}
+
+fn expected_block_0_receipts_root(
+	txs: &Vec<Arc<FullTransaction>>,
+) -> (Hash, Vec<Arc<FullReceipt>>) {
+	let trie_root = TrieRoot::new(Arc::new(HashImpl::Blake2b256)).unwrap();
+
+	let receipts = txs
+		.into_iter()
+		.map(|x| {
+			Arc::new(FullReceipt {
+				tx_hash: x.tx_hash.clone(),
+				receipt: Receipt {
+					block_number: 0,
+					events: vec![],
+					result: Ok(codec::encode(&()).unwrap()),
+				},
+			})
+		})
+		.collect::<Vec<_>>();
+
+	let map = receipts.iter().map(|x| codec::encode(&x.receipt).unwrap());
+	let root = Hash(trie_root.calc_ordered_trie_root(map));
+
+	(root, receipts)
 }
 
 fn expected_block_0_meta_state_root(txs: &Vec<Arc<FullTransaction>>) -> Hash {
@@ -350,8 +408,8 @@ fn expected_block_0_payload_state_root(txs: &Vec<Arc<FullTransaction>>) -> Hash 
 }
 
 fn expected_block_1_payload_state_root(
-	block_0_txs: Vec<Arc<FullTransaction>>,
-	block_1_txs: Vec<Arc<FullTransaction>>,
+	block_0_txs: &Vec<Arc<FullTransaction>>,
+	block_1_txs: &Vec<Arc<FullTransaction>>,
 ) -> Hash {
 	let tx = &block_0_txs[0].tx; // use the last tx
 	let params: module::balance::InitParams = codec::decode(&tx.call.params.0[..]).unwrap();
@@ -420,4 +478,39 @@ fn expected_block_1_payload_state_root(
 
 	let (state_root, _) = statedb.prepare_update(&state_root, data.iter()).unwrap();
 	Hash(state_root)
+}
+
+fn expected_block_1_receipts_root(
+	txs: &Vec<Arc<FullTransaction>>,
+	sender: Address,
+	recipient: Address,
+	value: Balance,
+) -> (Hash, Vec<Arc<FullReceipt>>) {
+	let trie_root = TrieRoot::new(Arc::new(HashImpl::Blake2b256)).unwrap();
+
+	let event = module::balance::TransferEvent {
+		sender,
+		recipient,
+		value,
+	};
+	let event = Event::from(&event).unwrap();
+
+	let receipts = txs
+		.into_iter()
+		.map(|x| {
+			Arc::new(FullReceipt {
+				tx_hash: x.tx_hash.clone(),
+				receipt: Receipt {
+					block_number: 1,
+					events: vec![event.clone()],
+					result: Ok(codec::encode(&()).unwrap()),
+				},
+			})
+		})
+		.collect::<Vec<_>>();
+
+	let map = receipts.iter().map(|x| codec::encode(&x.receipt).unwrap());
+	let root = Hash(trie_root.calc_ordered_trie_root(map));
+
+	(root, receipts)
 }
