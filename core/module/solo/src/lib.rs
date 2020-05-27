@@ -16,12 +16,12 @@ use std::rc::Rc;
 
 use executor_macro::{call, module};
 use executor_primitives::{
-	errors::{self, execute_error_result},
-	CallResult, Context, ContextEnv, EmptyParams, Module as ModuleT, StorageValue, Validator,
+	errors, Context, ContextEnv, EmptyParams, Module as ModuleT, StorageValue, Validator,
 };
 use primitives::codec::{Decode, Encode};
 use primitives::errors::CommonResult;
-use primitives::{codec, Address, Call};
+use primitives::types::CallResult;
+use primitives::{codec, Address, Call, TransactionResult};
 
 pub struct Module<C>
 where
@@ -44,13 +44,9 @@ impl<C: Context> Module<C> {
 	}
 
 	#[call(write = true)]
-	fn init(
-		&self,
-		_sender: Option<&Address>,
-		params: InitParams,
-	) -> CommonResult<CommonResult<()>> {
+	fn init(&self, _sender: Option<&Address>, params: InitParams) -> CommonResult<CallResult<()>> {
 		if self.env.number != 0 {
-			return execute_error_result("not genesis");
+			return Ok(Err("not genesis".to_string()));
 		}
 		self.block_interval.set(&params.block_interval)?;
 		Ok(Ok(()))
@@ -61,10 +57,10 @@ impl<C: Context> Module<C> {
 		&self,
 		_sender: Option<&Address>,
 		_params: EmptyParams,
-	) -> CommonResult<CommonResult<Meta>> {
+	) -> CommonResult<CallResult<Meta>> {
 		let block_interval = match self.block_interval.get()? {
 			Some(block_interval) => block_interval,
-			None => return execute_error_result("unexpected none"),
+			None => return Ok(Err("unexpected none".to_string())),
 		};
 		let meta = Meta { block_interval };
 		Ok(Ok(meta))

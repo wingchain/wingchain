@@ -76,6 +76,10 @@ where
 			method::chain_get_raw_transaction_by_hash::<S>,
 		)
 		.with_method(
+			"chain_getReceiptByHash",
+			method::chain_get_receipt_by_hash::<S>,
+		)
+		.with_method(
 			"chain_sendRawTransaction",
 			method::chain_send_raw_transaction::<S>,
 		)

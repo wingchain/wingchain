@@ -149,6 +149,22 @@ pub async fn chain_get_raw_transaction_by_hash<S: ApiSupport>(
 	Ok(raw_tx)
 }
 
+pub async fn chain_get_receipt_by_hash<S: ApiSupport>(
+	data: Data<Arc<S>>,
+	Params((hash,)): Params<(Hash,)>,
+) -> CustomResult<Option<Receipt>> {
+	let hash = hash.try_into()?;
+	let support = data.0;
+	let tx: Option<Receipt> = support.get_receipt(&hash).await?.map(Into::into);
+
+	let tx = tx.map(|mut x| {
+		x.hash = Some(hash.into());
+		x
+	});
+
+	Ok(tx)
+}
+
 pub async fn chain_send_raw_transaction<S: ApiSupport>(
 	data: Data<Arc<S>>,
 	Params((raw_transaction,)): Params<(Hex,)>,
@@ -202,8 +218,13 @@ pub async fn chain_execute_call<S: ApiSupport>(
 
 	let result = data
 		.execute_call(&block_hash, sender.as_ref(), &call)
-		.await??;
-	let result = result.0.into();
+		.await?;
+
+	let result: CommonResult<Vec<u8>> = result.map_err(|e| errors::ErrorKind::CallError(e).into());
+	let result = result?;
+
+	let result = result.into();
+
 	Ok(result)
 }
 
@@ -238,9 +259,11 @@ pub struct Header {
 	pub parent_hash: Hash,
 	pub meta_txs_root: Hash,
 	pub meta_state_root: Hash,
+	pub meta_receipts_root: Hash,
 	pub payload_txs_root: Hash,
 	pub payload_executed_gap: Hex,
 	pub payload_executed_state_root: Hash,
+	pub payload_executed_receipts_root: Hash,
 }
 
 #[derive(Serialize)]
@@ -280,6 +303,15 @@ pub struct Call {
 	pub params: Hex,
 }
 
+#[derive(Serialize)]
+pub struct Receipt {
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub hash: Option<Hash>,
+	pub block_number: Hex,
+	pub events: Vec<Hex>,
+	pub result: Hex,
+}
+
 #[derive(Deserialize)]
 pub struct ExecuteTransactionRequest {
 	pub block_hash: Hash,
@@ -296,9 +328,11 @@ impl From<primitives::Header> for Header {
 			parent_hash: header.parent_hash.into(),
 			meta_txs_root: header.meta_txs_root.into(),
 			meta_state_root: header.meta_state_root.into(),
+			meta_receipts_root: header.meta_receipts_root.into(),
 			payload_txs_root: header.payload_txs_root.into(),
 			payload_executed_gap: header.payload_executed_gap.into(),
 			payload_executed_state_root: header.payload_executed_state_root.into(),
+			payload_executed_receipts_root: header.payload_executed_receipts_root.into(),
 		}
 	}
 }
@@ -353,6 +387,17 @@ impl From<primitives::Call> for Call {
 	}
 }
 
+impl From<primitives::Receipt> for Receipt {
+	fn from(receipt: primitives::Receipt) -> Self {
+		Self {
+			hash: None,
+			block_number: receipt.block_number.into(),
+			events: receipt.events.into_iter().map(Into::into).collect(),
+			result: receipt.result.into(),
+		}
+	}
+}
+
 impl From<u32> for Hex {
 	fn from(number: u32) -> Self {
 		Hex(format!("0x{}", hex::encode(number.to_be_bytes())))
@@ -392,6 +437,21 @@ impl From<primitives::Signature> for Hex {
 impl From<primitives::Params> for Hex {
 	fn from(params: primitives::Params) -> Self {
 		Hex(format!("0x{}", hex::encode(params.0)))
+	}
+}
+
+impl From<primitives::Event> for Hex {
+	fn from(event: primitives::Event) -> Self {
+		Hex(format!("0x{}", hex::encode(event.0)))
+	}
+}
+
+impl From<primitives::TransactionResult> for Hex {
+	fn from(result: primitives::TransactionResult) -> Self {
+		Hex(format!(
+			"0x{}",
+			hex::encode(codec::encode(&result).expect("qed"))
+		))
 	}
 }
 

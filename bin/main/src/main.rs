@@ -25,7 +25,7 @@ mod errors;
 fn main() {
 	match run_main() {
 		Ok(_) => (),
-		Err(e) => eprintln!("Error: {:?}", e),
+		Err(e) => eprintln!("{}", e),
 	}
 }
 

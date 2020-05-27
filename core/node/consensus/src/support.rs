@@ -20,9 +20,11 @@ use node_txpool::support::TxPoolSupport;
 use node_txpool::TxPool;
 use primitives::codec::{Decode, Encode};
 use primitives::errors::CommonResult;
+use primitives::types::CallResult;
 use primitives::{
 	Address, BlockNumber, BuildBlockParams, FullTransaction, Hash, Header, Transaction,
 };
+use std::collections::HashSet;
 
 #[async_trait]
 pub trait ConsensusSupport {
@@ -37,7 +39,7 @@ pub trait ConsensusSupport {
 		module: String,
 		method: String,
 		params: P,
-	) -> CommonResult<R>;
+	) -> CommonResult<CallResult<R>>;
 	fn is_meta_tx(&self, tx: &Transaction) -> CommonResult<bool>;
 	fn build_block(
 		&self,
@@ -45,6 +47,7 @@ pub trait ConsensusSupport {
 	) -> CommonResult<ChainCommitBlockParams>;
 	async fn commit_block(&self, commit_block_params: ChainCommitBlockParams) -> CommonResult<()>;
 	fn get_transactions_in_txpool(&self) -> CommonResult<Vec<Arc<FullTransaction>>>;
+	fn remove_transactions_in_txpool(&self, tx_hash_set: &HashSet<Hash>) -> CommonResult<()>;
 }
 
 pub struct DefaultConsensusSupport<TS>
@@ -89,7 +92,7 @@ where
 		module: String,
 		method: String,
 		params: P,
-	) -> CommonResult<R> {
+	) -> CommonResult<CallResult<R>> {
 		self.chain
 			.execute_call_with_block_number(block_number, sender, module, method, params)
 	}
@@ -108,5 +111,8 @@ where
 	fn get_transactions_in_txpool(&self) -> CommonResult<Vec<Arc<FullTransaction>>> {
 		let txs = (*self.txpool.get_queue().read()).clone();
 		Ok(txs)
+	}
+	fn remove_transactions_in_txpool(&self, tx_hash_set: &HashSet<Hash>) -> CommonResult<()> {
+		self.txpool.remove(tx_hash_set)
 	}
 }

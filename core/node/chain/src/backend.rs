@@ -24,13 +24,14 @@ use crypto::hash::HashImpl;
 use main_base::spec::Spec;
 use node_db::{DBTransaction, DB};
 use node_executor::{Context, ContextEssence, Executor};
-use node_executor_primitives::{CallResult, ContextEnv};
+use node_executor_primitives::ContextEnv;
 use node_statedb::{StateDB, TrieRoot};
 use primitives::codec::{self, Decode, Encode};
 use primitives::errors::CommonResult;
+use primitives::types::CallResult;
 use primitives::{
 	Address, Block, BlockNumber, Body, BuildBlockParams, BuildExecuteParams, Call, DBKey, Executed,
-	Hash, Header, Nonce, SecretKey, Transaction,
+	Hash, Header, Nonce, Receipt, SecretKey, Transaction, TransactionResult,
 };
 
 use crate::genesis::build_genesis;
@@ -238,12 +239,20 @@ impl Backend {
 			.get(node_db::columns::TX, &DBKey::from_slice(&tx_hash.0))
 	}
 
+	pub fn get_receipt(&self, tx_hash: &Hash) -> CommonResult<Option<Receipt>> {
+		self.db.get_with(
+			node_db::columns::RECEIPT,
+			&DBKey::from_slice(&tx_hash.0),
+			|x| codec::decode(&x[..]),
+		)
+	}
+
 	pub fn execute_call(
 		&self,
 		block_hash: &Hash,
 		sender: Option<&Address>,
 		call: &Call,
-	) -> CommonResult<CommonResult<CallResult>> {
+	) -> CommonResult<TransactionResult> {
 		let header = match self.get_header(block_hash)? {
 			Some(header) => header,
 			None => {
@@ -293,7 +302,7 @@ impl Backend {
 		module: String,
 		method: String,
 		params: P,
-	) -> CommonResult<R> {
+	) -> CommonResult<CallResult<R>> {
 		let block_hash = self
 			.get_block_hash(block_number)?
 			.ok_or(errors::ErrorKind::Data(format!(
@@ -310,10 +319,13 @@ impl Backend {
 		module: String,
 		method: String,
 		params: P,
-	) -> CommonResult<R> {
+	) -> CommonResult<CallResult<R>> {
 		let call = self.build_transaction(None, module, method, params)?.call;
-		let result = self.execute_call(&block_hash, sender, &call)??;
-		let result = codec::decode(&result.0)?;
+		let result = self.execute_call(&block_hash, sender, &call)?;
+		let result: CallResult<R> = match result {
+			Ok(result) => Ok(codec::decode(&result)?),
+			Err(e) => Err(e),
+		};
 		Ok(result)
 	}
 
@@ -398,6 +410,7 @@ impl Backend {
 
 		let (meta_state_root, meta_transaction) = context.get_meta_update()?;
 		let (meta_txs_root, meta_txs) = context.get_meta_txs()?;
+		let (meta_receipts_root, meta_receipts) = context.get_meta_receipts()?;
 
 		let payload_txs_root = context.get_txs_root(&build_block_params.payload_txs)?;
 		let payload_txs = build_block_params.payload_txs;
@@ -417,9 +430,11 @@ impl Backend {
 			parent_hash,
 			meta_txs_root,
 			meta_state_root,
+			meta_receipts_root,
 			payload_txs_root,
 			payload_executed_gap: block_executed_gap,
 			payload_executed_state_root: block_executed.payload_executed_state_root,
+			payload_executed_receipts_root: block_executed.payload_executed_receipts_root,
 		};
 
 		let block_hash = self.hash(&header)?;
@@ -432,6 +447,7 @@ impl Backend {
 				payload_txs: payload_tx_hashes,
 			},
 			meta_txs,
+			meta_receipts,
 			payload_txs,
 			meta_transaction,
 		};
@@ -485,13 +501,16 @@ impl Backend {
 		self.executor.execute_txs(&context, payload_txs)?;
 
 		let (payload_state_root, payload_transaction) = context.get_payload_update()?;
+		let (payload_receipts_root, payload_receipts) = context.get_payload_receipts()?;
 
 		let commit_execute_params = ChainCommitExecuteParams {
 			block_hash,
 			number,
 			executed: Executed {
 				payload_executed_state_root: payload_state_root,
+				payload_executed_receipts_root: payload_receipts_root,
 			},
+			payload_receipts,
 			payload_transaction,
 		};
 
@@ -594,9 +613,11 @@ impl Backend {
 
 		let (meta_state_root, meta_transaction) = context.get_meta_update()?;
 		let (meta_txs_root, meta_txs) = context.get_meta_txs()?;
+		let (meta_receipts_root, meta_receipts) = context.get_meta_receipts()?;
 
 		let (payload_state_root, payload_transaction) = context.get_payload_update()?;
 		let (payload_txs_root, payload_txs) = context.get_payload_txs()?;
+		let (payload_receipts_root, payload_receipts) = context.get_payload_receipts()?;
 
 		let meta_tx_hashes = meta_txs
 			.iter()
@@ -613,9 +634,11 @@ impl Backend {
 			parent_hash: zero_hash.clone(),
 			meta_txs_root,
 			meta_state_root,
+			meta_receipts_root,
 			payload_txs_root,
 			payload_executed_gap: 1,
-			payload_executed_state_root: zero_hash,
+			payload_executed_state_root: zero_hash.clone(),
+			payload_executed_receipts_root: zero_hash,
 		};
 
 		let block_hash = self.hash(&header)?;
@@ -628,12 +651,14 @@ impl Backend {
 				payload_txs: payload_tx_hashes,
 			},
 			meta_txs,
+			meta_receipts,
 			payload_txs,
 			meta_transaction,
 		};
 
 		let executed = Executed {
 			payload_executed_state_root: payload_state_root,
+			payload_executed_receipts_root: payload_receipts_root,
 		};
 
 		let mut transaction = DBTransaction::new();
@@ -644,6 +669,7 @@ impl Backend {
 			block_hash: block_hash.clone(),
 			number,
 			executed,
+			payload_receipts,
 			payload_transaction,
 		};
 
@@ -707,14 +733,25 @@ fn commit_block(
 		);
 	}
 
-	// 5. block hash
+	// 5. meta receipts
+	for receipt in &commit_block_params.meta_receipts {
+		let tx_hash = &receipt.tx_hash;
+		let receipt = &receipt.receipt;
+		transaction.put_owned(
+			node_db::columns::RECEIPT,
+			DBKey::from_slice(&tx_hash.0),
+			codec::encode(&receipt)?,
+		);
+	}
+
+	// 6. block hash
 	transaction.put_owned(
 		node_db::columns::BLOCK_HASH,
 		DBKey::from_slice(&codec::encode(&commit_block_params.header.number)?),
 		codec::encode(&commit_block_params.block_hash)?,
 	);
 
-	// 6. best number
+	// 7. confirmed number
 	transaction.put_owned(
 		node_db::columns::GLOBAL,
 		DBKey::from_slice(node_db::global_key::CONFIRMED_NUMBER),
@@ -737,7 +774,18 @@ fn commit_executed(
 		codec::encode(&commit_execute_params.executed)?,
 	);
 
-	// 3. executed number
+	// 3. payload receipts
+	for receipt in &commit_execute_params.payload_receipts {
+		let tx_hash = &receipt.tx_hash;
+		let receipt = &receipt.receipt;
+		transaction.put_owned(
+			node_db::columns::RECEIPT,
+			DBKey::from_slice(&tx_hash.0),
+			codec::encode(&receipt)?,
+		);
+	}
+
+	// 4. executed number
 	transaction.put_owned(
 		node_db::columns::GLOBAL,
 		DBKey::from_slice(node_db::global_key::EXECUTED_NUMBER),

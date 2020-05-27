@@ -16,18 +16,19 @@ use std::rc::Rc;
 
 use executor_macro::{call, module};
 use executor_primitives::{
-	errors::{self, execute_error_result},
-	CallResult, Context, ContextEnv, EmptyParams, Module as ModuleT, StorageMap, Validator,
+	errors, Context, ContextEnv, EmptyParams, Module as ModuleT, StorageMap, Validator,
 };
 use primitives::codec::{Decode, Encode};
 use primitives::errors::CommonResult;
-use primitives::{codec, Address, Balance, Call};
+use primitives::types::CallResult;
+use primitives::{codec, Address, Balance, Call, TransactionResult};
 
 pub struct Module<C>
 where
 	C: Context,
 {
 	env: Rc<ContextEnv>,
+	context: C,
 	balance: StorageMap<Address, Balance, C>,
 }
 
@@ -39,17 +40,14 @@ impl<C: Context> Module<C> {
 	fn new(context: C) -> Self {
 		Self {
 			env: context.env(),
+			context: context.clone(),
 			balance: StorageMap::new::<Self>(context, b"balance"),
 		}
 	}
 	#[call(write = true)]
-	fn init(
-		&self,
-		_sender: Option<&Address>,
-		params: InitParams,
-	) -> CommonResult<CommonResult<()>> {
+	fn init(&self, _sender: Option<&Address>, params: InitParams) -> CommonResult<CallResult<()>> {
 		if self.env.number != 0 {
-			return execute_error_result("not genesis");
+			return Ok(Err("not genesis".to_string()));
 		}
 
 		for (address, balance) in &params.endow {
@@ -70,7 +68,7 @@ impl<C: Context> Module<C> {
 		&self,
 		sender: Option<&Address>,
 		_params: EmptyParams,
-	) -> CommonResult<CommonResult<Balance>> {
+	) -> CommonResult<CallResult<Balance>> {
 		let address = sender.expect("should be signed");
 		let balance = self.balance.get(address)?;
 		let balance = balance.unwrap_or(0);
@@ -82,33 +80,41 @@ impl<C: Context> Module<C> {
 		&self,
 		sender: Option<&Address>,
 		params: TransferParams,
-	) -> CommonResult<CommonResult<()>> {
+	) -> CommonResult<CallResult<()>> {
 		let sender = sender.expect("should be signed");
 		let recipient = &params.recipient;
 		let value = params.value;
 
 		if sender == recipient {
-			return execute_error_result("should not transfer to oneself");
+			return Ok(Err("should not transfer to oneself".to_string()));
 		}
 
 		let sender_balance = self.balance.get(sender)?.unwrap_or(0);
 		if sender_balance < value {
-			return execute_error_result("insufficient balance");
+			return Ok(Err("insufficient balance".to_string()));
 		}
 		let recipient_balance = self.balance.get(recipient)?.unwrap_or(0);
 
 		let (sender_balance, overflow) = sender_balance.overflowing_sub(value);
 		if overflow {
-			return execute_error_result("u64 overflow");
+			return Ok(Err("u64 overflow".to_string()));
 		}
 
 		let (recipient_balance, overflow) = recipient_balance.overflowing_add(value);
 		if overflow {
-			return execute_error_result("u64 overflow");
+			return Ok(Err("u64 overflow".to_string()));
 		}
 
 		self.balance.set(sender, &sender_balance)?;
 		self.balance.set(recipient, &recipient_balance)?;
+
+		let event = TransferEvent {
+			sender: sender.clone(),
+			recipient: recipient.clone(),
+			value,
+		};
+
+		self.context.emit_event(event)?;
 
 		Ok(Ok(()))
 	}
@@ -126,6 +132,13 @@ pub struct InitParams {
 
 #[derive(Encode, Decode)]
 pub struct TransferParams {
+	pub recipient: Address,
+	pub value: Balance,
+}
+
+#[derive(Encode, Decode)]
+pub struct TransferEvent {
+	pub sender: Address,
 	pub recipient: Address,
 	pub value: Balance,
 }

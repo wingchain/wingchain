@@ -20,12 +20,12 @@ use crypto::dsa::DsaImpl;
 use crypto::hash::HashImpl;
 use node_db::DBTransaction;
 pub use node_executor::module;
-pub use node_executor::CallResult;
 use primitives::codec::{Decode, Encode};
 use primitives::errors::CommonResult;
+use primitives::types::CallResult;
 use primitives::{
 	Address, Block, BlockNumber, BuildBlockParams, Call, CommitBlockParams, CommitExecuteParams,
-	Executed, Hash, Header, Nonce, SecretKey, Transaction,
+	Executed, Hash, Header, Nonce, Receipt, SecretKey, Transaction, TransactionResult,
 };
 
 use crate::backend::Backend;
@@ -90,6 +90,10 @@ impl Chain {
 
 	pub fn get_raw_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Vec<u8>>> {
 		self.backend.get_raw_transaction(tx_hash)
+	}
+
+	pub fn get_receipt(&self, tx_hash: &Hash) -> CommonResult<Option<Receipt>> {
+		self.backend.get_receipt(tx_hash)
 	}
 
 	pub fn is_meta_tx(&self, tx: &Transaction) -> CommonResult<bool> {
@@ -168,7 +172,7 @@ impl Chain {
 		block_hash: &Hash,
 		sender: Option<&Address>,
 		call: &Call,
-	) -> CommonResult<CommonResult<CallResult>> {
+	) -> CommonResult<TransactionResult> {
 		self.backend.execute_call(block_hash, sender, call)
 	}
 
@@ -179,7 +183,7 @@ impl Chain {
 		module: String,
 		method: String,
 		params: P,
-	) -> CommonResult<R> {
+	) -> CommonResult<CallResult<R>> {
 		self.backend
 			.execute_call_with_block_number(block_number, sender, module, method, params)
 	}

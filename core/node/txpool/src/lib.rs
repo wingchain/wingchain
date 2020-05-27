@@ -25,6 +25,7 @@ use primitives::errors::CommonResult;
 use primitives::{FullTransaction, Hash, Transaction};
 
 use crate::support::TxPoolSupport;
+use std::collections::HashSet;
 
 pub mod errors;
 pub mod support;
@@ -109,6 +110,19 @@ where
 		Ok(())
 	}
 
+	pub fn remove(&self, tx_hash_set: &HashSet<Hash>) -> CommonResult<()> {
+		{
+			let mut queue = self.queue.write();
+			queue.retain(|x| !tx_hash_set.contains(&x.tx_hash));
+		}
+
+		{
+			self.map.retain(|k, _v| !tx_hash_set.contains(k));
+		}
+
+		Ok(())
+	}
+
 	fn check_capacity(&self) -> CommonResult<()> {
 		if self.map.len() >= self.config.pool_capacity {
 			return Err(errors::ErrorKind::ExceedCapacity(self.config.pool_capacity).into());
@@ -169,11 +183,13 @@ async fn process_buffer(
 
 fn get_system_meta<S: TxPoolSupport>(support: Arc<S>) -> CommonResult<module::system::Meta> {
 	let block_number = support.get_confirmed_number()?.expect("qed");
-	support.execute_call_with_block_number(
-		&block_number,
-		None,
-		"system".to_string(),
-		"get_meta".to_string(),
-		EmptyParams,
-	)
+	support
+		.execute_call_with_block_number(
+			&block_number,
+			None,
+			"system".to_string(),
+			"get_meta".to_string(),
+			EmptyParams,
+		)
+		.map(|x| x.expect("qed"))
 }
