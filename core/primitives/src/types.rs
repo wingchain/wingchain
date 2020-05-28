@@ -72,9 +72,9 @@ pub struct Header {
 	pub meta_state_root: Hash,
 	pub meta_receipts_root: Hash,
 	pub payload_txs_root: Hash,
-	pub payload_executed_gap: i8,
-	pub payload_executed_state_root: Hash,
-	pub payload_executed_receipts_root: Hash,
+	pub payload_execution_gap: i8,
+	pub payload_execution_state_root: Hash,
+	pub payload_execution_receipts_root: Hash,
 }
 
 #[derive(Clone, Debug, Encode, Decode, PartialEq)]
@@ -135,16 +135,16 @@ pub struct BuildBlockParams {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct CommitExecuteParams<T> {
+pub struct CommitExecutionParams<T> {
 	pub block_hash: Hash,
 	pub number: BlockNumber,
-	pub executed: Executed,
+	pub execution: Execution,
 	pub payload_receipts: Vec<Arc<FullReceipt>>,
 	pub payload_transaction: T,
 }
 
 #[derive(Debug, PartialEq)]
-pub struct BuildExecuteParams {
+pub struct BuildExecutionParams {
 	pub number: BlockNumber,
 	pub timestamp: u64,
 	pub block_hash: Hash,
@@ -154,9 +154,9 @@ pub struct BuildExecuteParams {
 }
 
 #[derive(Clone, Debug, Encode, Decode, PartialEq)]
-pub struct Executed {
-	pub payload_executed_state_root: Hash,
-	pub payload_executed_receipts_root: Hash,
+pub struct Execution {
+	pub payload_execution_state_root: Hash,
+	pub payload_execution_receipts_root: Hash,
 }
 
 pub type DBKey = SmallVec<[u8; 32]>;

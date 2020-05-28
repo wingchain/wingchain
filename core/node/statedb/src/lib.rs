@@ -49,6 +49,7 @@ pub struct StateDB {
 }
 
 impl StateDB {
+	/// Create a new statedb
 	pub fn new(db: Arc<DB>, db_column: u32, hasher: Arc<HashImpl>) -> CommonResult<Self> {
 		load_hasher(hasher.clone())?;
 
@@ -61,17 +62,20 @@ impl StateDB {
 		})
 	}
 
+	/// Get the default trie root
 	pub fn default_root(&self) -> Vec<u8> {
 		match self.hash_length {
-			HashLength::HashLength20 => self.default_root_for_hash::<TrieHasher20>().to_vec(),
-			HashLength::HashLength32 => self.default_root_for_hash::<TrieHasher32>().to_vec(),
+			HashLength::HashLength20 => self.default_root_for_hasher::<TrieHasher20>().to_vec(),
+			HashLength::HashLength32 => self.default_root_for_hasher::<TrieHasher32>().to_vec(),
 			HashLength::HashLength64 => self
-				.default_root_for_hash::<TrieHasher64>()
+				.default_root_for_hasher::<TrieHasher64>()
 				.as_ref()
 				.to_vec(),
 		}
 	}
 
+	/// Get the value from the trie
+	/// by trie root and key
 	pub fn get(&self, root: &[u8], key: &[u8]) -> CommonResult<Option<DBValue>> {
 		let result = match self.hash_length {
 			HashLength::HashLength20 => {
@@ -94,6 +98,8 @@ impl StateDB {
 		result
 	}
 
+	/// Get the statedb statement by trie root
+	/// by which one can get a statedb getter
 	pub fn prepare_stmt(&self, root: &[u8]) -> CommonResult<StateDBStmt> {
 		let new = self.default_root() == root;
 		Ok(StateDBStmt::new(
@@ -105,6 +111,7 @@ impl StateDB {
 		))
 	}
 
+	/// Get a statedb getter by statedb statement
 	pub fn prepare_get(stmt: &StateDBStmt) -> CommonResult<StateDBGetter> {
 		let result = match stmt {
 			StateDBStmt::Hasher20(stmt) => {
@@ -120,7 +127,7 @@ impl StateDB {
 		Ok(result)
 	}
 
-	/// try update with batch key-values,
+	/// Try update with batch key-values,
 	/// return new trie root and db transaction to update the state column of DB
 	pub fn prepare_update<'a, I>(
 		&self,
@@ -160,7 +167,7 @@ impl StateDB {
 
 /// private impl
 impl StateDB {
-	fn default_root_for_hash<H>(&self) -> H::Out
+	fn default_root_for_hasher<H>(&self) -> H::Out
 	where
 		H: Hasher,
 	{
@@ -210,7 +217,7 @@ impl StateDB {
 		I: Iterator<Item = (&'a DBKey, &'a Option<DBValue>)>,
 		H: Hasher,
 	{
-		let new = self.default_root_for_hash::<H>() == root;
+		let new = self.default_root_for_hasher::<H>() == root;
 
 		let buffer = DefaultMemoryDB::<H>::default();
 		let mut proxy = ProxyHashDB {

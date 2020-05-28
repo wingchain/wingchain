@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! Chain to handle the db, statedb and executor
+
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -24,8 +26,8 @@ use primitives::codec::{Decode, Encode};
 use primitives::errors::CommonResult;
 use primitives::types::CallResult;
 use primitives::{
-	Address, Block, BlockNumber, BuildBlockParams, Call, CommitBlockParams, CommitExecuteParams,
-	Executed, Hash, Header, Nonce, Receipt, SecretKey, Transaction, TransactionResult,
+	Address, Block, BlockNumber, BuildBlockParams, Call, CommitBlockParams, CommitExecutionParams,
+	Execution, Hash, Header, Nonce, Receipt, SecretKey, Transaction, TransactionResult,
 };
 
 use crate::backend::Backend;
@@ -37,9 +39,10 @@ mod execute;
 mod genesis;
 
 pub type ChainCommitBlockParams = CommitBlockParams<DBTransaction>;
-pub type ChainCommitExecuteParams = CommitExecuteParams<DBTransaction>;
+pub type ChainCommitExecutionParams = CommitExecutionParams<DBTransaction>;
 
 pub struct ChainConfig {
+	/// Home path
 	pub home: PathBuf,
 }
 
@@ -68,42 +71,52 @@ impl Chain {
 		Ok(chain)
 	}
 
+	/// Get the block hash by block number
 	pub fn get_block_hash(&self, number: &BlockNumber) -> CommonResult<Option<Hash>> {
 		self.backend.get_block_hash(number)
 	}
 
+	/// Get the header by block hash
 	pub fn get_header(&self, block_hash: &Hash) -> CommonResult<Option<Header>> {
 		self.backend.get_header(block_hash)
 	}
 
+	/// Get the block by block hash
 	pub fn get_block(&self, block_hash: &Hash) -> CommonResult<Option<Block>> {
 		self.backend.get_block(block_hash)
 	}
 
-	pub fn get_executed(&self, block_hash: &Hash) -> CommonResult<Option<Executed>> {
-		self.backend.get_executed(block_hash)
+	/// Get the execution by block hash
+	pub fn get_execution(&self, block_hash: &Hash) -> CommonResult<Option<Execution>> {
+		self.backend.get_execution(block_hash)
 	}
 
+	/// Get the transaction by transaction hash
 	pub fn get_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Transaction>> {
 		self.backend.get_transaction(tx_hash)
 	}
 
+	/// Get the raw transaction (byte array) by transaction hash
 	pub fn get_raw_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Vec<u8>>> {
 		self.backend.get_raw_transaction(tx_hash)
 	}
 
+	/// Get the receipt by transaction hash
 	pub fn get_receipt(&self, tx_hash: &Hash) -> CommonResult<Option<Receipt>> {
 		self.backend.get_receipt(tx_hash)
 	}
 
+	/// Determine if the given transaction is meta transaction
 	pub fn is_meta_tx(&self, tx: &Transaction) -> CommonResult<bool> {
 		self.backend.is_meta_tx(tx)
 	}
 
+	/// Get the hash of the given transaction
 	pub fn hash_transaction(&self, tx: &Transaction) -> CommonResult<Hash> {
 		self.backend.hash_transaction(tx)
 	}
 
+	/// Validate transaction
 	pub fn validate_transaction(
 		&self,
 		tx: &Transaction,
@@ -112,6 +125,7 @@ impl Chain {
 		self.backend.validate_transaction(tx, witness_required)
 	}
 
+	/// Build a transaction by witness, module, method and params
 	pub fn build_transaction<P: Encode>(
 		&self,
 		witness: Option<(SecretKey, Nonce, BlockNumber)>,
@@ -123,6 +137,7 @@ impl Chain {
 			.build_transaction(witness, module, method, params)
 	}
 
+	/// Build a block
 	pub fn build_block(
 		&self,
 		build_block_params: BuildBlockParams,
@@ -130,6 +145,9 @@ impl Chain {
 		self.backend.build_block(build_block_params)
 	}
 
+	/// Commit a block
+	/// this will persist the block into the db
+	/// and insert a execute task into the execute queue
 	pub async fn commit_block(
 		&self,
 		commit_block_params: ChainCommitBlockParams,
@@ -155,18 +173,23 @@ impl Chain {
 		Ok(())
 	}
 
+	/// Get the basic algorithms: das, hash and address
 	pub fn get_basic(&self) -> Arc<Basic> {
 		self.backend.get_basic()
 	}
 
+	/// Get the confirmed block number (namely best number or max height)
 	pub fn get_confirmed_number(&self) -> CommonResult<Option<BlockNumber>> {
 		self.backend.get_confirmed_number()
 	}
 
-	pub fn get_confirmed_executed_number(&self) -> CommonResult<Option<BlockNumber>> {
-		self.backend.get_confirmed_executed_number()
+	/// Get the confirmed execution block number
+	pub fn get_confirmed_execution_number(&self) -> CommonResult<Option<BlockNumber>> {
+		self.backend.get_confirmed_execution_number()
 	}
 
+	/// Execute a call on a certain block specified by block hash
+	/// this will not commit to the chain
 	pub fn execute_call(
 		&self,
 		block_hash: &Hash,
@@ -176,6 +199,8 @@ impl Chain {
 		self.backend.execute_call(block_hash, sender, call)
 	}
 
+	/// Execute a call on a certain block specified by block number
+	/// this will not commit to the chain
 	pub fn execute_call_with_block_number<P: Encode, R: Decode>(
 		&self,
 		block_number: &BlockNumber,

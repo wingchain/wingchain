@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! Subcommand `init`
+//! init the config file, spec file before running a node
+
 use std::fs;
 use std::path::PathBuf;
 

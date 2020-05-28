@@ -12,6 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! Solo consensus
+//! one node append new blocks at a certain frequency specified by block interval
+
+use std::collections::HashSet;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::Context;
@@ -28,7 +32,6 @@ use node_executor::module;
 use node_executor_primitives::EmptyParams;
 use primitives::errors::CommonResult;
 use primitives::{BuildBlockParams, FullTransaction};
-use std::collections::HashSet;
 
 pub struct Solo<S>
 where

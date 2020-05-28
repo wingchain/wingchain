@@ -12,6 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! Base crypto library:
+//!
+//! # dsa
+//! signature algorithm:
+//!  - ed265519
+//!  - sm2
+//!  - custom algorithm provided by a dylib
+//!
+//! # hash
+//! hash Algorithm:
+//!  - blake2b_160
+//!  - blake2b_256
+//!  - blake2b_512
+//!  - sm3
+//!  - custom algorithm provided by a dylib
+//!
+//! # address
+//! account address format algorithm:
+//!  - blake2b_160
+//!  - original_160
+//!  - original_256
+//!  - custom algorithm provided by a dylib
+
 use std::convert::TryFrom;
 
 use primitives::errors::CommonError;
@@ -59,10 +82,10 @@ impl TryFrom<usize> for HashLength {
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum DsaLength {
-	// secret key 32, public key 32, signature 64
+	/// secret key 32, public key 32, signature 64
 	DsaLength32_32_64,
 
-	// secret key 32, public key 65, signature 64
+	/// secret key 32, public key 65, signature 64
 	DsaLength32_65_64,
 }
 

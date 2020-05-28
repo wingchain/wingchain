@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! Build the genesis block according to the spec
+
 use std::convert::TryInto;
 use std::sync::Arc;
 

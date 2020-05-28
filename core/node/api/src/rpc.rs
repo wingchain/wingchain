@@ -27,6 +27,7 @@ use crate::ApiConfig;
 
 mod method;
 
+/// Start rpc server in a new thread
 pub fn start_rpc<S>(config: &ApiConfig, support: Arc<S>)
 where
 	S: ApiSupport + Send + Sync + 'static,

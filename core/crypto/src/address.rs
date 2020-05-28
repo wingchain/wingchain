@@ -33,8 +33,11 @@ pub trait Address {
 }
 
 pub enum AddressImpl {
+	/// blake2b 160 on public key
 	Blake2b160,
+	/// original 160 bits public key
 	Original160,
+	/// original 256 bits public key
 	Original256,
 	/// custom address impl provided by dylib
 	Custom(CustomLib),

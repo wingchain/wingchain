@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! Common lib for subcommands
+
 use std::path::PathBuf;
 
 use app_dirs::get_app_root;
@@ -41,6 +43,7 @@ pub struct SharedParams {
 	pub log: Option<String>,
 }
 
+/// Get the default home path, under the os user data path
 pub fn get_default_home() -> CommonResult<PathBuf> {
 	let app_info = AppInfo {
 		name: NAME,
@@ -52,10 +55,12 @@ pub fn get_default_home() -> CommonResult<PathBuf> {
 	Ok(home)
 }
 
+/// Get the config file path, <home>/config.toml
 pub fn get_config_path(home: &PathBuf) -> PathBuf {
 	home.join(CONFIG)
 }
 
+/// Get the config file path, <home>/spec.toml
 pub fn get_data_path(home: &PathBuf) -> PathBuf {
 	home.join(DATA)
 }

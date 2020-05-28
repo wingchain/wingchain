@@ -27,7 +27,7 @@ use primitives::{
 pub trait ApiSupport {
 	async fn hash_transaction(&self, tx: &Transaction) -> CommonResult<Hash>;
 	async fn get_confirmed_number(&self) -> CommonResult<Option<BlockNumber>>;
-	async fn get_confirmed_executed_number(&self) -> CommonResult<Option<BlockNumber>>;
+	async fn get_confirmed_execution_number(&self) -> CommonResult<Option<BlockNumber>>;
 	async fn get_block_hash(&self, number: &BlockNumber) -> CommonResult<Option<Hash>>;
 	async fn get_block(&self, block_hash: &Hash) -> CommonResult<Option<Block>>;
 	async fn get_header(&self, block_hash: &Hash) -> CommonResult<Option<Header>>;
@@ -72,8 +72,8 @@ where
 	async fn get_confirmed_number(&self) -> CommonResult<Option<BlockNumber>> {
 		self.chain.get_confirmed_number()
 	}
-	async fn get_confirmed_executed_number(&self) -> CommonResult<Option<BlockNumber>> {
-		self.chain.get_confirmed_executed_number()
+	async fn get_confirmed_execution_number(&self) -> CommonResult<Option<BlockNumber>> {
+		self.chain.get_confirmed_execution_number()
 	}
 	async fn get_block_hash(&self, number: &BlockNumber) -> CommonResult<Option<Hash>> {
 		self.chain.get_block_hash(number)

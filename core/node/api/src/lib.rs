@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! API
+//! including rpc, websocket etc.
+
 use std::sync::Arc;
 
 use crate::support::ApiSupport;
@@ -22,8 +25,12 @@ pub mod support;
 
 #[derive(Clone)]
 pub struct ApiConfig {
+	/// rpc address: ip:port
 	pub rpc_addr: String,
+	/// http server worker count
+	/// 0 for cpu num
 	pub rpc_workers: usize,
+	/// connection count per worker
 	pub rpc_maxconn: usize,
 }
 
@@ -44,7 +51,6 @@ where
 			support: support.clone(),
 		};
 
-		// start rpc in new thread
 		rpc::start_rpc(&config, support);
 
 		api
