@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+/// Executor primitives for modules
 use std::marker::PhantomData;
 use std::rc::Rc;
 
@@ -21,13 +22,17 @@ use primitives::{codec, Address, BlockNumber, Call, DBValue, Event, TransactionR
 
 pub mod errors;
 
+/// Separator to build kv db key
 const SEPARATOR: &[u8] = b"_";
 
 pub trait Module<C>
 where
 	C: Context,
 {
+	/// Specify whether the module is meta module
 	const META_MODULE: bool = false;
+
+	/// Specify the kv db key prefix
 	const STORAGE_KEY: &'static [u8];
 
 	fn new(context: C) -> Self;
@@ -65,6 +70,8 @@ pub trait Validator {
 	fn validate_address(&self, address: &Address) -> CommonResult<()>;
 }
 
+/// Storage type for module
+/// module_storage_key + separator + storage_key => value
 pub struct StorageValue<T, C>
 where
 	T: Encode + Decode,
@@ -105,6 +112,8 @@ where
 	}
 }
 
+/// Storage type for module
+/// module_storage_key + separator + storage_key + separator + key => value
 pub struct StorageMap<K, V, C>
 where
 	K: Encode + Decode,
@@ -195,5 +204,6 @@ fn context_delete<C: Context>(context: &C, meta_module: bool, key: &[u8]) -> Com
 	}
 }
 
+/// Used by call which need not params
 #[derive(Encode, Decode)]
 pub struct EmptyParams;

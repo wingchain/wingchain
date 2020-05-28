@@ -28,7 +28,7 @@ use node_statedb::{StateDB, TrieRoot};
 use primitives::codec::Encode;
 use primitives::types::FullReceipt;
 use primitives::{
-	codec, Address, Balance, Block, Body, DBKey, Executed, FullTransaction, Hash, Header, Receipt,
+	codec, Address, Balance, Block, Body, DBKey, Execution, FullTransaction, Hash, Header, Receipt,
 	TransactionForHash,
 };
 use utils_test::test_accounts;
@@ -56,7 +56,7 @@ async fn test_chain() {
 	let (
 		expected_block_hash,
 		expected_block,
-		expected_executed,
+		expected_execution,
 		expected_meta_txs,
 		expected_payload_txs,
 		expected_meta_receipts,
@@ -68,10 +68,10 @@ async fn test_chain() {
 
 	assert_eq!(confirmed_number, Some(0));
 
-	// confirmed executed number
-	let confirmed_executed_number = chain.get_confirmed_executed_number().unwrap();
+	// confirmed execution number
+	let confirmed_execution_number = chain.get_confirmed_execution_number().unwrap();
 
-	assert_eq!(confirmed_executed_number, None);
+	assert_eq!(confirmed_execution_number, None);
 
 	// block hash
 	let block_hash = chain.get_block_hash(&0).unwrap().unwrap();
@@ -92,10 +92,10 @@ async fn test_chain() {
 
 	assert_eq!(block, expected_block);
 
-	// executed
-	let executed = chain.get_executed(&block_hash).unwrap().unwrap();
+	// execution
+	let execution = chain.get_execution(&block_hash).unwrap().unwrap();
 
-	assert_eq!(executed, expected_executed);
+	assert_eq!(execution, expected_execution);
 
 	// meta tx
 	let meta_tx_hash = &block.body.meta_txs[0];
@@ -205,7 +205,7 @@ fn expected_data(
 ) -> (
 	Hash,
 	Block,
-	Executed,
+	Execution,
 	Vec<Arc<FullTransaction>>,
 	Vec<Arc<FullTransaction>>,
 	Vec<Arc<FullReceipt>>,
@@ -273,9 +273,9 @@ fn expected_data(
 		meta_state_root,
 		meta_receipts_root,
 		payload_txs_root,
-		payload_executed_gap: 1,
-		payload_executed_state_root: Hash(zero_hash.clone()),
-		payload_executed_receipts_root: Hash(zero_hash),
+		payload_execution_gap: 1,
+		payload_execution_state_root: Hash(zero_hash.clone()),
+		payload_execution_receipts_root: Hash(zero_hash),
 	};
 
 	let block_hash = hash(&header);
@@ -288,15 +288,15 @@ fn expected_data(
 		},
 	};
 
-	let executed = Executed {
-		payload_executed_state_root: payload_state_root,
-		payload_executed_receipts_root: payload_receipts_root,
+	let execution = Execution {
+		payload_execution_state_root: payload_state_root,
+		payload_execution_receipts_root: payload_receipts_root,
 	};
 
 	(
 		block_hash,
 		block,
-		executed,
+		execution,
 		meta_txs,
 		payload_txs,
 		meta_receipts,

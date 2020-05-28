@@ -59,7 +59,9 @@ pub trait Verifier {
 }
 
 pub enum DsaImpl {
+	/// ed25519
 	Ed25519,
+	/// sm2 (Chinese National Standard)
 	SM2,
 	/// custom dsa impl provided by dylib
 	Custom(CustomLib),

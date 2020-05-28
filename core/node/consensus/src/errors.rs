@@ -20,9 +20,6 @@ use primitives::Hash;
 
 #[derive(Debug, Display)]
 pub enum ErrorKind {
-	#[display(fmt = "Invalid meta: {}", _0)]
-	Meta(String),
-
 	#[display(fmt = "Duplicated tx: tx_hash: {:?}", _0)]
 	Duplicated(Hash),
 

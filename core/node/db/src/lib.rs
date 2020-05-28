@@ -41,6 +41,7 @@ pub struct DB {
 }
 
 impl DB {
+	/// Open the db from the given path
 	pub fn open(path: &PathBuf) -> CommonResult<DB> {
 		let col_count = columns::COLUMN_NAMES.len();
 		let db_opts = gen_db_opts(col_count);
@@ -78,6 +79,7 @@ impl DB {
 		Ok(db)
 	}
 
+	/// Get value by col and key
 	pub fn get(&self, col: u32, key: &[u8]) -> CommonResult<Option<DBValue>> {
 		let ref db = *self.db.read();
 		let cf = Self::get_cf(&db, col);
@@ -89,6 +91,7 @@ impl DB {
 		Ok(result)
 	}
 
+	/// Get value processed by f
 	pub fn get_with<U, F: FnOnce(DBValue) -> CommonResult<U>>(
 		&self,
 		col: u32,
@@ -103,6 +106,7 @@ impl DB {
 		Ok(value)
 	}
 
+	/// Write with a db transaction
 	pub fn write(&self, transaction: DBTransaction) -> CommonResult<()> {
 		let ref db = *self.db.write();
 
@@ -129,6 +133,7 @@ impl DB {
 		Ok(())
 	}
 
+	/// Init a new empty db transaction
 	pub fn transaction(&self) -> DBTransaction {
 		DBTransaction::new()
 	}
@@ -211,7 +216,7 @@ pub mod columns {
 		"payload_txs",
 		"tx",
 		"receipt",
-		"executed",
+		"execution",
 	];
 
 	/// see global_key
@@ -241,15 +246,15 @@ pub mod columns {
 	/// transaction hash to receipt
 	pub const RECEIPT: u32 = 8;
 
-	/// block hash to executed
-	pub const EXECUTED: u32 = 9;
+	/// block hash to execution
+	pub const EXECUTION: u32 = 9;
 }
 
 pub mod global_key {
 	/// The confirmed number of the chain
 	pub const CONFIRMED_NUMBER: &[u8] = b"confirmed_number";
-	/// The executed number of the chain
-	pub const EXECUTED_NUMBER: &[u8] = b"executed_number";
+	/// The execution number of the chain
+	pub const EXECUTION_NUMBER: &[u8] = b"execution_number";
 	/// spec
 	pub const SPEC: &[u8] = b"spec";
 }

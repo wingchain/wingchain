@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! Transaction pool
+
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use chashmap::CHashMap;
@@ -25,13 +28,16 @@ use primitives::errors::CommonResult;
 use primitives::{FullTransaction, Hash, Transaction};
 
 use crate::support::TxPoolSupport;
-use std::collections::HashSet;
 
 pub mod errors;
 pub mod support;
 
 pub struct TxPoolConfig {
+	/// Max transaction count
 	pub pool_capacity: usize,
+	/// The  queue may be locked when the consensus module reads or writes,
+	/// so we need a buffer to avoid blocking inserting
+	/// this specifies the capacity of the buffer
 	pub buffer_capacity: usize,
 }
 
@@ -51,6 +57,7 @@ impl<S> TxPool<S>
 where
 	S: TxPoolSupport,
 {
+	/// Create a new transaction pool
 	pub fn new(config: TxPoolConfig, support: Arc<S>) -> CommonResult<Self> {
 		let map = CHashMap::with_capacity(config.pool_capacity);
 		let queue = Arc::new(RwLock::new(Vec::with_capacity(config.pool_capacity)));
@@ -75,14 +82,19 @@ where
 		Ok(tx_pool)
 	}
 
+	/// Get the queue of the pool
+	/// The queue keep the transaction in the insertion order
 	pub fn get_queue(&self) -> &Arc<RwLock<Vec<Arc<FullTransaction>>>> {
 		&self.queue
 	}
 
+	/// Get the map of the pool
+	/// The map is used to check if the pool already contains a transaction
 	pub fn get_map(&self) -> &CHashMap<Hash, Arc<FullTransaction>> {
 		&self.map
 	}
 
+	/// Insert a transaction into the pool
 	pub async fn insert(&self, tx: Transaction) -> CommonResult<()> {
 		self.check_capacity()?;
 		let tx_hash = self.support.hash_transaction(&tx)?;
@@ -110,6 +122,7 @@ where
 		Ok(())
 	}
 
+	/// Remove transactions of given set of transaction hash
 	pub fn remove(&self, tx_hash_set: &HashSet<Hash>) -> CommonResult<()> {
 		{
 			let mut queue = self.queue.write();
@@ -123,6 +136,7 @@ where
 		Ok(())
 	}
 
+	/// Check pool capacify
 	fn check_capacity(&self) -> CommonResult<()> {
 		if self.map.len() >= self.config.pool_capacity {
 			return Err(errors::ErrorKind::ExceedCapacity(self.config.pool_capacity).into());
@@ -130,6 +144,7 @@ where
 		Ok(())
 	}
 
+	/// Check if the pool already contains a transaction
 	fn check_pool_exist(&self, tx_hash: &Hash) -> CommonResult<()> {
 		if self.contain(tx_hash) {
 			return Err(errors::ErrorKind::Duplicated(tx_hash.clone()).into());
@@ -137,6 +152,7 @@ where
 		Ok(())
 	}
 
+	/// Check if the chain already contains a transaction
 	fn check_chain_exist(&self, tx_hash: &Hash) -> CommonResult<()> {
 		if self.support.get_transaction(&tx_hash)?.is_some() {
 			return Err(errors::ErrorKind::Duplicated(tx_hash.clone()).into());
@@ -144,6 +160,10 @@ where
 		Ok(())
 	}
 
+	/// Validate a transaction
+	/// check signature
+	/// check params format
+	/// check until: confirmed_number < until <= confirmed_number + until_gap
 	fn validate_transaction(&self, tx_hash: &Hash, tx: &Transaction) -> CommonResult<()> {
 		self.support.validate_transaction(&tx, true)?;
 		let witness = tx.witness.as_ref().expect("qed");
@@ -163,11 +183,13 @@ where
 		Ok(())
 	}
 
+	/// Check if the pool contains the transaction
 	fn contain(&self, tx_hash: &Hash) -> bool {
 		self.map.contains_key(tx_hash)
 	}
 }
 
+/// A loop to process the transaction in the buffer
 async fn process_buffer(
 	buffer_rx: Receiver<Arc<FullTransaction>>,
 	queue: Arc<RwLock<Vec<Arc<FullTransaction>>>>,
@@ -181,6 +203,7 @@ async fn process_buffer(
 	}
 }
 
+/// Get system meta by executing a call on the system module
 fn get_system_meta<S: TxPoolSupport>(support: Arc<S>) -> CommonResult<module::system::Meta> {
 	let block_number = support.get_confirmed_number()?.expect("qed");
 	support

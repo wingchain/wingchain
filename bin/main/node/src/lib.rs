@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! Subcommand `node`
+//! start wingchain node
+
 use std::path::PathBuf;
 
 use primitives::errors::CommonResult;

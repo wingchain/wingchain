@@ -12,13 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! Provide a queue to handle execute task
+//! to execute payload transactions
+
 use std::sync::Arc;
 
 use log::{debug, warn};
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 use primitives::errors::CommonResult;
-use primitives::{BlockNumber, BuildExecuteParams, FullTransaction, Hash};
+use primitives::{BlockNumber, BuildExecutionParams, FullTransaction, Hash};
 
 use crate::backend::Backend;
 use crate::errors;
@@ -53,6 +56,7 @@ impl ExecuteQueue {
 		execute_queue
 	}
 
+	/// Insert a execute task into the queue
 	pub async fn insert_task(&self, task: ExecuteTask) -> CommonResult<()> {
 		let result = self.task_tx.clone().send(task).await;
 		result
@@ -61,6 +65,7 @@ impl ExecuteQueue {
 	}
 }
 
+/// A loop to process execute tasks
 async fn process_tasks(mut task_rx: Receiver<ExecuteTask>, backend: Arc<Backend>) {
 	loop {
 		let task = task_rx.recv().await;
@@ -75,18 +80,22 @@ async fn process_tasks(mut task_rx: Receiver<ExecuteTask>, backend: Arc<Backend>
 	}
 }
 
+/// Process the given execute task
 fn process_task(task: ExecuteTask, backend: &Arc<Backend>) -> CommonResult<()> {
 	debug!("Execute task: {:?}", task);
 
 	let number = task.number;
 
-	let executed_number = backend
-		.get_executed_number()?
-		.ok_or(errors::ErrorKind::ExecuteQueue(format!(
-			"Unable to get executed_number"
-		)))?;
+	let execution_number =
+		backend
+			.get_execution_number()?
+			.ok_or(errors::ErrorKind::ExecuteQueue(format!(
+				"Unable to get execution_number"
+			)))?;
 
-	for current_number in (executed_number + 1)..number {
+	// Ensure execution is committed one by one
+	// The former failed task will be processed again
+	for current_number in (execution_number + 1)..number {
 		process_number(current_number, None, backend)?;
 	}
 	process_number(number, Some(task), backend)?;
@@ -94,6 +103,8 @@ fn process_task(task: ExecuteTask, backend: &Arc<Backend>) -> CommonResult<()> {
 	Ok(())
 }
 
+/// Process the execute task for the certain block number.
+/// When processing the former failed block number, we need rebuild the task
 fn process_number(
 	current_number: BlockNumber,
 	task: Option<ExecuteTask>,
@@ -147,48 +158,52 @@ fn process_number(
 	let number = current_task.number;
 	let block_hash = current_task.block_hash.clone();
 
-	let executed = backend
-		.get_executed(&current_task.parent_hash)
+	let execution = backend
+		.get_execution(&current_task.parent_hash)
 		.map_err(|e| {
 			errors::ErrorKind::ExecuteQueue(format!(
-				"Unable to get executed: block number: {}, block hash: {}, {}",
+				"Unable to get execution: block number: {}, block hash: {}, {}",
 				number, block_hash, e
 			))
 		})?;
 
-	let executed = match executed {
-		Some(executed) => executed,
+	let execution = match execution {
+		Some(execution) => execution,
 		None => {
 			return Err(errors::ErrorKind::ExecuteQueue(format!(
-				"Block not executed: block number: {}, block hash: {}",
+				"Block not execution: block number: {}, block hash: {}",
 				number, block_hash
 			))
 			.into());
 		}
 	};
 
-	let build_execute_params = BuildExecuteParams {
+	let build_execution_params = BuildExecutionParams {
 		number: current_task.number,
 		timestamp: current_task.timestamp,
 		block_hash: current_task.block_hash,
 		meta_state_root: current_task.meta_state_root,
-		payload_state_root: executed.payload_executed_state_root,
+		payload_state_root: execution.payload_execution_state_root,
 		payload_txs: current_task.payload_txs,
 	};
 
-	let commit_execute_params = backend.build_execute(build_execute_params).map_err(|e| {
-		errors::ErrorKind::ExecuteQueue(format!(
-			"Build execute error: block number: {}, block hash: {}, {}",
-			number, block_hash, e
-		))
-	})?;
+	let commit_execution_params = backend
+		.build_execution(build_execution_params)
+		.map_err(|e| {
+			errors::ErrorKind::ExecuteQueue(format!(
+				"Build execution error: block number: {}, block hash: {}, {}",
+				number, block_hash, e
+			))
+		})?;
 
-	backend.commit_execute(commit_execute_params).map_err(|e| {
-		errors::ErrorKind::ExecuteQueue(format!(
-			"Commit execute error: block number: {}, block hash: {}, {}",
-			number, block_hash, e
-		))
-	})?;
+	backend
+		.commit_execution(commit_execution_params)
+		.map_err(|e| {
+			errors::ErrorKind::ExecuteQueue(format!(
+				"Commit execution error: block number: {}, block hash: {}, {}",
+				number, block_hash, e
+			))
+		})?;
 
 	Ok(())
 }

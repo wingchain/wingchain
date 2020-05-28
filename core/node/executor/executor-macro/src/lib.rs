@@ -21,6 +21,7 @@ use syn::{
 
 use quote::quote;
 
+/// Module method validate_xxx will be treated as the validator of method xxx
 const VALIDATE_METHOD_PREFIX: &'static str = "validate_";
 
 #[proc_macro_attribute]

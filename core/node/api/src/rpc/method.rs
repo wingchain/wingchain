@@ -34,7 +34,7 @@ pub async fn chain_get_header_by_number<S: ApiSupport>(
 	let support = data.0;
 	let number = match number_enum {
 		BlockNumberEnum::Confirmed => support.get_confirmed_number().await?,
-		BlockNumberEnum::ConfirmedExecuted => support.get_confirmed_executed_number().await?,
+		BlockNumberEnum::ConfirmedExecution => support.get_confirmed_execution_number().await?,
 		BlockNumberEnum::Number(number) => Some(number),
 	};
 
@@ -83,7 +83,7 @@ pub async fn chain_get_block_by_number<S: ApiSupport>(
 	let support = data.0;
 	let number = match number_enum {
 		BlockNumberEnum::Confirmed => support.get_confirmed_number().await?,
-		BlockNumberEnum::ConfirmedExecuted => support.get_confirmed_executed_number().await?,
+		BlockNumberEnum::ConfirmedExecution => support.get_confirmed_execution_number().await?,
 		BlockNumberEnum::Number(number) => Some(number),
 	};
 
@@ -228,7 +228,7 @@ pub async fn chain_execute_call<S: ApiSupport>(
 	Ok(result)
 }
 
-/// Number input: number, hex or tag (best, executed)
+/// Number input: number, hex or tag (best, execution)
 #[derive(Deserialize)]
 pub struct BlockNumber(String);
 
@@ -247,7 +247,7 @@ pub struct Hex(String);
 enum BlockNumberEnum {
 	Number(primitives::BlockNumber),
 	Confirmed,
-	ConfirmedExecuted,
+	ConfirmedExecution,
 }
 
 #[derive(Serialize)]
@@ -261,9 +261,9 @@ pub struct Header {
 	pub meta_state_root: Hash,
 	pub meta_receipts_root: Hash,
 	pub payload_txs_root: Hash,
-	pub payload_executed_gap: Hex,
-	pub payload_executed_state_root: Hash,
-	pub payload_executed_receipts_root: Hash,
+	pub payload_execution_gap: Hex,
+	pub payload_execution_state_root: Hash,
+	pub payload_execution_receipts_root: Hash,
 }
 
 #[derive(Serialize)]
@@ -330,9 +330,9 @@ impl From<primitives::Header> for Header {
 			meta_state_root: header.meta_state_root.into(),
 			meta_receipts_root: header.meta_receipts_root.into(),
 			payload_txs_root: header.payload_txs_root.into(),
-			payload_executed_gap: header.payload_executed_gap.into(),
-			payload_executed_state_root: header.payload_executed_state_root.into(),
-			payload_executed_receipts_root: header.payload_executed_receipts_root.into(),
+			payload_execution_gap: header.payload_execution_gap.into(),
+			payload_execution_state_root: header.payload_execution_state_root.into(),
+			payload_execution_receipts_root: header.payload_execution_receipts_root.into(),
 		}
 	}
 }
@@ -514,7 +514,7 @@ impl TryFrom<BlockNumber> for BlockNumberEnum {
 	fn try_from(value: BlockNumber) -> Result<Self, Self::Error> {
 		let result = match value.0.as_str() {
 			"confirmed" => BlockNumberEnum::Confirmed,
-			"confirmed_executed" => BlockNumberEnum::ConfirmedExecuted,
+			"confirmed_execution" => BlockNumberEnum::ConfirmedExecution,
 			number if number.starts_with("0x") => {
 				let hex = number.trim_start_matches("0x");
 				let number = u64::from_str_radix(hex, 16).map_err(|_| {

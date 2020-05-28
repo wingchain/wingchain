@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! Execute transactions
+
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -95,7 +97,7 @@ struct ContextInner<'a> {
 	payload_txs: RefCell<Vec<Arc<FullTransaction>>>,
 	payload_receipts: RefCell<Vec<Arc<FullReceipt>>>,
 	events: RefCell<Vec<Event>>,
-	// to mark the context has already started to executed payload txs
+	// to mark the context has already started to execution payload txs
 	payload_phase: Cell<bool>,
 }
 
@@ -181,6 +183,7 @@ impl<'a> Context<'a> {
 		Ok(Self { inner })
 	}
 
+	/// Get the new trie root of the statedb and the db transaction after executing meta transactions
 	pub fn get_meta_update(&self) -> CommonResult<(Hash, DBTransaction)> {
 		let buffer = self.inner.meta_state.buffer.borrow();
 		let (root, transaction) = self
@@ -190,6 +193,7 @@ impl<'a> Context<'a> {
 		Ok((Hash(root), transaction))
 	}
 
+	/// Get the transactions root and the transaction list after executing meta transactions
 	pub fn get_meta_txs(&self) -> CommonResult<(Hash, Vec<Arc<FullTransaction>>)> {
 		let txs = self.inner.meta_txs.borrow().clone();
 
@@ -202,6 +206,7 @@ impl<'a> Context<'a> {
 		Ok((Hash(txs_root), txs))
 	}
 
+	/// Get the receipts root and the receipt list after executing meta transactions
 	pub fn get_meta_receipts(&self) -> CommonResult<(Hash, Vec<Arc<FullReceipt>>)> {
 		let receipts = self.inner.meta_receipts.borrow().clone();
 
@@ -214,6 +219,7 @@ impl<'a> Context<'a> {
 		Ok((Hash(receipts_root), receipts))
 	}
 
+	/// Get the new trie root of the statedb and the db transaction after executing payload transactions
 	pub fn get_payload_update(&self) -> CommonResult<(Hash, DBTransaction)> {
 		let buffer = self.inner.payload_state.buffer.borrow();
 		let (root, transaction) = self
@@ -223,18 +229,7 @@ impl<'a> Context<'a> {
 		Ok((Hash(root), transaction))
 	}
 
-	pub fn get_payload_receipts(&self) -> CommonResult<(Hash, Vec<Arc<FullReceipt>>)> {
-		let receipts = self.inner.payload_receipts.borrow().clone();
-
-		let input = receipts
-			.iter()
-			.map(|x| codec::encode(&x.receipt))
-			.collect::<Result<Vec<Vec<u8>>, _>>()?;
-		let receipts_root = self.inner.trie_root.calc_ordered_trie_root(input);
-
-		Ok((Hash(receipts_root), receipts))
-	}
-
+	/// Get the transactions root and the transaction list after executing payload transactions
 	pub fn get_payload_txs(&self) -> CommonResult<(Hash, Vec<Arc<FullTransaction>>)> {
 		let txs = self.inner.payload_txs.borrow().clone();
 
@@ -247,6 +242,20 @@ impl<'a> Context<'a> {
 		Ok((Hash(txs_root), txs))
 	}
 
+	/// Get the receipts root and the receipt list after executing payload transactions
+	pub fn get_payload_receipts(&self) -> CommonResult<(Hash, Vec<Arc<FullReceipt>>)> {
+		let receipts = self.inner.payload_receipts.borrow().clone();
+
+		let input = receipts
+			.iter()
+			.map(|x| codec::encode(&x.receipt))
+			.collect::<Result<Vec<Vec<u8>>, _>>()?;
+		let receipts_root = self.inner.trie_root.calc_ordered_trie_root(input);
+
+		Ok((Hash(receipts_root), receipts))
+	}
+
+	/// Get the transactions root of the given transactions
 	pub fn get_txs_root(&self, txs: &Vec<Arc<FullTransaction>>) -> CommonResult<Hash> {
 		let input = txs
 			.iter()
@@ -257,6 +266,7 @@ impl<'a> Context<'a> {
 	}
 }
 
+/// Default implementation of Validator
 struct Validator {
 	address: Arc<AddressImpl>,
 }
@@ -291,6 +301,7 @@ impl Executor {
 		}
 	}
 
+	/// Build a transaction
 	pub fn build_tx<P: Encode>(
 		&self,
 		witness: Option<(SecretKey, Nonce, BlockNumber)>,
@@ -336,6 +347,7 @@ impl Executor {
 		Ok(Transaction { witness, call })
 	}
 
+	/// Validate a transaction
 	pub fn validate_tx(&self, tx: &Transaction, witness_required: bool) -> CommonResult<()> {
 		let call = &tx.call;
 
@@ -370,11 +382,14 @@ impl Executor {
 		Ok(())
 	}
 
+	/// Determine if a transaction is meta transaction
 	pub fn is_meta_tx(&self, tx: &Transaction) -> CommonResult<bool> {
 		let module = &tx.call.module;
 		Dispatcher::is_meta::<Context>(module)
 	}
 
+	/// Execute a call on a certain block specified by block hash
+	/// this will not commit to the chain
 	pub fn execute_call(
 		&self,
 		context: &Context,
@@ -385,6 +400,10 @@ impl Executor {
 		Dispatcher::execute_call::<Context>(module, context, sender, call)
 	}
 
+	/// Execute a batch of transactions
+	/// should not mix meta transactions and none-meta transactions in one batch
+	/// should not execute a batch of meta transactions after a batch of none-meta transactions
+	/// this method will affect the state of the context
 	pub fn execute_txs(
 		&self,
 		context: &Context,
@@ -473,20 +492,24 @@ impl Executor {
 		Ok(())
 	}
 
+	/// Get the hash of the given transaction
 	pub fn hash_transaction(&self, tx: &Transaction) -> CommonResult<Hash> {
 		let transaction_for_hash = TransactionForHash::new(tx);
 		self.hash(&transaction_for_hash)
 	}
 
+	/// Get the hash of the given encodable data
 	pub fn hash<D: Encode>(&self, data: &D) -> CommonResult<Hash> {
 		let encoded = codec::encode(data)?;
 		Ok(self.hash_slice(&encoded))
 	}
 
+	/// Get the default hash of the hash algorithm
 	pub fn default_hash(&self) -> Hash {
 		Hash(vec![0u8; self.hash.length().into()])
 	}
 
+	/// Get the hash of the given slice
 	fn hash_slice(&self, data: &[u8]) -> Hash {
 		let mut out = vec![0u8; self.hash.length().into()];
 		self.hash.hash(&mut out, data);
@@ -494,6 +517,8 @@ impl Executor {
 	}
 }
 
+/// Dispatcher for all the modules
+/// the enum should contain all the modules
 #[allow(non_camel_case_types)]
 #[dispatcher]
 enum Dispatcher {

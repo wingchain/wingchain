@@ -12,5 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! Common lib for consensus
+
 pub mod errors;
 pub mod support;

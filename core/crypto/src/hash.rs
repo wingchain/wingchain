@@ -33,9 +33,13 @@ pub trait Hash {
 }
 
 pub enum HashImpl {
+	/// blake2b 160
 	Blake2b160,
+	/// blake2b 256
 	Blake2b256,
+	/// blake2b 512
 	Blake2b512,
+	/// sm3 (Chinese National Standard)
 	SM3,
 	/// custom hash impl provided by dylib
 	Custom(CustomLib),
