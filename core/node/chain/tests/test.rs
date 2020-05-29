@@ -69,9 +69,9 @@ async fn test_chain() {
 	assert_eq!(confirmed_number, Some(0));
 
 	// confirmed execution number
-	let confirmed_execution_number = chain.get_confirmed_execution_number().unwrap();
+	let confirmed_executed_number = chain.get_confirmed_executed_number().unwrap();
 
-	assert_eq!(confirmed_execution_number, None);
+	assert_eq!(confirmed_executed_number, None);
 
 	// block hash
 	let block_hash = chain.get_block_hash(&0).unwrap().unwrap();

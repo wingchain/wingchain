@@ -34,7 +34,7 @@ pub async fn chain_get_header_by_number<S: ApiSupport>(
 	let support = data.0;
 	let number = match number_enum {
 		BlockNumberEnum::Confirmed => support.get_confirmed_number().await?,
-		BlockNumberEnum::ConfirmedExecution => support.get_confirmed_execution_number().await?,
+		BlockNumberEnum::ConfirmedExecuted => support.get_confirmed_executed_number().await?,
 		BlockNumberEnum::Number(number) => Some(number),
 	};
 
@@ -83,7 +83,7 @@ pub async fn chain_get_block_by_number<S: ApiSupport>(
 	let support = data.0;
 	let number = match number_enum {
 		BlockNumberEnum::Confirmed => support.get_confirmed_number().await?,
-		BlockNumberEnum::ConfirmedExecution => support.get_confirmed_execution_number().await?,
+		BlockNumberEnum::ConfirmedExecuted => support.get_confirmed_executed_number().await?,
 		BlockNumberEnum::Number(number) => Some(number),
 	};
 
@@ -247,7 +247,7 @@ pub struct Hex(String);
 enum BlockNumberEnum {
 	Number(primitives::BlockNumber),
 	Confirmed,
-	ConfirmedExecution,
+	ConfirmedExecuted,
 }
 
 #[derive(Serialize)]
@@ -514,7 +514,7 @@ impl TryFrom<BlockNumber> for BlockNumberEnum {
 	fn try_from(value: BlockNumber) -> Result<Self, Self::Error> {
 		let result = match value.0.as_str() {
 			"confirmed" => BlockNumberEnum::Confirmed,
-			"confirmed_execution" => BlockNumberEnum::ConfirmedExecution,
+			"confirmed_executed" => BlockNumberEnum::ConfirmedExecuted,
 			number if number.starts_with("0x") => {
 				let hex = number.trim_start_matches("0x");
 				let number = u64::from_str_radix(hex, 16).map_err(|_| {

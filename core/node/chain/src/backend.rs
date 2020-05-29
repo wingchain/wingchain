@@ -149,7 +149,7 @@ impl Backend {
 
 	/// Get the confirmed execution block number
 	/// should be confirmed_number - payload_execution_gap
-	pub fn get_confirmed_execution_number(&self) -> CommonResult<Option<BlockNumber>> {
+	pub fn get_confirmed_executed_number(&self) -> CommonResult<Option<BlockNumber>> {
 		let confirmed_number = match self.get_confirmed_number()? {
 			Some(confirmed_number) => confirmed_number,
 			None => return Ok(None),
@@ -169,12 +169,12 @@ impl Backend {
 				block_hash
 			)))?;
 
-		let confirmed_execution_number = match confirmed_number {
+		let confirmed_executed_number = match confirmed_number {
 			0 => None,
 			_ => Some(confirmed_number - header.payload_execution_gap as u64),
 		};
 
-		Ok(confirmed_execution_number)
+		Ok(confirmed_executed_number)
 	}
 
 	/// Get the block hash by block number

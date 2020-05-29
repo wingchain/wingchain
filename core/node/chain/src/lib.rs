@@ -184,8 +184,8 @@ impl Chain {
 	}
 
 	/// Get the confirmed execution block number
-	pub fn get_confirmed_execution_number(&self) -> CommonResult<Option<BlockNumber>> {
-		self.backend.get_confirmed_execution_number()
+	pub fn get_confirmed_executed_number(&self) -> CommonResult<Option<BlockNumber>> {
+		self.backend.get_confirmed_executed_number()
 	}
 
 	/// Execute a call on a certain block specified by block hash
