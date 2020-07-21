@@ -121,7 +121,7 @@ fn slice_to_public_key(slice: &[u8]) -> CommonResult<PubKey> {
 fn slice_to_u64x4(slice: &[u8]) -> U64x4 {
 	U64x4 {
 		value: [
-			u64::from_be_bytes({ slice_to_arr(&slice[24..32]) }),
+			u64::from_be_bytes(slice_to_arr(&slice[24..32])),
 			u64::from_be_bytes(slice_to_arr(&slice[16..24])),
 			u64::from_be_bytes(slice_to_arr(&slice[8..16])),
 			u64::from_be_bytes(slice_to_arr(&slice[0..8])),

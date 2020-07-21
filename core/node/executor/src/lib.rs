@@ -286,6 +286,7 @@ pub struct Executor {
 	dsa: Arc<DsaImpl>,
 	address: Arc<AddressImpl>,
 	validator: Validator,
+	genesis_hash: Hash,
 }
 
 impl Executor {
@@ -293,12 +294,18 @@ impl Executor {
 		let validator = Validator {
 			address: address.clone(),
 		};
+		let default_hash = Hash(vec![0u8; hash.length().into()]);
 		Self {
 			hash,
 			dsa,
 			address,
 			validator,
+			genesis_hash: default_hash,
 		}
+	}
+
+	pub fn set_genesis_hash(&mut self, genesis_hash: Hash) {
+		self.genesis_hash = genesis_hash;
 	}
 
 	/// Build a transaction
@@ -321,7 +328,8 @@ impl Executor {
 
 		let witness = match witness {
 			Some((secret_key, nonce, until)) => {
-				let message = codec::encode(&(&nonce, &until, &call))?;
+				let genesis_hash = &self.genesis_hash;
+				let message = codec::encode(&(&nonce, &until, &call, genesis_hash))?;
 				let key_pair = self.dsa.key_pair_from_secret_key(&secret_key.0)?;
 				let (_, pub_len, sig_len) = self.dsa.length().into();
 				let public_key = {
@@ -354,7 +362,8 @@ impl Executor {
 		match &tx.witness {
 			Some(witness) => {
 				let signature = &witness.signature;
-				let message = codec::encode(&(&witness.nonce, &witness.until, call))?;
+				let genesis_hash = &self.genesis_hash;
+				let message = codec::encode(&(&witness.nonce, &witness.until, call, genesis_hash))?;
 				let verifier = self.dsa.verifier_from_public_key(&witness.public_key.0)?;
 				verifier.verify(&message, &signature.0).map_err(|_| {
 					errors::ErrorKind::InvalidTxWitness("invalid signature".to_string())

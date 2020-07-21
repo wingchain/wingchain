@@ -74,7 +74,7 @@ impl Backend {
 
 		let basic = Arc::new(Basic { hash, dsa, address });
 
-		let backend = Self {
+		let mut backend = Self {
 			db,
 			config,
 			meta_statedb,
@@ -89,6 +89,11 @@ impl Backend {
 		if !genesis_inited {
 			backend.init_genesis()?;
 		}
+
+		let genesis_hash = backend.get_block_hash(&0)?
+			.ok_or(errors::ErrorKind::Data("missing genesis block".to_string()))?;
+
+		backend.executor.set_genesis_hash(genesis_hash);
 
 		Ok(backend)
 	}
