@@ -51,12 +51,16 @@ where
 	) -> CommonResult<TransactionResult>;
 }
 
+/// Env variables for a block
 pub struct ContextEnv {
 	pub number: BlockNumber,
 	pub timestamp: u64,
 }
 
+/// Env variables for a call
 pub struct CallEnv {
+	/// A unique address associated with a call
+	/// The contract module will use it as the address of the contract created
 	pub unique_address: Address,
 }
 
