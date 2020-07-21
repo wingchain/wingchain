@@ -56,8 +56,13 @@ pub struct ContextEnv {
 	pub timestamp: u64,
 }
 
+pub struct CallEnv {
+	pub unique_address: Address,
+}
+
 pub trait Context: Clone {
 	fn env(&self) -> Rc<ContextEnv>;
+	fn call_env(&self) -> Rc<CallEnv>;
 	fn meta_get(&self, key: &[u8]) -> CommonResult<Option<DBValue>>;
 	fn meta_set(&self, key: &[u8], value: Option<DBValue>) -> CommonResult<()>;
 	fn payload_get(&self, key: &[u8]) -> CommonResult<Option<DBValue>>;

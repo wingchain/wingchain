@@ -90,7 +90,8 @@ impl Backend {
 			backend.init_genesis()?;
 		}
 
-		let genesis_hash = backend.get_block_hash(&0)?
+		let genesis_hash = backend
+			.get_block_hash(&0)?
 			.ok_or(errors::ErrorKind::Data("missing genesis block".to_string()))?;
 
 		backend.executor.set_genesis_hash(genesis_hash);

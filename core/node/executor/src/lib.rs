@@ -27,7 +27,7 @@ use node_db::DBTransaction;
 use node_executor_macro::dispatcher;
 pub use node_executor_primitives::ContextEnv;
 use node_executor_primitives::{
-	errors, Context as ContextT, Module as ModuleT, Validator as ValidatorT,
+	errors, CallEnv, Context as ContextT, Module as ModuleT, Validator as ValidatorT,
 };
 use node_statedb::{StateDB, StateDBGetter, StateDBStmt, TrieRoot};
 use primitives::codec::Encode;
@@ -85,6 +85,7 @@ pub struct Context<'a> {
 
 struct ContextInner<'a> {
 	env: Rc<ContextEnv>,
+	call_env: RefCell<Option<Rc<CallEnv>>>,
 	trie_root: Arc<TrieRoot>,
 	meta_statedb: Arc<StateDB>,
 	meta_state_root: Rc<Hash>,
@@ -121,6 +122,14 @@ impl<'a> ContextState<'a> {
 impl<'a> ContextT for Context<'a> {
 	fn env(&self) -> Rc<ContextEnv> {
 		self.inner.env.clone()
+	}
+	fn call_env(&self) -> Rc<CallEnv> {
+		self.inner
+			.call_env
+			.borrow()
+			.as_ref()
+			.expect("should set before")
+			.clone()
 	}
 	fn meta_get(&self, key: &[u8]) -> CommonResult<Option<DBValue>> {
 		let buffer = self.inner.meta_state.buffer.borrow();
@@ -165,6 +174,7 @@ impl<'a> Context<'a> {
 
 		let inner = Rc::new(ContextInner {
 			env: context_essence.env.clone(),
+			call_env: RefCell::new(None),
 			trie_root: context_essence.trie_root.clone(),
 			meta_statedb: context_essence.meta_statedb.clone(),
 			meta_state_root: context_essence.meta_state_root.clone(),
@@ -449,6 +459,16 @@ impl Executor {
 				self.address.address(&mut address, &public_key.0);
 				Address(address)
 			});
+
+			// prepare call env
+			let unique_address = {
+				let hash = self.hash(tx_hash)?;
+				let mut address = vec![0u8; self.address.length().into()];
+				self.address.address(&mut address, &hash.0);
+				Address(address)
+			};
+			let call_env = CallEnv { unique_address };
+			context.inner.call_env.replace(Some(Rc::new(call_env)));
 
 			let result =
 				Dispatcher::execute_call::<Context>(module, context, sender.as_ref(), &call)?;
