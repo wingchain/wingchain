@@ -13,6 +13,7 @@ node-statedb = { path = "../statedb" }
 primitives = { path = "../../primitives" }
 module-system = { path = "../../module/system" }
 module-balance = { path = "../../module/balance" }
+module-contract = { path = "../../module/contract" }
 module-solo = { path = "../../module/solo" }
 node-executor-primitives = { path = "primitives" }
 node-executor-macro = { path = "executor-macro" }

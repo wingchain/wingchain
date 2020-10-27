@@ -52,9 +52,9 @@ async fn test_consensus_solo() {
 
 	let _solo = Solo::new(support).unwrap();
 
-	let delay_to_insert_tx = time_until_next(duration_now(), 3000) / 2;
+	let delay_to_insert_tx = time_until_next(duration_now(), 1000) / 2;
 
-	// block 1
+	// block 0
 	delay_for(delay_to_insert_tx).await;
 
 	let tx1 = chain
@@ -71,8 +71,8 @@ async fn test_consensus_solo() {
 	let tx1_hash = chain.hash_transaction(&tx1).unwrap();
 	txpool.insert(tx1).await.unwrap();
 
-	// block 2
-	delay_for(Duration::from_millis(3000)).await;
+	// block 1
+	delay_for(Duration::from_millis(1000)).await;
 
 	let tx2 = chain
 		.build_transaction(
@@ -88,8 +88,8 @@ async fn test_consensus_solo() {
 	let tx2_hash = chain.hash_transaction(&tx2).unwrap();
 	txpool.insert(tx2).await.unwrap();
 
-	// block 3
-	delay_for(Duration::from_millis(3000)).await;
+	// block 2
+	delay_for(Duration::from_millis(1000)).await;
 
 	let tx3 = chain
 		.build_transaction(
@@ -105,7 +105,7 @@ async fn test_consensus_solo() {
 	let tx3_hash = chain.hash_transaction(&tx3).unwrap();
 	txpool.insert(tx3).await.unwrap();
 
-	delay_for(Duration::from_millis(3000)).await;
+	delay_for(Duration::from_millis(1000)).await;
 
 	// check
 
@@ -166,11 +166,13 @@ async fn test_consensus_solo() {
 		tx3_receipt,
 		Receipt {
 			block_number: 3,
-			events: vec![Event::from(&module::balance::TransferEvent {
-				sender: account1.3,
-				recipient: account2.3,
-				value: 3,
-			})
+			events: vec![Event::from(&module::balance::TransferEvent::Transferred(
+				module::balance::Transferred {
+					sender: account1.3,
+					recipient: account2.3,
+					value: 3,
+				}
+			))
 			.unwrap()],
 			result: Ok(codec::encode(&()).unwrap()),
 		}
@@ -231,7 +233,7 @@ module = "solo"
 method = "init"
 params = '''
 {{
-    "block_interval": 3000
+    "block_interval": 1000
 }}
 '''
 	"#,

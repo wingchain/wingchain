@@ -108,11 +108,11 @@ impl<C: Context> Module<C> {
 		self.balance.set(sender, &sender_balance)?;
 		self.balance.set(recipient, &recipient_balance)?;
 
-		let event = TransferEvent {
+		let event = TransferEvent::Transferred(Transferred {
 			sender: sender.clone(),
 			recipient: recipient.clone(),
 			value,
-		};
+		});
 
 		self.context.emit_event(event)?;
 
@@ -137,7 +137,12 @@ pub struct TransferParams {
 }
 
 #[derive(Encode, Decode)]
-pub struct TransferEvent {
+pub enum TransferEvent {
+	Transferred(Transferred),
+}
+
+#[derive(Encode, Decode)]
+pub struct Transferred {
 	pub sender: Address,
 	pub recipient: Address,
 	pub value: Balance,

@@ -488,11 +488,11 @@ fn expected_block_1_receipts_root(
 ) -> (Hash, Vec<Arc<FullReceipt>>) {
 	let trie_root = TrieRoot::new(Arc::new(HashImpl::Blake2b256)).unwrap();
 
-	let event = module::balance::TransferEvent {
+	let event = module::balance::TransferEvent::Transferred(module::balance::Transferred {
 		sender,
 		recipient,
 		value,
-	};
+	});
 	let event = Event::from(&event).unwrap();
 
 	let receipts = txs
