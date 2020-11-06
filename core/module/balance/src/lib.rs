@@ -69,8 +69,11 @@ impl<C: Context> Module<C> {
 		sender: Option<&Address>,
 		_params: EmptyParams,
 	) -> CommonResult<CallResult<Balance>> {
-		let address = sender.expect("should be signed");
-		let balance = self.balance.get(address)?;
+		let sender = match sender {
+			Some(v) => v,
+			None => return Ok(Err("should be signed".to_string())),
+		};
+		let balance = self.balance.get(sender)?;
 		let balance = balance.unwrap_or(0);
 		Ok(Ok(balance))
 	}
@@ -81,7 +84,10 @@ impl<C: Context> Module<C> {
 		sender: Option<&Address>,
 		params: TransferParams,
 	) -> CommonResult<CallResult<()>> {
-		let sender = sender.expect("should be signed");
+		let sender = match sender {
+			Some(v) => v,
+			None => return Ok(Err("should be signed".to_string())),
+		};
 		let recipient = &params.recipient;
 		let value = params.value;
 

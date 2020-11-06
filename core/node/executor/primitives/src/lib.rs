@@ -18,7 +18,7 @@ use std::rc::Rc;
 
 use codec::{Decode, Encode};
 use primitives::errors::CommonResult;
-use primitives::{codec, Address, BlockNumber, Call, DBValue, Event, TransactionResult};
+use primitives::{codec, Address, BlockNumber, Call, DBValue, Event, Hash, TransactionResult};
 
 pub mod errors;
 
@@ -59,9 +59,7 @@ pub struct ContextEnv {
 
 /// Env variables for a call
 pub struct CallEnv {
-	/// A unique address associated with a call
-	/// The contract module will use it as the address of the contract created
-	pub unique_address: Address,
+	pub tx_hash: Hash,
 }
 
 pub trait Context: Clone {
@@ -73,6 +71,8 @@ pub trait Context: Clone {
 	fn payload_set(&self, key: &[u8], value: Option<DBValue>) -> CommonResult<()>;
 	fn emit_event<E: Encode>(&self, event: E) -> CommonResult<()>;
 	fn drain_events(&self) -> CommonResult<Vec<Event>>;
+	fn hash(&self, data: &[u8]) -> CommonResult<Hash>;
+	fn address(&self, data: &[u8]) -> CommonResult<Address>;
 }
 
 pub trait Validator {

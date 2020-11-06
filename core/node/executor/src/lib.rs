@@ -51,6 +51,8 @@ pub struct ContextEssence {
 	payload_statedb: Arc<StateDB>,
 	payload_state_root: Rc<Hash>,
 	payload_stmt: StateDBStmt,
+	hash: Arc<HashImpl>,
+	address: Arc<AddressImpl>,
 }
 
 impl ContextEssence {
@@ -61,6 +63,8 @@ impl ContextEssence {
 		meta_state_root: Hash,
 		payload_statedb: Arc<StateDB>,
 		payload_state_root: Hash,
+		hash: Arc<HashImpl>,
+		address: Arc<AddressImpl>,
 	) -> CommonResult<Self> {
 		let meta_stmt = meta_statedb.prepare_stmt(&meta_state_root.0)?;
 		let payload_stmt = payload_statedb.prepare_stmt(&payload_state_root.0)?;
@@ -74,6 +78,8 @@ impl ContextEssence {
 			payload_statedb,
 			payload_state_root: Rc::new(payload_state_root),
 			payload_stmt,
+			hash,
+			address,
 		})
 	}
 }
@@ -100,6 +106,8 @@ struct ContextInner<'a> {
 	events: RefCell<Vec<Event>>,
 	// to mark the context has already started to execution payload txs
 	payload_phase: Cell<bool>,
+	hash: Arc<HashImpl>,
+	address: Arc<AddressImpl>,
 }
 
 struct ContextState<'a> {
@@ -165,6 +173,16 @@ impl<'a> ContextT for Context<'a> {
 		let events = events.drain(..).collect();
 		Ok(events)
 	}
+	fn hash(&self, data: &[u8]) -> CommonResult<Hash> {
+		let mut out = vec![0u8; self.inner.hash.length().into()];
+		self.inner.hash.hash(&mut out, data);
+		Ok(Hash(out))
+	}
+	fn address(&self, data: &[u8]) -> CommonResult<Address> {
+		let mut out = vec![0u8; self.inner.address.length().into()];
+		self.inner.address.address(&mut out, data);
+		Ok(Address(out))
+	}
 }
 
 impl<'a> Context<'a> {
@@ -188,6 +206,8 @@ impl<'a> Context<'a> {
 			payload_receipts: RefCell::new(Vec::with_capacity(PAYLOAD_TXS_SIZE)),
 			events: RefCell::new(Vec::with_capacity(EVENT_SIZE)),
 			payload_phase: Cell::new(false),
+			hash: context_essence.hash.clone(),
+			address: context_essence.address.clone(),
 		});
 
 		Ok(Self { inner })
@@ -461,13 +481,9 @@ impl Executor {
 			});
 
 			// prepare call env
-			let unique_address = {
-				let hash = self.hash(tx_hash)?;
-				let mut address = vec![0u8; self.address.length().into()];
-				self.address.address(&mut address, &hash.0);
-				Address(address)
+			let call_env = CallEnv {
+				tx_hash: tx_hash.clone(),
 			};
-			let call_env = CallEnv { unique_address };
 			context.inner.call_env.replace(Some(Rc::new(call_env)));
 
 			let result =
