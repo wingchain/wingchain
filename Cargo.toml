@@ -23,6 +23,7 @@ members = [
 	"core/module/system",
 	"core/module/balance",
 	"core/module/solo",
+	"core/module/contract",
 ]
 
 [profile.release]

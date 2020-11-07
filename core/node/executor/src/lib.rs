@@ -27,7 +27,7 @@ use node_db::DBTransaction;
 use node_executor_macro::dispatcher;
 pub use node_executor_primitives::ContextEnv;
 use node_executor_primitives::{
-	errors, Context as ContextT, Module as ModuleT, Validator as ValidatorT,
+	errors, CallEnv, Context as ContextT, Module as ModuleT, Validator as ValidatorT,
 };
 use node_statedb::{StateDB, StateDBGetter, StateDBStmt, TrieRoot};
 use primitives::codec::Encode;
@@ -51,6 +51,8 @@ pub struct ContextEssence {
 	payload_statedb: Arc<StateDB>,
 	payload_state_root: Rc<Hash>,
 	payload_stmt: StateDBStmt,
+	hash: Arc<HashImpl>,
+	address: Arc<AddressImpl>,
 }
 
 impl ContextEssence {
@@ -61,6 +63,8 @@ impl ContextEssence {
 		meta_state_root: Hash,
 		payload_statedb: Arc<StateDB>,
 		payload_state_root: Hash,
+		hash: Arc<HashImpl>,
+		address: Arc<AddressImpl>,
 	) -> CommonResult<Self> {
 		let meta_stmt = meta_statedb.prepare_stmt(&meta_state_root.0)?;
 		let payload_stmt = payload_statedb.prepare_stmt(&payload_state_root.0)?;
@@ -74,6 +78,8 @@ impl ContextEssence {
 			payload_statedb,
 			payload_state_root: Rc::new(payload_state_root),
 			payload_stmt,
+			hash,
+			address,
 		})
 	}
 }
@@ -85,6 +91,7 @@ pub struct Context<'a> {
 
 struct ContextInner<'a> {
 	env: Rc<ContextEnv>,
+	call_env: RefCell<Option<Rc<CallEnv>>>,
 	trie_root: Arc<TrieRoot>,
 	meta_statedb: Arc<StateDB>,
 	meta_state_root: Rc<Hash>,
@@ -99,6 +106,8 @@ struct ContextInner<'a> {
 	events: RefCell<Vec<Event>>,
 	// to mark the context has already started to execution payload txs
 	payload_phase: Cell<bool>,
+	hash: Arc<HashImpl>,
+	address: Arc<AddressImpl>,
 }
 
 struct ContextState<'a> {
@@ -121,6 +130,14 @@ impl<'a> ContextState<'a> {
 impl<'a> ContextT for Context<'a> {
 	fn env(&self) -> Rc<ContextEnv> {
 		self.inner.env.clone()
+	}
+	fn call_env(&self) -> Rc<CallEnv> {
+		self.inner
+			.call_env
+			.borrow()
+			.as_ref()
+			.expect("should set before")
+			.clone()
 	}
 	fn meta_get(&self, key: &[u8]) -> CommonResult<Option<DBValue>> {
 		let buffer = self.inner.meta_state.buffer.borrow();
@@ -156,6 +173,16 @@ impl<'a> ContextT for Context<'a> {
 		let events = events.drain(..).collect();
 		Ok(events)
 	}
+	fn hash(&self, data: &[u8]) -> CommonResult<Hash> {
+		let mut out = vec![0u8; self.inner.hash.length().into()];
+		self.inner.hash.hash(&mut out, data);
+		Ok(Hash(out))
+	}
+	fn address(&self, data: &[u8]) -> CommonResult<Address> {
+		let mut out = vec![0u8; self.inner.address.length().into()];
+		self.inner.address.address(&mut out, data);
+		Ok(Address(out))
+	}
 }
 
 impl<'a> Context<'a> {
@@ -165,6 +192,7 @@ impl<'a> Context<'a> {
 
 		let inner = Rc::new(ContextInner {
 			env: context_essence.env.clone(),
+			call_env: RefCell::new(None),
 			trie_root: context_essence.trie_root.clone(),
 			meta_statedb: context_essence.meta_statedb.clone(),
 			meta_state_root: context_essence.meta_state_root.clone(),
@@ -178,6 +206,8 @@ impl<'a> Context<'a> {
 			payload_receipts: RefCell::new(Vec::with_capacity(PAYLOAD_TXS_SIZE)),
 			events: RefCell::new(Vec::with_capacity(EVENT_SIZE)),
 			payload_phase: Cell::new(false),
+			hash: context_essence.hash.clone(),
+			address: context_essence.address.clone(),
 		});
 
 		Ok(Self { inner })
@@ -450,6 +480,12 @@ impl Executor {
 				Address(address)
 			});
 
+			// prepare call env
+			let call_env = CallEnv {
+				tx_hash: tx_hash.clone(),
+			};
+			context.inner.call_env.replace(Some(Rc::new(call_env)));
+
 			let result =
 				Dispatcher::execute_call::<Context>(module, context, sender.as_ref(), &call)?;
 			let events = context.drain_events()?;
@@ -534,11 +570,13 @@ enum Dispatcher {
 	system,
 	balance,
 	solo,
+	contract,
 }
 
 /// re-import modules
 pub mod module {
 	pub use module_balance as balance;
+	pub use module_contract as contract;
 	pub use module_solo as solo;
 	pub use module_system as system;
 }

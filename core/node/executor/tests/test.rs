@@ -53,7 +53,7 @@ fn test_executor() {
 
 	let (account1, account2) = test_accounts(dsa.clone(), address.clone());
 
-	let executor = Executor::new(hasher, dsa, address);
+	let executor = Executor::new(hasher.clone(), dsa.clone(), address.clone());
 
 	// block 0
 	let block_0_meta_txs = vec![executor
@@ -108,6 +108,8 @@ fn test_executor() {
 		Hash(meta_state_root),
 		payload_statedb.clone(),
 		Hash(payload_state_root),
+		hasher.clone(),
+		address.clone(),
 	)
 	.unwrap();
 	let context = Context::new(&context_essence).unwrap();
@@ -190,6 +192,8 @@ fn test_executor() {
 		meta_state_root,
 		payload_statedb.clone(),
 		payload_state_root,
+		hasher.clone(),
+		address.clone(),
 	)
 	.unwrap();
 	let context = Context::new(&context_essence).unwrap();
@@ -488,11 +492,11 @@ fn expected_block_1_receipts_root(
 ) -> (Hash, Vec<Arc<FullReceipt>>) {
 	let trie_root = TrieRoot::new(Arc::new(HashImpl::Blake2b256)).unwrap();
 
-	let event = module::balance::TransferEvent {
+	let event = module::balance::TransferEvent::Transferred(module::balance::Transferred {
 		sender,
 		recipient,
 		value,
-	};
+	});
 	let event = Event::from(&event).unwrap();
 
 	let receipts = txs

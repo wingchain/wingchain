@@ -90,7 +90,8 @@ impl Backend {
 			backend.init_genesis()?;
 		}
 
-		let genesis_hash = backend.get_block_hash(&0)?
+		let genesis_hash = backend
+			.get_block_hash(&0)?
 			.ok_or(errors::ErrorKind::Data("missing genesis block".to_string()))?;
 
 		backend.executor.set_genesis_hash(genesis_hash);
@@ -314,6 +315,8 @@ impl Backend {
 			meta_state_root,
 			self.payload_statedb.clone(),
 			payload_state_root,
+			self.basic.hash.clone(),
+			self.basic.address.clone(),
 		)?;
 
 		let context = Context::new(&context_essence)?;
@@ -399,7 +402,7 @@ impl Backend {
 		let execution_number = match self.get_execution_number()? {
 			Some(actual_execution_number) => actual_execution_number,
 			None => {
-				return Err(errors::ErrorKind::Data(format!("execution number not found")).into())
+				return Err(errors::ErrorKind::Data(format!("execution number not found")).into());
 			}
 		};
 		let execution_block_hash = match self.get_block_hash(&execution_number)? {
@@ -419,7 +422,7 @@ impl Backend {
 					"execution not found, block_hash: {}",
 					execution_block_hash
 				))
-				.into())
+				.into());
 			}
 		};
 
@@ -433,6 +436,8 @@ impl Backend {
 			meta_state_root,
 			self.payload_statedb.clone(),
 			block_execution.payload_execution_state_root.clone(),
+			self.basic.hash.clone(),
+			self.basic.address.clone(),
 		)?;
 
 		let context = Context::new(&context_essence)?;
@@ -529,6 +534,8 @@ impl Backend {
 			meta_state_root,
 			self.payload_statedb.clone(),
 			payload_state_root,
+			self.basic.hash.clone(),
+			self.basic.address.clone(),
 		)?;
 
 		let context = Context::new(&context_essence)?;
@@ -645,6 +652,8 @@ impl Backend {
 			Hash(self.meta_statedb.default_root()),
 			self.payload_statedb.clone(),
 			Hash(self.payload_statedb.default_root()),
+			self.basic.hash.clone(),
+			self.basic.address.clone(),
 		)?;
 
 		let context = Context::new(&context_essence)?;

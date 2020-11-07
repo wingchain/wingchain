@@ -18,7 +18,7 @@ use std::rc::Rc;
 
 use codec::{Decode, Encode};
 use primitives::errors::CommonResult;
-use primitives::{codec, Address, BlockNumber, Call, DBValue, Event, TransactionResult};
+use primitives::{codec, Address, BlockNumber, Call, DBValue, Event, Hash, TransactionResult};
 
 pub mod errors;
 
@@ -51,19 +51,28 @@ where
 	) -> CommonResult<TransactionResult>;
 }
 
+/// Env variables for a block
 pub struct ContextEnv {
 	pub number: BlockNumber,
 	pub timestamp: u64,
 }
 
+/// Env variables for a call
+pub struct CallEnv {
+	pub tx_hash: Hash,
+}
+
 pub trait Context: Clone {
 	fn env(&self) -> Rc<ContextEnv>;
+	fn call_env(&self) -> Rc<CallEnv>;
 	fn meta_get(&self, key: &[u8]) -> CommonResult<Option<DBValue>>;
 	fn meta_set(&self, key: &[u8], value: Option<DBValue>) -> CommonResult<()>;
 	fn payload_get(&self, key: &[u8]) -> CommonResult<Option<DBValue>>;
 	fn payload_set(&self, key: &[u8], value: Option<DBValue>) -> CommonResult<()>;
 	fn emit_event<E: Encode>(&self, event: E) -> CommonResult<()>;
 	fn drain_events(&self) -> CommonResult<Vec<Event>>;
+	fn hash(&self, data: &[u8]) -> CommonResult<Hash>;
+	fn address(&self, data: &[u8]) -> CommonResult<Address>;
 }
 
 pub trait Validator {

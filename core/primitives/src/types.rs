@@ -17,7 +17,7 @@ use smallvec::SmallVec;
 
 use crate::codec::{Decode, Encode};
 
-#[derive(Clone, Encode, Decode, PartialEq)]
+#[derive(Clone, Encode, Decode, PartialEq, Hash, Eq)]
 pub struct Address(pub Vec<u8>);
 
 #[derive(Clone, Debug, Encode, Decode, PartialEq)]
