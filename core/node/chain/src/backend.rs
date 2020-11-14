@@ -33,7 +33,7 @@ use primitives::errors::CommonResult;
 use primitives::types::CallResult;
 use primitives::{
 	Address, Block, BlockNumber, Body, BuildBlockParams, BuildExecutionParams, Call, DBKey,
-	Execution, Hash, Header, Nonce, Receipt, SecretKey, Transaction, TransactionResult,
+	Execution, Hash, Header, Nonce, OpaqueCallResult, Receipt, SecretKey, Transaction,
 };
 
 use crate::genesis::build_genesis;
@@ -279,7 +279,7 @@ impl Backend {
 		block_hash: &Hash,
 		sender: Option<&Address>,
 		call: &Call,
-	) -> CommonResult<TransactionResult> {
+	) -> CommonResult<OpaqueCallResult> {
 		let header = match self.get_header(block_hash)? {
 			Some(header) => header,
 			None => {

@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::str::FromStr;
+
 use crypto::hash::Hash;
 use crypto::hash::HashImpl;
-use std::str::FromStr;
 
 #[test]
 fn test() {

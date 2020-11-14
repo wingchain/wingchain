@@ -16,12 +16,11 @@ use std::rc::Rc;
 
 use executor_macro::{call, module};
 use executor_primitives::{
-	errors, Context, ContextEnv, EmptyParams, Module as ModuleT, StorageMap, Validator,
+	errors, Context, ContextEnv, EmptyParams, Module as ModuleT, ModuleResult, OpaqueModuleResult,
+	StorageMap, Validator,
 };
 use primitives::codec::{Decode, Encode};
-use primitives::errors::CommonResult;
-use primitives::types::CallResult;
-use primitives::{codec, Address, Balance, Call, TransactionResult};
+use primitives::{codec, Address, Balance, Call};
 
 pub struct Module<C>
 where
@@ -45,18 +44,18 @@ impl<C: Context> Module<C> {
 		}
 	}
 	#[call(write = true)]
-	fn init(&self, _sender: Option<&Address>, params: InitParams) -> CommonResult<CallResult<()>> {
+	fn init(&self, _sender: Option<&Address>, params: InitParams) -> ModuleResult<()> {
 		if self.env.number != 0 {
-			return Ok(Err("not genesis".to_string()));
+			return Err("not genesis".into());
 		}
 
 		for (address, balance) in &params.endow {
 			self.balance.set(address, balance)?;
 		}
-		Ok(Ok(()))
+		Ok(())
 	}
 
-	fn validate_init<V: Validator>(validator: &V, params: InitParams) -> CommonResult<()> {
+	fn validate_init<V: Validator>(validator: &V, params: InitParams) -> ModuleResult<()> {
 		for (address, _) in params.endow {
 			validator.validate_address(&address)?;
 		}
@@ -64,51 +63,37 @@ impl<C: Context> Module<C> {
 	}
 
 	#[call]
-	fn get_balance(
-		&self,
-		sender: Option<&Address>,
-		_params: EmptyParams,
-	) -> CommonResult<CallResult<Balance>> {
-		let sender = match sender {
-			Some(v) => v,
-			None => return Ok(Err("should be signed".to_string())),
-		};
+	fn get_balance(&self, sender: Option<&Address>, _params: EmptyParams) -> ModuleResult<Balance> {
+		let sender = sender.ok_or("should be signed")?;
 		let balance = self.balance.get(sender)?;
 		let balance = balance.unwrap_or(0);
-		Ok(Ok(balance))
+		Ok(balance)
 	}
 
 	#[call(write = true)]
-	fn transfer(
-		&self,
-		sender: Option<&Address>,
-		params: TransferParams,
-	) -> CommonResult<CallResult<()>> {
-		let sender = match sender {
-			Some(v) => v,
-			None => return Ok(Err("should be signed".to_string())),
-		};
+	fn transfer(&self, sender: Option<&Address>, params: TransferParams) -> ModuleResult<()> {
+		let sender = sender.ok_or("should be signed")?;
 		let recipient = &params.recipient;
 		let value = params.value;
 
 		if sender == recipient {
-			return Ok(Err("should not transfer to oneself".to_string()));
+			return Err("should not transfer to oneself".into());
 		}
 
 		let sender_balance = self.balance.get(sender)?.unwrap_or(0);
 		if sender_balance < value {
-			return Ok(Err("insufficient balance".to_string()));
+			return Err("insufficient balance".into());
 		}
 		let recipient_balance = self.balance.get(recipient)?.unwrap_or(0);
 
 		let (sender_balance, overflow) = sender_balance.overflowing_sub(value);
 		if overflow {
-			return Ok(Err("u64 overflow".to_string()));
+			return Err("u64 overflow".into());
 		}
 
 		let (recipient_balance, overflow) = recipient_balance.overflowing_add(value);
 		if overflow {
-			return Ok(Err("u64 overflow".to_string()));
+			return Err("u64 overflow".into());
 		}
 
 		self.balance.set(sender, &sender_balance)?;
@@ -122,10 +107,10 @@ impl<C: Context> Module<C> {
 
 		self.context.emit_event(event)?;
 
-		Ok(Ok(()))
+		Ok(())
 	}
 
-	fn validate_transfer<V: Validator>(validator: &V, params: TransferParams) -> CommonResult<()> {
+	fn validate_transfer<V: Validator>(validator: &V, params: TransferParams) -> ModuleResult<()> {
 		validator.validate_address(&params.recipient)?;
 		Ok(())
 	}

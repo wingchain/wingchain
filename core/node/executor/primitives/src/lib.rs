@@ -18,7 +18,9 @@ use std::rc::Rc;
 
 use codec::{Decode, Encode};
 use primitives::errors::CommonResult;
-use primitives::{codec, Address, BlockNumber, Call, DBValue, Event, Hash, TransactionResult};
+use primitives::{codec, Address, BlockNumber, Call, DBValue, Event, Hash};
+
+pub use crate::errors::{ModuleError, ModuleResult, OpaqueModuleResult};
 
 pub mod errors;
 
@@ -38,17 +40,13 @@ where
 	fn new(context: C) -> Self;
 
 	/// validate the call
-	fn validate_call<V: Validator>(validator: &V, call: &Call) -> CommonResult<()>;
+	fn validate_call<V: Validator>(validator: &V, call: &Call) -> ModuleResult<()>;
 
 	/// check if the call is a write call, a transaction should be built by a write call
 	fn is_write_call(call: &Call) -> Option<bool>;
 
 	/// execute the call
-	fn execute_call(
-		&self,
-		sender: Option<&Address>,
-		call: &Call,
-	) -> CommonResult<TransactionResult>;
+	fn execute_call(&self, sender: Option<&Address>, call: &Call) -> OpaqueModuleResult;
 }
 
 /// Env variables for a block

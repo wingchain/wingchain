@@ -28,7 +28,7 @@ use node_consensus_solo::Solo;
 use node_executor::module;
 use node_txpool::{TxPool, TxPoolConfig};
 use primitives::codec::Decode;
-use primitives::Address;
+use primitives::{Address, Hash};
 use utils_test::test_accounts;
 
 #[tokio::test]
@@ -567,6 +567,25 @@ async fn test_contract_update_code() {
 		.unwrap();
 	log::info!("code: {:?}", code);
 	assert_eq!(code, Some(new_code),);
+
+	let code_hash: Option<Hash> = chain
+		.execute_call_with_block_number(
+			&block_number,
+			None,
+			"contract".to_string(),
+			"get_code_hash".to_string(),
+			module::contract::GetCodeHashParams {
+				contract_address: contract_address.clone(),
+				version: None,
+			},
+		)
+		.unwrap()
+		.unwrap();
+	let expect_code_hash = Hash(
+		hex::decode("bb30a42c1e62f0afda5f0a4e8a562f7a13a24cea00ee81917b86b89e801314aa").unwrap(),
+	);
+	log::info!("code_hash: {:?}", code_hash);
+	assert_eq!(code_hash, Some(expect_code_hash),);
 }
 
 fn get_chain(address: &Address) -> Arc<Chain> {

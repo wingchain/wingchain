@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::{CommonError, CommonErrorKind, CommonResult};
 pub use scale_codec::{Decode, Encode};
+
+use crate::errors::{CommonError, CommonErrorKind, CommonResult};
 
 pub fn encode<E: Encode>(value: &E) -> CommonResult<Vec<u8>> {
 	Ok(Encode::encode(value))

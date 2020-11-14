@@ -25,16 +25,17 @@ use crypto::hash::Hash as HashT;
 use crypto::hash::HashImpl;
 use node_db::DBTransaction;
 use node_executor_macro::dispatcher;
+use node_executor_primitives::errors::ErrorKind;
 pub use node_executor_primitives::ContextEnv;
 use node_executor_primitives::{
-	errors, CallEnv, Context as ContextT, Module as ModuleT, Validator as ValidatorT,
+	errors, CallEnv, Context as ContextT, Module as ModuleT, ModuleError, Validator as ValidatorT,
 };
 use node_statedb::{StateDB, StateDBGetter, StateDBStmt, TrieRoot};
 use primitives::codec::Encode;
 use primitives::types::FullReceipt;
 use primitives::{
-	codec, errors::CommonResult, BlockNumber, Event, FullTransaction, Nonce, PublicKey, Receipt,
-	SecretKey, Signature, TransactionForHash, TransactionResult, Witness,
+	codec, errors::CommonResult, BlockNumber, CallResult, Event, FullTransaction, Nonce,
+	OpaqueCallResult, PublicKey, Receipt, SecretKey, Signature, TransactionForHash, Witness,
 };
 use primitives::{Address, Call, DBKey, DBValue, Hash, Params, Transaction};
 
@@ -354,7 +355,8 @@ impl Executor {
 			params,
 		};
 
-		Dispatcher::validate_call::<Context, _>(&module, &self.validator, &call)?;
+		Dispatcher::validate_call::<Context, _>(&module, &self.validator, &call)?
+			.map_err(|e| ErrorKind::Invalid(e))?;
 
 		let witness = match witness {
 			Some((secret_key, nonce, until)) => {
@@ -409,7 +411,8 @@ impl Executor {
 		};
 
 		let module = &call.module;
-		Dispatcher::validate_call::<Context, _>(module, &self.validator, &call)?;
+		Dispatcher::validate_call::<Context, _>(module, &self.validator, &call)?
+			.map_err(|e| ErrorKind::Invalid(e))?;
 
 		let write = Dispatcher::is_write_call::<Context>(module, &call)?;
 		if write != Some(true) {
@@ -434,7 +437,7 @@ impl Executor {
 		context: &Context,
 		sender: Option<&Address>,
 		call: &Call,
-	) -> CommonResult<TransactionResult> {
+	) -> CommonResult<OpaqueCallResult> {
 		let module = &call.module;
 		Dispatcher::execute_call::<Context>(module, context, sender, call)
 	}

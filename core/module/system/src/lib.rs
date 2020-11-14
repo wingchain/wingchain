@@ -16,12 +16,11 @@ use std::rc::Rc;
 
 use executor_macro::{call, module};
 use executor_primitives::{
-	errors, Context, ContextEnv, EmptyParams, Module as ModuleT, StorageValue, Validator,
+	errors, Context, ContextEnv, EmptyParams, Module as ModuleT, ModuleResult, OpaqueModuleResult,
+	StorageValue, Validator,
 };
 use primitives::codec::{Decode, Encode};
-use primitives::errors::CommonResult;
-use primitives::types::CallResult;
-use primitives::{codec, Address, BlockNumber, Call, TransactionResult};
+use primitives::{codec, Address, BlockNumber, Call};
 
 pub struct Module<C>
 where
@@ -48,40 +47,27 @@ impl<C: Context> Module<C> {
 	}
 
 	#[call(write = true)]
-	fn init(&self, _sender: Option<&Address>, params: InitParams) -> CommonResult<CallResult<()>> {
+	fn init(&self, _sender: Option<&Address>, params: InitParams) -> ModuleResult<()> {
 		if self.env.number != 0 {
-			return Ok(Err("not genesis".to_string()));
+			return Err("not genesis".into());
 		}
 		self.chain_id.set(&params.chain_id)?;
 		self.timestamp.set(&params.timestamp)?;
 		self.until_gap.set(&params.until_gap)?;
-		Ok(Ok(()))
+		Ok(())
 	}
 
 	#[call]
-	fn get_meta(
-		&self,
-		_sender: Option<&Address>,
-		_params: EmptyParams,
-	) -> CommonResult<CallResult<Meta>> {
-		let chain_id = match self.chain_id.get()? {
-			Some(chain_id) => chain_id,
-			None => return Ok(Err("unexpected none".to_string())),
-		};
-		let timestamp = match self.timestamp.get()? {
-			Some(timestamp) => timestamp,
-			None => return Ok(Err("unexpected none".to_string())),
-		};
-		let until_gap = match self.until_gap.get()? {
-			Some(until_gap) => until_gap,
-			None => return Ok(Err("unexpected none".to_string())),
-		};
+	fn get_meta(&self, _sender: Option<&Address>, _params: EmptyParams) -> ModuleResult<Meta> {
+		let chain_id = self.chain_id.get()?.ok_or("unexpected none")?;
+		let timestamp = self.timestamp.get()?.ok_or("unexpected none")?;
+		let until_gap = self.until_gap.get()?.ok_or("unexpected none")?;
 		let meta = Meta {
 			chain_id,
 			timestamp,
 			until_gap,
 		};
-		Ok(Ok(meta))
+		Ok(meta)
 	}
 }
 

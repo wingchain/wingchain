@@ -27,7 +27,7 @@ use primitives::errors::CommonResult;
 use primitives::types::CallResult;
 use primitives::{
 	Address, Block, BlockNumber, BuildBlockParams, Call, CommitBlockParams, CommitExecutionParams,
-	Execution, Hash, Header, Nonce, Receipt, SecretKey, Transaction, TransactionResult,
+	Execution, Hash, Header, Nonce, OpaqueCallResult, Receipt, SecretKey, Transaction,
 };
 
 use crate::backend::Backend;
@@ -195,7 +195,7 @@ impl Chain {
 		block_hash: &Hash,
 		sender: Option<&Address>,
 		call: &Call,
-	) -> CommonResult<TransactionResult> {
+	) -> CommonResult<OpaqueCallResult> {
 		self.backend.execute_call(block_hash, sender, call)
 	}
 

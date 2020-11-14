@@ -103,7 +103,7 @@ pub struct FullReceipt {
 
 pub type CallResult<T> = Result<T, String>;
 
-pub type TransactionResult = Result<Vec<u8>, String>;
+pub type OpaqueCallResult = Result<Vec<u8>, String>;
 
 #[derive(Clone, Encode, Decode, Debug, PartialEq)]
 pub struct Event(pub Vec<u8>);
@@ -112,7 +112,7 @@ pub struct Event(pub Vec<u8>);
 pub struct Receipt {
 	pub block_number: BlockNumber,
 	pub events: Vec<Event>,
-	pub result: TransactionResult,
+	pub result: OpaqueCallResult,
 }
 
 #[derive(Debug, PartialEq)]

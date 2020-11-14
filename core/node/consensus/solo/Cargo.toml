@@ -23,3 +23,4 @@ tempfile = "3.1.0"
 utils-test = { path = "../../../../utils/test" }
 crypto = { path = "../../../crypto" }
 env_logger = "0.7.1"
+hex = "0.4.2"

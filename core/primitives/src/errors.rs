@@ -13,10 +13,11 @@
 // limitations under the License.
 
 use std::error::Error;
+use std::sync::Arc;
 
 pub use derive_more::{Constructor, Display};
 
-#[derive(Debug, Display)]
+#[derive(Debug, Display, Clone)]
 pub enum CommonErrorKind {
 	Main,
 	Service,
@@ -29,13 +30,23 @@ pub enum CommonErrorKind {
 	Codec,
 	Api,
 	Consensus,
+	VM,
 }
 
-#[derive(Debug, Constructor, Display)]
+#[derive(Debug, Display, Clone)]
 #[display(fmt = "[CommonError] Kind: {}, Error: {}", kind, error)]
 pub struct CommonError {
 	pub kind: CommonErrorKind,
-	pub error: Box<dyn Error + Send>,
+	pub error: Arc<dyn Error + Send + Sync>,
+}
+
+impl CommonError {
+	pub fn new(kind: CommonErrorKind, error: Box<dyn Error + Send + Sync>) -> Self {
+		CommonError {
+			kind,
+			error: error.into(),
+		}
+	}
 }
 
 impl Error for CommonError {}

@@ -37,8 +37,8 @@ pub enum ErrorKind {
 	#[display(fmt = "Invalid address: {}", _0)]
 	InvalidAddress(String),
 
-	#[display(fmt = "{}", _0)]
-	ExecuteError(String),
+	#[display(fmt = "Invalid: {}", _0)]
+	Invalid(String),
 }
 
 impl Error for ErrorKind {}
@@ -46,5 +46,41 @@ impl Error for ErrorKind {}
 impl From<ErrorKind> for CommonError {
 	fn from(error: ErrorKind) -> Self {
 		CommonError::new(CommonErrorKind::Executor, Box::new(error))
+	}
+}
+
+pub type ModuleResult<T> = Result<T, ModuleError>;
+
+pub type OpaqueModuleResult = ModuleResult<Vec<u8>>;
+
+#[derive(Debug)]
+pub enum ModuleError {
+	/// System error, should not be accepted
+	System(CommonError),
+	/// Application error, should be accepted
+	Application(String),
+}
+
+impl From<CommonError> for ModuleError {
+	fn from(v: CommonError) -> Self {
+		ModuleError::System(v)
+	}
+}
+
+impl From<ErrorKind> for ModuleError {
+	fn from(v: ErrorKind) -> Self {
+		ModuleError::System(v.into())
+	}
+}
+
+impl From<String> for ModuleError {
+	fn from(v: String) -> Self {
+		ModuleError::Application(v)
+	}
+}
+
+impl From<&str> for ModuleError {
+	fn from(v: &str) -> Self {
+		ModuleError::Application(v.to_string())
 	}
 }
