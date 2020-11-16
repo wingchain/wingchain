@@ -1,3 +1,5 @@
+use byteorder::ByteOrder;
+use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
@@ -18,6 +20,8 @@ mod env {
 		pub fn block_timestamp() -> u64;
 		pub fn tx_hash_read(ptr: u64);
 		pub fn tx_hash_len() -> u64;
+		pub fn storage_read(key_len: u64, key_ptr: u64, result_ptr: u64);
+		pub fn storage_exist_len(key_len: u64, key_ptr: u64) -> u64;
 	}
 }
 
@@ -61,6 +65,14 @@ pub fn tx_hash_len() -> u64 {
 	unsafe { env::tx_hash_len() }
 }
 
+pub fn storage_read(key_len: u64, key_ptr: u64, result_ptr: u64) {
+	unsafe { env::storage_read(key_len, key_ptr, result_ptr) }
+}
+
+pub fn storage_exist_len(key_len: u64, key_ptr: u64) -> u64 {
+	unsafe { env::storage_exist_len(key_len, key_ptr) }
+}
+
 #[wasm_bindgen]
 pub fn execute_call() {
 	let len = method_len();
@@ -76,6 +88,7 @@ pub fn execute_call() {
 		"block_number" => call_block_number(),
 		"block_timestamp" => call_block_timestamp(),
 		"tx_hash" => call_tx_hash(),
+		"storage_get" => call_storage_get(),
 		_ => (),
 	}
 }
@@ -115,5 +128,38 @@ fn call_tx_hash() {
 	tx_hash_read(tx_hash.as_ptr() as _);
 
 	let output = serde_json::to_vec(&tx_hash).unwrap();
+	output_write(output.len() as _, output.as_ptr() as _);
+}
+
+fn call_storage_get() {
+	let len = input_len();
+	let key = vec![0u8; len as usize];
+	input_read(key.as_ptr() as _);
+
+	let exist_len = storage_exist_len(key.len() as _, key.as_ptr() as _);
+
+	let mut buffer = vec![0u8; 8];
+	byteorder::LittleEndian::write_u64(&mut buffer, exist_len);
+	let mut exist_len = [0; 2];
+	byteorder::LittleEndian::read_u32_into(&buffer, &mut exist_len);
+	let (exist, len) = (exist_len[0], exist_len[1]);
+
+	let value = match exist {
+		1 => {
+			let value = vec![0u8; len as usize];
+			storage_read(key.len() as _, key.as_ptr() as _, value.as_ptr() as _);
+			Some(value)
+		}
+		_ => None,
+	};
+
+	#[derive(Serialize)]
+	struct Value {
+		value: Option<Vec<u8>>,
+	}
+
+	let value = Value { value };
+
+	let output = serde_json::to_vec(&value).unwrap();
 	output_write(output.len() as _, output.as_ptr() as _);
 }

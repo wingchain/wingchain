@@ -91,6 +91,7 @@ pub enum BusinessError {
 	Panic { msg: String },
 	Deserialize,
 	User { msg: String },
+	IllegalRead,
 }
 
 impl From<wasmer_error::Error> for VMError {

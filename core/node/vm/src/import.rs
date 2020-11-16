@@ -15,6 +15,7 @@
 use std::ffi::c_void;
 use std::rc::Rc;
 
+use byteorder::ByteOrder;
 use wasmer_runtime::Memory;
 use wasmer_runtime::{func, imports};
 use wasmer_runtime_core::import::ImportObject;
@@ -55,6 +56,8 @@ pub fn import(state: &mut State, memory: Memory) -> VMResult<ImportObject> {
 			"block_timestamp" => func!(block_timestamp),
 			"tx_hash_read" => func!(tx_hash_read),
 			"tx_hash_len" => func!(tx_hash_len),
+			"storage_read" => func!(storage_read),
+			"storage_exist_len" => func!(storage_exist_len),
 		}
 	};
 	Ok(import_object)
@@ -156,6 +159,57 @@ fn tx_hash_len(ctx: &mut Ctx) -> VMResult<u64> {
 	let state = get_state(ctx);
 	let len = state.context.call_env().tx_hash.0.len() as u64;
 	Ok(len)
+}
+
+fn storage_read(ctx: &mut Ctx, key_len: u64, key_ptr: u64, result_ptr: u64) -> VMResult<()> {
+	let state = get_state(ctx);
+	let memory = &state.memory;
+
+	let key_ptr = key_ptr as usize;
+	let key_len = key_len as usize;
+	let mut key = vec![0u8; key_len];
+	for (i, cell) in memory.view()[key_ptr..(key_ptr + key_len)]
+		.iter()
+		.enumerate()
+	{
+		key[i] = cell.get();
+	}
+
+	let value = state.context.payload_get(&key)?;
+	let value = value.ok_or(BusinessError::IllegalRead)?;
+
+	let result_ptr = result_ptr as usize;
+	memory.view()[result_ptr..(result_ptr + value.len())]
+		.iter()
+		.zip(value.iter())
+		.for_each(|(cell, v)| cell.set(*v));
+	Ok(())
+}
+
+fn storage_exist_len(ctx: &mut Ctx, key_len: u64, key_ptr: u64) -> VMResult<u64> {
+	let state = get_state(ctx);
+	let memory = &state.memory;
+
+	let key_ptr = key_ptr as usize;
+	let key_len = key_len as usize;
+	let mut key = vec![0u8; key_len];
+	for (i, cell) in memory.view()[key_ptr..(key_ptr + key_len)]
+		.iter()
+		.enumerate()
+	{
+		key[i] = cell.get();
+	}
+
+	let value = state.context.payload_get(&key)?;
+	let (exist, len) = match value {
+		Some(value) => (1u32, value.len() as u32),
+		None => (0, 0),
+	};
+	let mut buffer = vec![0u8; 8];
+	byteorder::LittleEndian::write_u32_into(&[exist, len], &mut buffer);
+	let exist_len = byteorder::LittleEndian::read_u64(&buffer);
+
+	Ok(exist_len)
 }
 
 fn get_state<'a>(ctx: &'a mut Ctx) -> &'a mut State {

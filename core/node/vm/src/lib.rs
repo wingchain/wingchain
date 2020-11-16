@@ -22,7 +22,7 @@ use wasmer_runtime_core::units::Pages;
 
 use primitives::codec::Encode;
 use primitives::errors::CommonResult;
-use primitives::{BlockNumber, Hash};
+use primitives::{Address, BlockNumber, DBValue, Hash};
 
 use crate::errors::{ErrorKind, VMError, VMResult};
 use crate::import::State;
@@ -100,6 +100,11 @@ impl VM {
 pub trait VMContext {
 	fn env(&self) -> Rc<VMContextEnv>;
 	fn call_env(&self) -> Rc<VMCallEnv>;
+	fn payload_get(&self, key: &[u8]) -> VMResult<Option<DBValue>>;
+	fn payload_set(&self, key: &[u8], value: Option<DBValue>) -> VMResult<()>;
+	fn emit_event(&self, event: Vec<u8>) -> VMResult<()>;
+	fn hash(&self, data: &[u8]) -> VMResult<Hash>;
+	fn address(&self, data: &[u8]) -> VMResult<Address>;
 }
 
 pub struct VMContextEnv {

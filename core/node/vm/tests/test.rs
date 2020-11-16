@@ -12,13 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 
+use serde::Deserialize;
+
+use crypto::address::{Address as AddressT, AddressImpl};
 use crypto::hash::{Hash as HashT, HashImpl};
 use node_vm::errors::{BusinessError, VMError, VMResult};
 use node_vm::{VMCallEnv, VMConfig, VMContext, VMContextEnv, VM};
-use primitives::{BlockNumber, Hash};
+use primitives::{Address, BlockNumber, DBValue, Hash};
 
 #[test]
 fn test_vm_hello() {
@@ -71,15 +76,51 @@ fn test_vm_tx_hash() {
 	assert_eq!(result, vec![1, 2, 3, 4, 5, 6, 7, 8]);
 }
 
+#[test]
+fn test_vm_storage_get() {
+	#[derive(Deserialize, Debug, PartialEq)]
+	struct Value {
+		value: Option<Vec<u8>>,
+	}
+
+	let input = vec![1u8];
+	let result = test_vm_execute("storage_get", input).unwrap();
+
+	let result: Value = serde_json::from_slice(&result).unwrap();
+
+	assert_eq!(
+		result,
+		Value {
+			value: Some(vec![2])
+		}
+	);
+
+	let input = vec![2u8];
+	let result = test_vm_execute("storage_get", input).unwrap();
+
+	let result: Value = serde_json::from_slice(&result).unwrap();
+
+	assert_eq!(result, Value { value: None });
+}
+
 fn test_vm_execute(method: &str, input: Vec<u8>) -> VMResult<Vec<u8>> {
 	let hash = Arc::new(HashImpl::Blake2b256);
+	let address = Arc::new(AddressImpl::Blake2b160);
 
 	let config = VMConfig::default();
+
+	let payload = vec![(vec![1u8], vec![2u8])]
+		.into_iter()
+		.collect::<HashMap<_, _>>();
 
 	let context = TestVMContext {
 		block_number: 10,
 		block_timestamp: 12345,
 		tx_hash: Hash(vec![1, 2, 3, 4, 5, 6, 7, 8]),
+		payload: RefCell::new(payload),
+		events: RefCell::new(Vec::new()),
+		hash: hash.clone(),
+		address: address.clone(),
 	};
 
 	let vm = VM::new(config, Rc::new(context)).unwrap();
@@ -103,6 +144,10 @@ struct TestVMContext {
 	block_number: BlockNumber,
 	block_timestamp: u64,
 	tx_hash: Hash,
+	payload: RefCell<HashMap<Vec<u8>, DBValue>>,
+	events: RefCell<Vec<Vec<u8>>>,
+	hash: Arc<HashImpl>,
+	address: Arc<AddressImpl>,
 }
 
 impl VMContext for TestVMContext {
@@ -116,5 +161,29 @@ impl VMContext for TestVMContext {
 		Rc::new(VMCallEnv {
 			tx_hash: self.tx_hash.clone(),
 		})
+	}
+	fn payload_get(&self, key: &[u8]) -> VMResult<Option<DBValue>> {
+		Ok(self.payload.borrow().get(key).cloned())
+	}
+	fn payload_set(&self, key: &[u8], value: Option<DBValue>) -> VMResult<()> {
+		match value {
+			Some(value) => self.payload.borrow_mut().insert(key.to_vec(), value),
+			None => self.payload.borrow_mut().remove(key),
+		};
+		Ok(())
+	}
+	fn emit_event(&self, event: Vec<u8>) -> VMResult<()> {
+		self.events.borrow_mut().push(event);
+		Ok(())
+	}
+	fn hash(&self, data: &[u8]) -> VMResult<Hash> {
+		let mut out = vec![0u8; self.hash.length().into()];
+		self.hash.hash(&mut out, data);
+		Ok(Hash(out))
+	}
+	fn address(&self, data: &[u8]) -> VMResult<Address> {
+		let mut out = vec![0u8; self.address.length().into()];
+		self.address.address(&mut out, data);
+		Ok(Address(out))
 	}
 }
