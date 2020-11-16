@@ -14,6 +14,8 @@
 
 //! Virtual machine to execute contract
 
+use std::rc::Rc;
+
 use wasmer_runtime::wasm::MemoryDescriptor;
 use wasmer_runtime::Memory;
 use wasmer_runtime_core::units::Pages;
@@ -45,13 +47,13 @@ impl Default for VMConfig {
 	}
 }
 
-pub struct VM<C: VMContext> {
+pub struct VM {
 	config: VMConfig,
-	context: C,
+	context: Rc<dyn VMContext>,
 }
 
-impl<C: VMContext> VM<C> {
-	pub fn new(config: VMConfig, context: C) -> CommonResult<Self> {
+impl VM {
+	pub fn new(config: VMConfig, context: Rc<dyn VMContext>) -> CommonResult<Self> {
 		let vm = VM { config, context };
 		Ok(vm)
 	}
@@ -77,6 +79,7 @@ impl<C: VMContext> VM<C> {
 
 		let mut state = State {
 			memory,
+			context: self.context.clone(),
 			method,
 			input,
 			output: None,
@@ -94,7 +97,10 @@ impl<C: VMContext> VM<C> {
 	}
 }
 
-pub trait VMContext {}
+pub trait VMContext {
+	fn env(&self) -> Rc<VMContextEnv>;
+	fn call_env(&self) -> Rc<VMCallEnv>;
+}
 
 pub struct VMContextEnv {
 	pub number: BlockNumber,

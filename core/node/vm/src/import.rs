@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use std::ffi::c_void;
+use std::rc::Rc;
 
 use wasmer_runtime::Memory;
 use wasmer_runtime::{func, imports};
@@ -20,9 +21,11 @@ use wasmer_runtime_core::import::ImportObject;
 use wasmer_runtime_core::vm::Ctx;
 
 use crate::errors::{ApplicationError, BusinessError, VMError, VMResult};
+use crate::VMContext;
 
 pub struct State {
 	pub memory: Memory,
+	pub context: Rc<dyn VMContext>,
 	pub method: Vec<u8>,
 	pub input: Vec<u8>,
 	pub output: Option<Vec<u8>>,
@@ -48,6 +51,10 @@ pub fn import(state: &mut State, memory: Memory) -> VMResult<ImportObject> {
 			"output_write" => func!(output_write),
 			"error_return" => func!(error_return),
 			"abort" => func!(abort),
+			"block_number" => func!(block_number),
+			"block_timestamp" => func!(block_timestamp),
+			"tx_hash_read" => func!(tx_hash_read),
+			"tx_hash_len" => func!(tx_hash_len),
 		}
 	};
 	Ok(import_object)
@@ -121,6 +128,34 @@ fn abort(_ctx: &mut Ctx, _msg_ptr: u32, _filename_ptr: u32, _line: u32, _col: u3
 			msg: "AssemblyScript panic".to_string(),
 		},
 	)))
+}
+
+fn block_number(ctx: &mut Ctx) -> VMResult<u64> {
+	let state = get_state(ctx);
+	Ok(state.context.env().number)
+}
+
+fn block_timestamp(ctx: &mut Ctx) -> VMResult<u64> {
+	let state = get_state(ctx);
+	Ok(state.context.env().timestamp)
+}
+
+fn tx_hash_read(ctx: &mut Ctx, ptr: u64) -> VMResult<()> {
+	let state = get_state(ctx);
+	let memory = &state.memory;
+	let tx_hash = &state.context.call_env().tx_hash.0[..];
+	let ptr = ptr as usize;
+	memory.view()[ptr..(ptr + tx_hash.len())]
+		.iter()
+		.zip(tx_hash.iter())
+		.for_each(|(cell, v)| cell.set(*v));
+	Ok(())
+}
+
+fn tx_hash_len(ctx: &mut Ctx) -> VMResult<u64> {
+	let state = get_state(ctx);
+	let len = state.context.call_env().tx_hash.0.len() as u64;
+	Ok(len)
 }
 
 fn get_state<'a>(ctx: &'a mut Ctx) -> &'a mut State {

@@ -14,6 +14,10 @@ mod env {
 		pub fn input_len() -> u64;
 		pub fn output_write(len: u64, ptr: u64);
 		pub fn error_return(len: u64, ptr: u64);
+		pub fn block_number() -> u64;
+		pub fn block_timestamp() -> u64;
+		pub fn tx_hash_read(ptr: u64);
+		pub fn tx_hash_len() -> u64;
 	}
 }
 
@@ -41,6 +45,22 @@ pub fn error_return(len: u64, ptr: u64) {
 	unsafe { env::error_return(len, ptr) }
 }
 
+pub fn block_number() -> u64 {
+	unsafe { env::block_number() }
+}
+
+pub fn block_timestamp() -> u64 {
+	unsafe { env::block_timestamp() }
+}
+
+pub fn tx_hash_read(ptr: u64) {
+	unsafe { env::tx_hash_read(ptr) }
+}
+
+pub fn tx_hash_len() -> u64 {
+	unsafe { env::tx_hash_len() }
+}
+
 #[wasm_bindgen]
 pub fn execute_call() {
 	let len = method_len();
@@ -51,13 +71,16 @@ pub fn execute_call() {
 	let method = method.as_str();
 
 	match method {
-		"hello" => hello(),
-		"error" => error(),
+		"hello" => call_hello(),
+		"error" => call_error(),
+		"block_number" => call_block_number(),
+		"block_timestamp" => call_block_timestamp(),
+		"tx_hash" => call_tx_hash(),
 		_ => (),
 	}
 }
 
-fn hello() {
+fn call_hello() {
 	let len = input_len();
 	let buffer = vec![0u8; len as usize];
 	input_read(buffer.as_ptr() as _);
@@ -69,7 +92,28 @@ fn hello() {
 	output_write(output.len() as _, output.as_ptr() as _);
 }
 
-fn error() {
+fn call_error() {
 	let error = "custom error";
 	error_return(error.len() as _, error.as_ptr() as _);
+}
+
+fn call_block_number() {
+	let number = block_number();
+	let output = serde_json::to_vec(&number).unwrap();
+	output_write(output.len() as _, output.as_ptr() as _);
+}
+
+fn call_block_timestamp() {
+	let timestamp = block_timestamp();
+	let output = serde_json::to_vec(&timestamp).unwrap();
+	output_write(output.len() as _, output.as_ptr() as _);
+}
+
+fn call_tx_hash() {
+	let len = tx_hash_len();
+	let tx_hash = vec![0u8; len as usize];
+	tx_hash_read(tx_hash.as_ptr() as _);
+
+	let output = serde_json::to_vec(&tx_hash).unwrap();
+	output_write(output.len() as _, output.as_ptr() as _);
 }
