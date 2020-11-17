@@ -93,16 +93,11 @@ fn test_vm_tx_hash() {
 #[test]
 fn test_vm_contract_address() {
 	let context = Rc::new(get_context());
-	let result = vm_execute(context, "contract_address", vec![]).unwrap();
+	let result = vm_execute(context.clone(), "contract_address", vec![]).unwrap();
 
 	let result: Vec<u8> = serde_json::from_slice(&result).unwrap();
 
-	let address = Arc::new(AddressImpl::Blake2b160);
-	let expected_address = {
-		let mut out = vec![0u8; address.length().into()];
-		address.address(&mut out, &vec![1]);
-		Address(out)
-	};
+	let expected_address = context.contract_address.clone();
 
 	assert_eq!(result, expected_address.0);
 }
@@ -110,14 +105,11 @@ fn test_vm_contract_address() {
 #[test]
 fn test_vm_sender_address() {
 	let context = Rc::new(get_context());
-	let result = vm_execute(context, "sender_address", vec![]).unwrap();
+	let result = vm_execute(context.clone(), "sender_address", vec![]).unwrap();
 
 	let result: Vec<u8> = serde_json::from_slice(&result).unwrap();
 
-	let dsa = Arc::new(DsaImpl::Ed25519);
-	let address = Arc::new(AddressImpl::Blake2b160);
-	let (account1, _account2) = test_accounts(dsa, address);
-	let expected_address = account1.3;
+	let expected_address = context.sender_address.clone();
 
 	assert_eq!(result, expected_address.0);
 }
@@ -182,7 +174,7 @@ fn test_vm_event() {
 }
 
 #[test]
-fn test_vm_hash() {
+fn test_vm_compute_hash() {
 	let context = Rc::new(get_context());
 	let input = vec![1u8];
 	let input = serde_json::to_vec(&input).unwrap();
@@ -214,7 +206,7 @@ fn test_vm_hash() {
 }
 
 #[test]
-fn test_vm_address() {
+fn test_vm_compute_address() {
 	let context = Rc::new(get_context());
 	let input = vec![1u8];
 	let input = serde_json::to_vec(&input).unwrap();
@@ -243,6 +235,27 @@ fn test_vm_address() {
 			128
 		]
 	);
+}
+
+#[test]
+fn test_vm_balance() {
+	let context = Rc::new(get_context());
+
+	let input = context.sender_address.clone().0;
+	let input = serde_json::to_vec(&input).unwrap();
+	let result = vm_execute(context.clone(), "balance", input).unwrap();
+
+	let result: Balance = serde_json::from_slice(&result).unwrap();
+
+	assert_eq!(result, 1000);
+
+	let input = context.contract_address.clone().0;
+	let input = serde_json::to_vec(&input).unwrap();
+	let result = vm_execute(context.clone(), "balance", input).unwrap();
+
+	let result: Balance = serde_json::from_slice(&result).unwrap();
+
+	assert_eq!(result, 0);
 }
 
 fn get_context() -> TestVMContext {
