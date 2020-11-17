@@ -1,5 +1,5 @@
 use byteorder::ByteOrder;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
@@ -29,6 +29,7 @@ mod env {
 			value_len: u64,
 			value_ptr: u64,
 		);
+		pub fn event_write(len: u64, ptr: u64);
 	}
 }
 
@@ -84,6 +85,10 @@ pub fn storage_write(key_len: u64, key_ptr: u64, value_exist: u64, value_len: u6
 	unsafe { env::storage_write(key_len, key_ptr, value_exist, value_len, value_ptr) }
 }
 
+pub fn event_write(len: u64, ptr: u64) {
+	unsafe { env::event_write(len, ptr) }
+}
+
 #[wasm_bindgen]
 pub fn execute_call() {
 	let len = method_len();
@@ -101,6 +106,7 @@ pub fn execute_call() {
 		"tx_hash" => call_tx_hash(),
 		"storage_get" => call_storage_get(),
 		"storage_set" => call_storage_set(),
+		"event" => call_event(),
 		_ => (),
 	}
 }
@@ -195,4 +201,17 @@ fn call_storage_set() {
 			storage_write(input.key.len() as _, input.key.as_ptr() as _, 0, 0, 0);
 		}
 	}
+}
+
+fn call_event() {
+	#[derive(Serialize)]
+	struct Event {
+		name: String,
+	}
+	let event = Event {
+		name: "MyEvent".to_string(),
+	};
+	let event = serde_json::to_vec(&event).unwrap();
+
+	event_write(event.len() as _, event.as_ptr() as _);
 }

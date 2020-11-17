@@ -127,6 +127,17 @@ fn test_vm_storage_set() {
 	assert_eq!(context.payload.borrow().get(&vec![1u8]), None);
 }
 
+#[test]
+fn test_vm_event() {
+	let context = Rc::new(get_context());
+	let _result = vm_execute(context.clone(), "event", vec![]).unwrap();
+
+	let event = context.events.borrow().get(0).unwrap().clone();
+	let event = String::from_utf8(event).unwrap();
+
+	assert_eq!(event, "{\"name\":\"MyEvent\"}");
+}
+
 fn get_context() -> TestVMContext {
 	let hash = Arc::new(HashImpl::Blake2b256);
 	let address = Arc::new(AddressImpl::Blake2b160);

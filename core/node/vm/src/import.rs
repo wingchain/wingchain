@@ -59,6 +59,7 @@ pub fn import(state: &mut State, memory: Memory) -> VMResult<ImportObject> {
 			"storage_read" => func!(storage_read),
 			"storage_exist_len" => func!(storage_exist_len),
 			"storage_write" => func!(storage_write),
+			"event_write" => func!(event_write),
 		}
 	};
 	Ok(import_object)
@@ -252,6 +253,19 @@ fn storage_write(
 
 	state.context.storage_set(&key, value)?;
 
+	Ok(())
+}
+
+fn event_write(ctx: &mut Ctx, len: u64, ptr: u64) -> VMResult<()> {
+	let state = get_state(ctx);
+	let memory = &state.memory;
+	let ptr = ptr as usize;
+	let len = len as usize;
+	let mut event = vec![0u8; len];
+	for (i, cell) in memory.view()[ptr..(ptr + len)].iter().enumerate() {
+		event[i] = cell.get();
+	}
+	state.context.emit_event(event)?;
 	Ok(())
 }
 
