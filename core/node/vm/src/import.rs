@@ -70,11 +70,7 @@ pub fn import(state: &mut State, memory: Memory) -> VMResult<ImportObject> {
 fn method_read(ctx: &mut Ctx, ptr: u64) -> VMResult<()> {
 	let state = get_state(ctx);
 	let memory = &state.memory;
-	let ptr = ptr as usize;
-	memory.view()[ptr..(ptr + state.method.len())]
-		.iter()
-		.zip(state.method.iter())
-		.for_each(|(cell, v)| cell.set(*v));
+	vec_to_memory(memory, ptr, &state.method);
 	Ok(())
 }
 
@@ -87,11 +83,7 @@ fn method_len(ctx: &mut Ctx) -> VMResult<u64> {
 fn input_read(ctx: &mut Ctx, ptr: u64) -> VMResult<()> {
 	let state = get_state(ctx);
 	let memory = &state.memory;
-	let ptr = ptr as usize;
-	memory.view()[ptr..(ptr + state.input.len())]
-		.iter()
-		.zip(state.input.iter())
-		.for_each(|(cell, v)| cell.set(*v));
+	vec_to_memory(memory, ptr, &state.input);
 	Ok(())
 }
 
@@ -104,12 +96,7 @@ fn input_len(ctx: &mut Ctx) -> VMResult<u64> {
 fn output_write(ctx: &mut Ctx, len: u64, ptr: u64) -> VMResult<()> {
 	let state = get_state(ctx);
 	let memory = &state.memory;
-	let ptr = ptr as usize;
-	let len = len as usize;
-	let mut output = vec![0u8; len];
-	for (i, cell) in memory.view()[ptr..(ptr + len)].iter().enumerate() {
-		output[i] = cell.get();
-	}
+	let output = memory_to_vec(memory, len, ptr);
 	state.output = Some(output);
 	Ok(())
 }
@@ -117,13 +104,8 @@ fn output_write(ctx: &mut Ctx, len: u64, ptr: u64) -> VMResult<()> {
 fn error_return(ctx: &mut Ctx, len: u64, ptr: u64) -> VMResult<()> {
 	let state = get_state(ctx);
 	let memory = &state.memory;
-	let ptr = ptr as usize;
-	let len = len as usize;
-	let mut error = vec![0u8; len];
-	for (i, cell) in memory.view()[ptr..(ptr + len)].iter().enumerate() {
-		error[i] = cell.get();
-	}
-	let msg = String::from_utf8(error).map_err(|_e| BusinessError::Deserialize)?;
+	let msg = memory_to_vec(memory, len, ptr);
+	let msg = String::from_utf8(msg).map_err(|_e| BusinessError::Deserialize)?;
 	let error = BusinessError::User { msg };
 	Err(error.into())
 }
@@ -151,11 +133,7 @@ fn tx_hash_read(ctx: &mut Ctx, ptr: u64) -> VMResult<()> {
 	let state = get_state(ctx);
 	let memory = &state.memory;
 	let tx_hash = &state.context.call_env().tx_hash.0[..];
-	let ptr = ptr as usize;
-	memory.view()[ptr..(ptr + tx_hash.len())]
-		.iter()
-		.zip(tx_hash.iter())
-		.for_each(|(cell, v)| cell.set(*v));
+	vec_to_memory(memory, ptr, tx_hash);
 	Ok(())
 }
 
@@ -169,24 +147,12 @@ fn storage_read(ctx: &mut Ctx, key_len: u64, key_ptr: u64, result_ptr: u64) -> V
 	let state = get_state(ctx);
 	let memory = &state.memory;
 
-	let key_ptr = key_ptr as usize;
-	let key_len = key_len as usize;
-	let mut key = vec![0u8; key_len];
-	for (i, cell) in memory.view()[key_ptr..(key_ptr + key_len)]
-		.iter()
-		.enumerate()
-	{
-		key[i] = cell.get();
-	}
+	let key = memory_to_vec(memory, key_len, key_ptr);
 
 	let value = state.context.storage_get(&key)?;
 	let value = value.ok_or(BusinessError::IllegalRead)?;
 
-	let result_ptr = result_ptr as usize;
-	memory.view()[result_ptr..(result_ptr + value.len())]
-		.iter()
-		.zip(value.iter())
-		.for_each(|(cell, v)| cell.set(*v));
+	vec_to_memory(memory, result_ptr, &value);
 	Ok(())
 }
 
@@ -194,15 +160,7 @@ fn storage_exist_len(ctx: &mut Ctx, key_len: u64, key_ptr: u64) -> VMResult<u64>
 	let state = get_state(ctx);
 	let memory = &state.memory;
 
-	let key_ptr = key_ptr as usize;
-	let key_len = key_len as usize;
-	let mut key = vec![0u8; key_len];
-	for (i, cell) in memory.view()[key_ptr..(key_ptr + key_len)]
-		.iter()
-		.enumerate()
-	{
-		key[i] = cell.get();
-	}
+	let key = memory_to_vec(memory, key_len, key_ptr);
 
 	let value = state.context.storage_get(&key)?;
 	let (exist, len) = match value {
@@ -227,27 +185,11 @@ fn storage_write(
 	let state = get_state(ctx);
 	let memory = &state.memory;
 
-	let key_ptr = key_ptr as usize;
-	let key_len = key_len as usize;
-	let mut key = vec![0u8; key_len];
-	for (i, cell) in memory.view()[key_ptr..(key_ptr + key_len)]
-		.iter()
-		.enumerate()
-	{
-		key[i] = cell.get();
-	}
+	let key = memory_to_vec(memory, key_len, key_ptr);
 
 	let value = match value_exist {
 		1 => {
-			let value_ptr = value_ptr as usize;
-			let value_len = value_len as usize;
-			let mut value = vec![0u8; value_len];
-			for (i, cell) in memory.view()[value_ptr..(value_ptr + value_len)]
-				.iter()
-				.enumerate()
-			{
-				value[i] = cell.get();
-			}
+			let value = memory_to_vec(memory, value_len, value_ptr);
 			Some(value)
 		}
 		_ => None,
@@ -261,12 +203,8 @@ fn storage_write(
 fn event_write(ctx: &mut Ctx, len: u64, ptr: u64) -> VMResult<()> {
 	let state = get_state(ctx);
 	let memory = &state.memory;
-	let ptr = ptr as usize;
-	let len = len as usize;
-	let mut event = vec![0u8; len];
-	for (i, cell) in memory.view()[ptr..(ptr + len)].iter().enumerate() {
-		event[i] = cell.get();
-	}
+
+	let event = memory_to_vec(memory, len, ptr);
 	state.context.emit_event(event)?;
 	Ok(())
 }
@@ -275,23 +213,11 @@ fn hash_read(ctx: &mut Ctx, data_len: u64, data_ptr: u64, result_ptr: u64) -> VM
 	let state = get_state(ctx);
 	let memory = &state.memory;
 
-	let data_ptr = data_ptr as usize;
-	let data_len = data_len as usize;
-	let mut data = vec![0u8; data_len];
-	for (i, cell) in memory.view()[data_ptr..(data_ptr + data_len)]
-		.iter()
-		.enumerate()
-	{
-		data[i] = cell.get();
-	}
+	let data = memory_to_vec(memory, data_len, data_ptr);
 
 	let result = state.context.hash(&data)?.0;
 
-	let result_ptr = result_ptr as usize;
-	memory.view()[result_ptr..(result_ptr + result.len())]
-		.iter()
-		.zip(result.iter())
-		.for_each(|(cell, v)| cell.set(*v));
+	vec_to_memory(memory, result_ptr, &result);
 	Ok(())
 }
 
@@ -299,6 +225,24 @@ fn hash_len(ctx: &mut Ctx) -> VMResult<u64> {
 	let state = get_state(ctx);
 	let len = state.context.hash_len()?;
 	Ok(len as u64)
+}
+
+fn memory_to_vec(memory: &Memory, len: u64, ptr: u64) -> Vec<u8> {
+	let ptr = ptr as usize;
+	let len = len as usize;
+	let mut data = vec![0u8; len];
+	for (i, cell) in memory.view()[ptr..(ptr + len)].iter().enumerate() {
+		data[i] = cell.get();
+	}
+	data
+}
+
+fn vec_to_memory(memory: &Memory, ptr: u64, data: &[u8]) {
+	let ptr = ptr as usize;
+	memory.view()[ptr..(ptr + data.len())]
+		.iter()
+		.zip(data.iter())
+		.for_each(|(cell, v)| cell.set(*v));
 }
 
 fn get_state(ctx: &mut Ctx) -> &mut State {
