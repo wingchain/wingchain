@@ -22,7 +22,7 @@ use wasmer_runtime_core::units::Pages;
 
 use primitives::codec::Encode;
 use primitives::errors::CommonResult;
-use primitives::{Address, BlockNumber, DBValue, Hash};
+use primitives::{Address, BlockNumber, DBValue, Hash, Balance};
 
 use crate::errors::{ErrorKind, VMError, VMResult};
 use crate::import::State;
@@ -107,6 +107,7 @@ pub trait VMContext {
 	fn hash_len(&self) -> VMResult<u32>;
 	fn address(&self, data: &[u8]) -> VMResult<Address>;
 	fn address_len(&self) -> VMResult<u32>;
+	fn get_balance(&self, address: &Address) -> VMResult<Balance>;
 }
 
 pub struct VMContextEnv {
