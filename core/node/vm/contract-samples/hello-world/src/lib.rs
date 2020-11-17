@@ -30,6 +30,8 @@ mod env {
 			value_ptr: u64,
 		);
 		pub fn event_write(len: u64, ptr: u64);
+		pub fn hash_read(data_len: u64, data_ptr: u64, result_ptr: u64);
+		pub fn hash_len() -> u64;
 	}
 }
 
@@ -89,6 +91,14 @@ pub fn event_write(len: u64, ptr: u64) {
 	unsafe { env::event_write(len, ptr) }
 }
 
+pub fn hash_read(data_len: u64, data_ptr: u64, result_ptr: u64) {
+	unsafe { env::hash_read(data_len, data_ptr, result_ptr) }
+}
+
+pub fn hash_len() -> u64 {
+	unsafe { env::hash_len() }
+}
+
 #[wasm_bindgen]
 pub fn execute_call() {
 	let len = method_len();
@@ -107,16 +117,17 @@ pub fn execute_call() {
 		"storage_get" => call_storage_get(),
 		"storage_set" => call_storage_set(),
 		"event" => call_event(),
+		"hash" => call_hash(),
 		_ => (),
 	}
 }
 
 fn call_hello() {
 	let len = input_len();
-	let buffer = vec![0u8; len as usize];
-	input_read(buffer.as_ptr() as _);
+	let input = vec![0u8; len as usize];
+	input_read(input.as_ptr() as _);
 
-	let input: String = serde_json::from_slice(&buffer).unwrap();
+	let input: String = serde_json::from_slice(&input).unwrap();
 	let output = format!("hello {}", input);
 	let output = serde_json::to_vec(&output).unwrap();
 
@@ -151,8 +162,10 @@ fn call_tx_hash() {
 
 fn call_storage_get() {
 	let len = input_len();
-	let key = vec![0u8; len as usize];
-	input_read(key.as_ptr() as _);
+	let input = vec![0u8; len as usize];
+	input_read(input.as_ptr() as _);
+
+	let key: Vec<u8> = serde_json::from_slice(&input).unwrap();
 
 	let exist_len = storage_exist_len(key.len() as _, key.as_ptr() as _);
 
@@ -214,4 +227,21 @@ fn call_event() {
 	let event = serde_json::to_vec(&event).unwrap();
 
 	event_write(event.len() as _, event.as_ptr() as _);
+}
+
+fn call_hash() {
+	let len = input_len();
+	let input = vec![0u8; len as usize];
+	input_read(input.as_ptr() as _);
+	let input: Vec<u8> = serde_json::from_slice(&input).unwrap();
+
+	let hash_len = hash_len();
+	let hash = vec![0u8; hash_len as usize];
+
+	hash_read(input.len() as _, input.as_ptr() as _, hash.as_ptr() as _);
+
+	let output = hash;
+	let output = serde_json::to_vec(&output).unwrap();
+
+	output_write(output.len() as _, output.as_ptr() as _);
 }

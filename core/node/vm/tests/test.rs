@@ -85,6 +85,7 @@ fn test_vm_tx_hash() {
 fn test_vm_storage_get() {
 	let context = Rc::new(get_context());
 	let input = vec![1u8];
+	let input = serde_json::to_vec(&input).unwrap();
 	let result = vm_execute(context.clone(), "storage_get", input).unwrap();
 
 	let result: Option<Vec<u8>> = serde_json::from_slice(&result).unwrap();
@@ -92,6 +93,7 @@ fn test_vm_storage_get() {
 	assert_eq!(result, Some(vec![2]));
 
 	let input = vec![2u8];
+	let input = serde_json::to_vec(&input).unwrap();
 	let result = vm_execute(context, "storage_get", input).unwrap();
 
 	let result: Option<Vec<u8>> = serde_json::from_slice(&result).unwrap();
@@ -136,6 +138,38 @@ fn test_vm_event() {
 	let event = String::from_utf8(event).unwrap();
 
 	assert_eq!(event, "{\"name\":\"MyEvent\"}");
+}
+
+#[test]
+fn test_vm_hash() {
+	let context = Rc::new(get_context());
+	let input = vec![1u8];
+	let input = serde_json::to_vec(&input).unwrap();
+	let result = vm_execute(context.clone(), "hash", input).unwrap();
+
+	let result: Vec<u8> = serde_json::from_slice(&result).unwrap();
+
+	assert_eq!(
+		result,
+		vec![
+			238u8, 21, 90, 206, 156, 64, 41, 32, 116, 203, 106, 255, 140, 156, 205, 210, 115, 200,
+			22, 72, 255, 17, 73, 239, 54, 188, 234, 110, 187, 138, 62, 37
+		]
+	);
+
+	let input = vec![2u8];
+	let input = serde_json::to_vec(&input).unwrap();
+	let result = vm_execute(context, "hash", input).unwrap();
+
+	let result: Vec<u8> = serde_json::from_slice(&result).unwrap();
+
+	assert_eq!(
+		result,
+		vec![
+			187u8, 48, 164, 44, 30, 98, 240, 175, 218, 95, 10, 78, 138, 86, 47, 122, 19, 162, 76,
+			234, 0, 238, 129, 145, 123, 134, 184, 158, 128, 19, 20, 170
+		]
+	);
 }
 
 fn get_context() -> TestVMContext {
@@ -218,9 +252,17 @@ impl VMContext for TestVMContext {
 		self.hash.hash(&mut out, data);
 		Ok(Hash(out))
 	}
+	fn hash_len(&self) -> VMResult<u32> {
+		let len: usize = self.hash.length().into();
+		Ok(len as u32)
+	}
 	fn address(&self, data: &[u8]) -> VMResult<Address> {
 		let mut out = vec![0u8; self.address.length().into()];
 		self.address.address(&mut out, data);
 		Ok(Address(out))
+	}
+	fn address_len(&self) -> VMResult<u32> {
+		let len: usize = self.address.length().into();
+		Ok(len as u32)
 	}
 }

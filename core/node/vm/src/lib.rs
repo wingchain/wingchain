@@ -104,7 +104,9 @@ pub trait VMContext {
 	fn storage_set(&self, key: &[u8], value: Option<DBValue>) -> VMResult<()>;
 	fn emit_event(&self, event: Vec<u8>) -> VMResult<()>;
 	fn hash(&self, data: &[u8]) -> VMResult<Hash>;
+	fn hash_len(&self) -> VMResult<u32>;
 	fn address(&self, data: &[u8]) -> VMResult<Address>;
+	fn address_len(&self) -> VMResult<u32>;
 }
 
 pub struct VMContextEnv {

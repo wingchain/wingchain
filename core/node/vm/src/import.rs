@@ -60,6 +60,8 @@ pub fn import(state: &mut State, memory: Memory) -> VMResult<ImportObject> {
 			"storage_exist_len" => func!(storage_exist_len),
 			"storage_write" => func!(storage_write),
 			"event_write" => func!(event_write),
+			"hash_read" => func!(hash_read),
+			"hash_len" => func!(hash_len),
 		}
 	};
 	Ok(import_object)
@@ -267,6 +269,36 @@ fn event_write(ctx: &mut Ctx, len: u64, ptr: u64) -> VMResult<()> {
 	}
 	state.context.emit_event(event)?;
 	Ok(())
+}
+
+fn hash_read(ctx: &mut Ctx, data_len: u64, data_ptr: u64, result_ptr: u64) -> VMResult<()> {
+	let state = get_state(ctx);
+	let memory = &state.memory;
+
+	let data_ptr = data_ptr as usize;
+	let data_len = data_len as usize;
+	let mut data = vec![0u8; data_len];
+	for (i, cell) in memory.view()[data_ptr..(data_ptr + data_len)]
+		.iter()
+		.enumerate()
+	{
+		data[i] = cell.get();
+	}
+
+	let result = state.context.hash(&data)?.0;
+
+	let result_ptr = result_ptr as usize;
+	memory.view()[result_ptr..(result_ptr + result.len())]
+		.iter()
+		.zip(result.iter())
+		.for_each(|(cell, v)| cell.set(*v));
+	Ok(())
+}
+
+fn hash_len(ctx: &mut Ctx) -> VMResult<u64> {
+	let state = get_state(ctx);
+	let len = state.context.hash_len()?;
+	Ok(len as u64)
 }
 
 fn get_state(ctx: &mut Ctx) -> &mut State {
