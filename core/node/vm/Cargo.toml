@@ -23,6 +23,6 @@ primitives = { path = "../../primitives" }
 [dev-dependencies]
 serde = { version = "1.0", features = ["derive"] }
 
-
+utils-test = { path = "../../../utils/test" }
 crypto = { path = "../../crypto" }
 

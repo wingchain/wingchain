@@ -56,6 +56,10 @@ pub fn import(state: &mut State, memory: Memory) -> VMResult<ImportObject> {
 			"block_timestamp" => func!(block_timestamp),
 			"tx_hash_read" => func!(tx_hash_read),
 			"tx_hash_len" => func!(tx_hash_len),
+			"contract_address_read" => func!(contract_address_read),
+			"contract_address_len" => func!(contract_address_len),
+			"sender_address_read" => func!(sender_address_read),
+			"sender_address_len" => func!(sender_address_len),
 			"storage_read" => func!(storage_read),
 			"storage_exist_len" => func!(storage_exist_len),
 			"storage_write" => func!(storage_write),
@@ -142,6 +146,34 @@ fn tx_hash_read(ctx: &mut Ctx, ptr: u64) -> VMResult<()> {
 fn tx_hash_len(ctx: &mut Ctx) -> VMResult<u64> {
 	let state = get_state(ctx);
 	let len = state.context.call_env().tx_hash.0.len() as u64;
+	Ok(len)
+}
+
+fn contract_address_read(ctx: &mut Ctx, ptr: u64) -> VMResult<()> {
+	let state = get_state(ctx);
+	let memory = &state.memory;
+	let contract_address = &state.context.call_env().contract_address.0[..];
+	vec_to_memory(memory, ptr, contract_address);
+	Ok(())
+}
+
+fn contract_address_len(ctx: &mut Ctx) -> VMResult<u64> {
+	let state = get_state(ctx);
+	let len = state.context.call_env().contract_address.0.len() as u64;
+	Ok(len)
+}
+
+fn sender_address_read(ctx: &mut Ctx, ptr: u64) -> VMResult<()> {
+	let state = get_state(ctx);
+	let memory = &state.memory;
+	let sender_address = &state.context.call_env().sender_address.0[..];
+	vec_to_memory(memory, ptr, sender_address);
+	Ok(())
+}
+
+fn sender_address_len(ctx: &mut Ctx) -> VMResult<u64> {
+	let state = get_state(ctx);
+	let len = state.context.call_env().sender_address.0.len() as u64;
 	Ok(len)
 }
 

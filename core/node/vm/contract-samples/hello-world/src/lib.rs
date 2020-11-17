@@ -20,6 +20,10 @@ mod env {
 		pub fn block_timestamp() -> u64;
 		pub fn tx_hash_read(ptr: u64);
 		pub fn tx_hash_len() -> u64;
+		pub fn contract_address_read(ptr: u64);
+		pub fn contract_address_len() -> u64;
+		pub fn sender_address_read(ptr: u64);
+		pub fn sender_address_len() -> u64;
 		pub fn storage_read(key_len: u64, key_ptr: u64, result_ptr: u64);
 		pub fn storage_exist_len(key_len: u64, key_ptr: u64) -> u64;
 		pub fn storage_write(
@@ -77,6 +81,22 @@ pub fn tx_hash_len() -> u64 {
 	unsafe { env::tx_hash_len() }
 }
 
+pub fn contract_address_read(ptr: u64) {
+	unsafe { env::contract_address_read(ptr) }
+}
+
+pub fn contract_address_len() -> u64 {
+	unsafe { env::contract_address_len() }
+}
+
+pub fn sender_address_read(ptr: u64) {
+	unsafe { env::sender_address_read(ptr) }
+}
+
+pub fn sender_address_len() -> u64 {
+	unsafe { env::sender_address_len() }
+}
+
 pub fn storage_read(key_len: u64, key_ptr: u64, result_ptr: u64) {
 	unsafe { env::storage_read(key_len, key_ptr, result_ptr) }
 }
@@ -124,6 +144,8 @@ pub fn execute_call() {
 		"block_number" => call_block_number(),
 		"block_timestamp" => call_block_timestamp(),
 		"tx_hash" => call_tx_hash(),
+		"contract_address" => call_contract_address(),
+		"sender_address" => call_sender_address(),
 		"storage_get" => call_storage_get(),
 		"storage_set" => call_storage_set(),
 		"event" => call_event(),
@@ -168,6 +190,24 @@ fn call_tx_hash() {
 	tx_hash_read(tx_hash.as_ptr() as _);
 
 	let output = serde_json::to_vec(&tx_hash).unwrap();
+	output_write(output.len() as _, output.as_ptr() as _);
+}
+
+fn call_contract_address() {
+	let len = contract_address_len();
+	let contract_address = vec![0u8; len as usize];
+	contract_address_read(contract_address.as_ptr() as _);
+
+	let output = serde_json::to_vec(&contract_address).unwrap();
+	output_write(output.len() as _, output.as_ptr() as _);
+}
+
+fn call_sender_address() {
+	let len = sender_address_len();
+	let sender_address = vec![0u8; len as usize];
+	sender_address_read(sender_address.as_ptr() as _);
+
+	let output = serde_json::to_vec(&sender_address).unwrap();
 	output_write(output.len() as _, output.as_ptr() as _);
 }
 

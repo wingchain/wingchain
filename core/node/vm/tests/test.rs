@@ -20,10 +20,12 @@ use std::sync::Arc;
 use serde::Serialize;
 
 use crypto::address::{Address as AddressT, AddressImpl};
+use crypto::dsa::DsaImpl;
 use crypto::hash::{Hash as HashT, HashImpl};
 use node_vm::errors::{BusinessError, VMError, VMResult};
 use node_vm::{VMCallEnv, VMConfig, VMContext, VMContextEnv, VM};
 use primitives::{Address, BlockNumber, DBValue, Hash};
+use utils_test::test_accounts;
 
 #[test]
 fn test_vm_hello() {
@@ -78,7 +80,46 @@ fn test_vm_tx_hash() {
 
 	let result: Vec<u8> = serde_json::from_slice(&result).unwrap();
 
-	assert_eq!(result, vec![1, 2, 3, 4, 5, 6, 7, 8]);
+	let hash = Arc::new(HashImpl::Blake2b256);
+	let expected_tx_hash = {
+		let mut out = vec![0u8; hash.length().into()];
+		hash.hash(&mut out, &vec![1]);
+		Hash(out)
+	};
+
+	assert_eq!(result, expected_tx_hash.0);
+}
+
+#[test]
+fn test_vm_contract_address() {
+	let context = Rc::new(get_context());
+	let result = vm_execute(context, "contract_address", vec![]).unwrap();
+
+	let result: Vec<u8> = serde_json::from_slice(&result).unwrap();
+
+	let address = Arc::new(AddressImpl::Blake2b160);
+	let expected_address = {
+		let mut out = vec![0u8; address.length().into()];
+		address.address(&mut out, &vec![1]);
+		Address(out)
+	};
+
+	assert_eq!(result, expected_address.0);
+}
+
+#[test]
+fn test_vm_sender_address() {
+	let context = Rc::new(get_context());
+	let result = vm_execute(context, "sender_address", vec![]).unwrap();
+
+	let result: Vec<u8> = serde_json::from_slice(&result).unwrap();
+
+	let dsa = Arc::new(DsaImpl::Ed25519);
+	let address = Arc::new(AddressImpl::Blake2b160);
+	let (account1, _account2) = test_accounts(dsa, address);
+	let expected_address = account1.3;
+
+	assert_eq!(result, expected_address.0);
 }
 
 #[test]
@@ -207,13 +248,28 @@ fn test_vm_address() {
 fn get_context() -> TestVMContext {
 	let hash = Arc::new(HashImpl::Blake2b256);
 	let address = Arc::new(AddressImpl::Blake2b160);
+	let dsa = Arc::new(DsaImpl::Ed25519);
 	let payload = vec![(vec![1u8], vec![2u8])]
 		.into_iter()
 		.collect::<HashMap<_, _>>();
+	let tx_hash = {
+		let mut out = vec![0u8; hash.length().into()];
+		hash.hash(&mut out, &vec![1]);
+		Hash(out)
+	};
+	let contract_address = {
+		let mut out = vec![0u8; address.length().into()];
+		address.address(&mut out, &vec![1]);
+		Address(out)
+	};
+	let (account1, _account2) = test_accounts(dsa, address.clone());
+	let sender_address = account1.3;
 	TestVMContext {
 		block_number: 10,
 		block_timestamp: 12345,
-		tx_hash: Hash(vec![1, 2, 3, 4, 5, 6, 7, 8]),
+		tx_hash,
+		contract_address,
+		sender_address,
 		payload: RefCell::new(payload),
 		events: RefCell::new(Vec::new()),
 		hash: hash.clone(),
@@ -247,6 +303,8 @@ struct TestVMContext {
 	block_number: BlockNumber,
 	block_timestamp: u64,
 	tx_hash: Hash,
+	contract_address: Address,
+	sender_address: Address,
 	payload: RefCell<HashMap<Vec<u8>, DBValue>>,
 	events: RefCell<Vec<Vec<u8>>>,
 	hash: Arc<HashImpl>,
@@ -263,6 +321,8 @@ impl VMContext for TestVMContext {
 	fn call_env(&self) -> Rc<VMCallEnv> {
 		Rc::new(VMCallEnv {
 			tx_hash: self.tx_hash.clone(),
+			contract_address: self.contract_address.clone(),
+			sender_address: self.sender_address.clone(),
 		})
 	}
 	fn storage_get(&self, key: &[u8]) -> VMResult<Option<DBValue>> {

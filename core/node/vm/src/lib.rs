@@ -116,4 +116,6 @@ pub struct VMContextEnv {
 
 pub struct VMCallEnv {
 	pub tx_hash: Hash,
+	pub contract_address: Address,
+	pub sender_address: Address,
 }
