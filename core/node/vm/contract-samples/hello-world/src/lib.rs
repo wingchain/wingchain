@@ -1,5 +1,5 @@
 use byteorder::ByteOrder;
-use serde::Serialize;
+use serde::Deserialize;
 use wasm_bindgen::prelude::*;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
@@ -22,6 +22,13 @@ mod env {
 		pub fn tx_hash_len() -> u64;
 		pub fn storage_read(key_len: u64, key_ptr: u64, result_ptr: u64);
 		pub fn storage_exist_len(key_len: u64, key_ptr: u64) -> u64;
+		pub fn storage_write(
+			key_len: u64,
+			key_ptr: u64,
+			value_exist: u64,
+			value_len: u64,
+			value_ptr: u64,
+		);
 	}
 }
 
@@ -73,6 +80,10 @@ pub fn storage_exist_len(key_len: u64, key_ptr: u64) -> u64 {
 	unsafe { env::storage_exist_len(key_len, key_ptr) }
 }
 
+pub fn storage_write(key_len: u64, key_ptr: u64, value_exist: u64, value_len: u64, value_ptr: u64) {
+	unsafe { env::storage_write(key_len, key_ptr, value_exist, value_len, value_ptr) }
+}
+
 #[wasm_bindgen]
 pub fn execute_call() {
 	let len = method_len();
@@ -89,6 +100,7 @@ pub fn execute_call() {
 		"block_timestamp" => call_block_timestamp(),
 		"tx_hash" => call_tx_hash(),
 		"storage_get" => call_storage_get(),
+		"storage_set" => call_storage_set(),
 		_ => (),
 	}
 }
@@ -153,13 +165,34 @@ fn call_storage_get() {
 		_ => None,
 	};
 
-	#[derive(Serialize)]
-	struct Value {
-		value: Option<Vec<u8>>,
-	}
-
-	let value = Value { value };
-
 	let output = serde_json::to_vec(&value).unwrap();
 	output_write(output.len() as _, output.as_ptr() as _);
+}
+
+fn call_storage_set() {
+	let len = input_len();
+	let input = vec![0u8; len as usize];
+	input_read(input.as_ptr() as _);
+
+	#[derive(Deserialize)]
+	struct Input {
+		key: Vec<u8>,
+		value: Option<Vec<u8>>,
+	}
+	let input: Input = serde_json::from_slice(&input).unwrap();
+
+	match input.value {
+		Some(value) => {
+			storage_write(
+				input.key.len() as _,
+				input.key.as_ptr() as _,
+				1,
+				value.len() as _,
+				value.as_ptr() as _,
+			);
+		}
+		None => {
+			storage_write(input.key.len() as _, input.key.as_ptr() as _, 0, 0, 0);
+		}
+	}
 }

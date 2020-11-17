@@ -58,6 +58,7 @@ pub fn import(state: &mut State, memory: Memory) -> VMResult<ImportObject> {
 			"tx_hash_len" => func!(tx_hash_len),
 			"storage_read" => func!(storage_read),
 			"storage_exist_len" => func!(storage_exist_len),
+			"storage_write" => func!(storage_write),
 		}
 	};
 	Ok(import_object)
@@ -175,7 +176,7 @@ fn storage_read(ctx: &mut Ctx, key_len: u64, key_ptr: u64, result_ptr: u64) -> V
 		key[i] = cell.get();
 	}
 
-	let value = state.context.payload_get(&key)?;
+	let value = state.context.storage_get(&key)?;
 	let value = value.ok_or(BusinessError::IllegalRead)?;
 
 	let result_ptr = result_ptr as usize;
@@ -200,7 +201,7 @@ fn storage_exist_len(ctx: &mut Ctx, key_len: u64, key_ptr: u64) -> VMResult<u64>
 		key[i] = cell.get();
 	}
 
-	let value = state.context.payload_get(&key)?;
+	let value = state.context.storage_get(&key)?;
 	let (exist, len) = match value {
 		Some(value) => (1u32, value.len() as u32),
 		None => (0, 0),
@@ -212,7 +213,49 @@ fn storage_exist_len(ctx: &mut Ctx, key_len: u64, key_ptr: u64) -> VMResult<u64>
 	Ok(exist_len)
 }
 
-fn get_state<'a>(ctx: &'a mut Ctx) -> &'a mut State {
+fn storage_write(
+	ctx: &mut Ctx,
+	key_len: u64,
+	key_ptr: u64,
+	value_exist: u64,
+	value_len: u64,
+	value_ptr: u64,
+) -> VMResult<()> {
+	let state = get_state(ctx);
+	let memory = &state.memory;
+
+	let key_ptr = key_ptr as usize;
+	let key_len = key_len as usize;
+	let mut key = vec![0u8; key_len];
+	for (i, cell) in memory.view()[key_ptr..(key_ptr + key_len)]
+		.iter()
+		.enumerate()
+	{
+		key[i] = cell.get();
+	}
+
+	let value = match value_exist {
+		1 => {
+			let value_ptr = value_ptr as usize;
+			let value_len = value_len as usize;
+			let mut value = vec![0u8; value_len];
+			for (i, cell) in memory.view()[value_ptr..(value_ptr + value_len)]
+				.iter()
+				.enumerate()
+			{
+				value[i] = cell.get();
+			}
+			Some(value)
+		}
+		_ => None,
+	};
+
+	state.context.storage_set(&key, value)?;
+
+	Ok(())
+}
+
+fn get_state(ctx: &mut Ctx) -> &mut State {
 	let state = unsafe { &mut *(ctx.data as *mut State) };
 	state
 }

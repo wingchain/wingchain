@@ -17,7 +17,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use serde::Deserialize;
+use serde::Serialize;
 
 use crypto::address::{Address as AddressT, AddressImpl};
 use crypto::hash::{Hash as HashT, HashImpl};
@@ -27,8 +27,9 @@ use primitives::{Address, BlockNumber, DBValue, Hash};
 
 #[test]
 fn test_vm_hello() {
+	let context = Rc::new(get_context());
 	let input = serde_json::to_vec(&"world".to_string()).unwrap();
-	let result = test_vm_execute("hello", input).unwrap();
+	let result = vm_execute(context, "hello", input).unwrap();
 
 	let result: String = serde_json::from_slice(&result).unwrap();
 
@@ -37,7 +38,8 @@ fn test_vm_hello() {
 
 #[test]
 fn test_vm_error() {
-	let result = test_vm_execute("error", vec![]);
+	let context = Rc::new(get_context());
+	let result = vm_execute(context, "error", vec![]);
 
 	let error = result.unwrap_err();
 
@@ -51,7 +53,8 @@ fn test_vm_error() {
 
 #[test]
 fn test_vm_block_number() {
-	let result = test_vm_execute("block_number", vec![]).unwrap();
+	let context = Rc::new(get_context());
+	let result = vm_execute(context, "block_number", vec![]).unwrap();
 
 	let result: u64 = serde_json::from_slice(&result).unwrap();
 
@@ -60,7 +63,8 @@ fn test_vm_block_number() {
 
 #[test]
 fn test_vm_block_timestamp() {
-	let result = test_vm_execute("block_timestamp", vec![]).unwrap();
+	let context = Rc::new(get_context());
+	let result = vm_execute(context, "block_timestamp", vec![]).unwrap();
 
 	let result: u64 = serde_json::from_slice(&result).unwrap();
 
@@ -69,7 +73,8 @@ fn test_vm_block_timestamp() {
 
 #[test]
 fn test_vm_tx_hash() {
-	let result = test_vm_execute("tx_hash", vec![]).unwrap();
+	let context = Rc::new(get_context());
+	let result = vm_execute(context, "tx_hash", vec![]).unwrap();
 
 	let result: Vec<u8> = serde_json::from_slice(&result).unwrap();
 
@@ -78,42 +83,57 @@ fn test_vm_tx_hash() {
 
 #[test]
 fn test_vm_storage_get() {
-	#[derive(Deserialize, Debug, PartialEq)]
-	struct Value {
+	let context = Rc::new(get_context());
+	let input = vec![1u8];
+	let result = vm_execute(context.clone(), "storage_get", input).unwrap();
+
+	let result: Option<Vec<u8>> = serde_json::from_slice(&result).unwrap();
+
+	assert_eq!(result, Some(vec![2]));
+
+	let input = vec![2u8];
+	let result = vm_execute(context, "storage_get", input).unwrap();
+
+	let result: Option<Vec<u8>> = serde_json::from_slice(&result).unwrap();
+
+	assert_eq!(result, None);
+}
+
+#[test]
+fn test_vm_storage_set() {
+	#[derive(Serialize)]
+	struct Input {
+		key: Vec<u8>,
 		value: Option<Vec<u8>>,
 	}
 
-	let input = vec![1u8];
-	let result = test_vm_execute("storage_get", input).unwrap();
+	let context = Rc::new(get_context());
+	let input = Input {
+		key: vec![1u8],
+		value: Some(vec![3u8]),
+	};
+	let input = serde_json::to_vec(&input).unwrap();
+	let _result = vm_execute(context.clone(), "storage_set", input).unwrap();
 
-	let result: Value = serde_json::from_slice(&result).unwrap();
+	assert_eq!(context.payload.borrow().get(&vec![1u8]), Some(&vec![3]));
 
-	assert_eq!(
-		result,
-		Value {
-			value: Some(vec![2])
-		}
-	);
+	let input = Input {
+		key: vec![1u8],
+		value: None,
+	};
+	let input = serde_json::to_vec(&input).unwrap();
+	let _result = vm_execute(context.clone(), "storage_set", input).unwrap();
 
-	let input = vec![2u8];
-	let result = test_vm_execute("storage_get", input).unwrap();
-
-	let result: Value = serde_json::from_slice(&result).unwrap();
-
-	assert_eq!(result, Value { value: None });
+	assert_eq!(context.payload.borrow().get(&vec![1u8]), None);
 }
 
-fn test_vm_execute(method: &str, input: Vec<u8>) -> VMResult<Vec<u8>> {
+fn get_context() -> TestVMContext {
 	let hash = Arc::new(HashImpl::Blake2b256);
 	let address = Arc::new(AddressImpl::Blake2b160);
-
-	let config = VMConfig::default();
-
 	let payload = vec![(vec![1u8], vec![2u8])]
 		.into_iter()
 		.collect::<HashMap<_, _>>();
-
-	let context = TestVMContext {
+	TestVMContext {
 		block_number: 10,
 		block_timestamp: 12345,
 		tx_hash: Hash(vec![1, 2, 3, 4, 5, 6, 7, 8]),
@@ -121,9 +141,15 @@ fn test_vm_execute(method: &str, input: Vec<u8>) -> VMResult<Vec<u8>> {
 		events: RefCell::new(Vec::new()),
 		hash: hash.clone(),
 		address: address.clone(),
-	};
+	}
+}
 
-	let vm = VM::new(config, Rc::new(context)).unwrap();
+fn vm_execute(context: Rc<dyn VMContext>, method: &str, input: Vec<u8>) -> VMResult<Vec<u8>> {
+	let hash = Arc::new(HashImpl::Blake2b256);
+
+	let config = VMConfig::default();
+
+	let vm = VM::new(config, context).unwrap();
 
 	let code =
 		include_bytes!("../contract-samples/hello-world/pkg/contract_samples_hello_world_bg.wasm")
@@ -162,10 +188,10 @@ impl VMContext for TestVMContext {
 			tx_hash: self.tx_hash.clone(),
 		})
 	}
-	fn payload_get(&self, key: &[u8]) -> VMResult<Option<DBValue>> {
+	fn storage_get(&self, key: &[u8]) -> VMResult<Option<DBValue>> {
 		Ok(self.payload.borrow().get(key).cloned())
 	}
-	fn payload_set(&self, key: &[u8], value: Option<DBValue>) -> VMResult<()> {
+	fn storage_set(&self, key: &[u8], value: Option<DBValue>) -> VMResult<()> {
 		match value {
 			Some(value) => self.payload.borrow_mut().insert(key.to_vec(), value),
 			None => self.payload.borrow_mut().remove(key),

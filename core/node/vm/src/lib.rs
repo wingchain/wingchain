@@ -100,8 +100,8 @@ impl VM {
 pub trait VMContext {
 	fn env(&self) -> Rc<VMContextEnv>;
 	fn call_env(&self) -> Rc<VMCallEnv>;
-	fn payload_get(&self, key: &[u8]) -> VMResult<Option<DBValue>>;
-	fn payload_set(&self, key: &[u8], value: Option<DBValue>) -> VMResult<()>;
+	fn storage_get(&self, key: &[u8]) -> VMResult<Option<DBValue>>;
+	fn storage_set(&self, key: &[u8], value: Option<DBValue>) -> VMResult<()>;
 	fn emit_event(&self, event: Vec<u8>) -> VMResult<()>;
 	fn hash(&self, data: &[u8]) -> VMResult<Hash>;
 	fn address(&self, data: &[u8]) -> VMResult<Address>;
