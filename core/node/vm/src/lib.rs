@@ -22,7 +22,7 @@ use wasmer_runtime_core::units::Pages;
 
 use primitives::codec::Encode;
 use primitives::errors::CommonResult;
-use primitives::{Address, BlockNumber, DBValue, Hash, Balance};
+use primitives::{Address, Balance, BlockNumber, DBValue, Hash};
 
 use crate::errors::{ErrorKind, VMError, VMResult};
 use crate::import::State;

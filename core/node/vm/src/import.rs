@@ -23,6 +23,7 @@ use wasmer_runtime_core::vm::Ctx;
 
 use crate::errors::{ApplicationError, BusinessError, VMError, VMResult};
 use crate::VMContext;
+use primitives::Address;
 
 pub struct State {
 	pub memory: Memory,
@@ -64,10 +65,11 @@ pub fn import(state: &mut State, memory: Memory) -> VMResult<ImportObject> {
 			"storage_exist_len" => func!(storage_exist_len),
 			"storage_write" => func!(storage_write),
 			"event_write" => func!(event_write),
-			"hash_read" => func!(hash_read),
-			"hash_len" => func!(hash_len),
-			"address_read" => func!(address_read),
-			"address_len" => func!(address_len),
+			"compute_hash" => func!(compute_hash),
+			"compute_hash_len" => func!(compute_hash_len),
+			"compute_address" => func!(compute_address),
+			"compute_address_len" => func!(compute_address_len),
+			"balance_read" => func!(balance_read),
 		}
 	};
 	Ok(import_object)
@@ -243,7 +245,7 @@ fn event_write(ctx: &mut Ctx, len: u64, ptr: u64) -> VMResult<()> {
 	Ok(())
 }
 
-fn hash_read(ctx: &mut Ctx, data_len: u64, data_ptr: u64, result_ptr: u64) -> VMResult<()> {
+fn compute_hash(ctx: &mut Ctx, data_len: u64, data_ptr: u64, result_ptr: u64) -> VMResult<()> {
 	let state = get_state(ctx);
 	let memory = &state.memory;
 
@@ -255,13 +257,13 @@ fn hash_read(ctx: &mut Ctx, data_len: u64, data_ptr: u64, result_ptr: u64) -> VM
 	Ok(())
 }
 
-fn hash_len(ctx: &mut Ctx) -> VMResult<u64> {
+fn compute_hash_len(ctx: &mut Ctx) -> VMResult<u64> {
 	let state = get_state(ctx);
 	let len = state.context.hash_len()?;
 	Ok(len as u64)
 }
 
-fn address_read(ctx: &mut Ctx, data_len: u64, data_ptr: u64, result_ptr: u64) -> VMResult<()> {
+fn compute_address(ctx: &mut Ctx, data_len: u64, data_ptr: u64, result_ptr: u64) -> VMResult<()> {
 	let state = get_state(ctx);
 	let memory = &state.memory;
 
@@ -273,10 +275,22 @@ fn address_read(ctx: &mut Ctx, data_len: u64, data_ptr: u64, result_ptr: u64) ->
 	Ok(())
 }
 
-fn address_len(ctx: &mut Ctx) -> VMResult<u64> {
+fn compute_address_len(ctx: &mut Ctx) -> VMResult<u64> {
 	let state = get_state(ctx);
 	let len = state.context.address_len()?;
 	Ok(len as u64)
+}
+
+fn balance_read(ctx: &mut Ctx, address_len: u64, address_ptr: u64) -> VMResult<u64> {
+	let state = get_state(ctx);
+	let memory = &state.memory;
+
+	let address = memory_to_vec(memory, address_len, address_ptr);
+	let address = Address(address);
+
+	let balance = state.context.get_balance(&address)?;
+
+	Ok(balance)
 }
 
 fn memory_to_vec(memory: &Memory, len: u64, ptr: u64) -> Vec<u8> {
