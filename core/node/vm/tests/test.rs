@@ -172,6 +172,38 @@ fn test_vm_hash() {
 	);
 }
 
+#[test]
+fn test_vm_address() {
+	let context = Rc::new(get_context());
+	let input = vec![1u8];
+	let input = serde_json::to_vec(&input).unwrap();
+	let result = vm_execute(context.clone(), "address", input).unwrap();
+
+	let result: Vec<u8> = serde_json::from_slice(&result).unwrap();
+
+	assert_eq!(
+		result,
+		vec![
+			202, 93, 63, 160, 166, 136, 114, 133, 239, 106, 168, 92, 177, 41, 96, 162, 182, 112,
+			110, 0
+		]
+	);
+
+	let input = vec![2u8];
+	let input = serde_json::to_vec(&input).unwrap();
+	let result = vm_execute(context, "address", input).unwrap();
+
+	let result: Vec<u8> = serde_json::from_slice(&result).unwrap();
+
+	assert_eq!(
+		result,
+		vec![
+			85, 237, 90, 196, 157, 121, 112, 231, 82, 44, 235, 194, 40, 99, 215, 178, 45, 122, 241,
+			128
+		]
+	);
+}
+
 fn get_context() -> TestVMContext {
 	let hash = Arc::new(HashImpl::Blake2b256);
 	let address = Arc::new(AddressImpl::Blake2b160);

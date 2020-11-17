@@ -62,6 +62,8 @@ pub fn import(state: &mut State, memory: Memory) -> VMResult<ImportObject> {
 			"event_write" => func!(event_write),
 			"hash_read" => func!(hash_read),
 			"hash_len" => func!(hash_len),
+			"address_read" => func!(address_read),
+			"address_len" => func!(address_len),
 		}
 	};
 	Ok(import_object)
@@ -224,6 +226,24 @@ fn hash_read(ctx: &mut Ctx, data_len: u64, data_ptr: u64, result_ptr: u64) -> VM
 fn hash_len(ctx: &mut Ctx) -> VMResult<u64> {
 	let state = get_state(ctx);
 	let len = state.context.hash_len()?;
+	Ok(len as u64)
+}
+
+fn address_read(ctx: &mut Ctx, data_len: u64, data_ptr: u64, result_ptr: u64) -> VMResult<()> {
+	let state = get_state(ctx);
+	let memory = &state.memory;
+
+	let data = memory_to_vec(memory, data_len, data_ptr);
+
+	let result = state.context.address(&data)?.0;
+
+	vec_to_memory(memory, result_ptr, &result);
+	Ok(())
+}
+
+fn address_len(ctx: &mut Ctx) -> VMResult<u64> {
+	let state = get_state(ctx);
+	let len = state.context.address_len()?;
 	Ok(len as u64)
 }
 

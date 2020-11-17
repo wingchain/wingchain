@@ -32,6 +32,8 @@ mod env {
 		pub fn event_write(len: u64, ptr: u64);
 		pub fn hash_read(data_len: u64, data_ptr: u64, result_ptr: u64);
 		pub fn hash_len() -> u64;
+		pub fn address_read(data_len: u64, data_ptr: u64, result_ptr: u64);
+		pub fn address_len() -> u64;
 	}
 }
 
@@ -99,6 +101,14 @@ pub fn hash_len() -> u64 {
 	unsafe { env::hash_len() }
 }
 
+pub fn address_read(data_len: u64, data_ptr: u64, result_ptr: u64) {
+	unsafe { env::address_read(data_len, data_ptr, result_ptr) }
+}
+
+pub fn address_len() -> u64 {
+	unsafe { env::address_len() }
+}
+
 #[wasm_bindgen]
 pub fn execute_call() {
 	let len = method_len();
@@ -118,6 +128,7 @@ pub fn execute_call() {
 		"storage_set" => call_storage_set(),
 		"event" => call_event(),
 		"hash" => call_hash(),
+		"address" => call_address(),
 		_ => (),
 	}
 }
@@ -241,6 +252,22 @@ fn call_hash() {
 	hash_read(input.len() as _, input.as_ptr() as _, hash.as_ptr() as _);
 
 	let output = hash;
+	let output = serde_json::to_vec(&output).unwrap();
+
+	output_write(output.len() as _, output.as_ptr() as _);
+}
+
+fn call_address() {
+	let len = input_len();
+	let input = vec![0u8; len as usize];
+	input_read(input.as_ptr() as _);
+	let input: Vec<u8> = serde_json::from_slice(&input).unwrap();
+
+	let address_len = address_len();
+	let address = vec![0u8; address_len as usize];
+
+	address_read(input.len() as _, input.as_ptr() as _, address.as_ptr() as _);
+	let output = address;
 	let output = serde_json::to_vec(&output).unwrap();
 
 	output_write(output.len() as _, output.as_ptr() as _);
