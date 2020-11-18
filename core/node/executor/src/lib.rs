@@ -159,17 +159,13 @@ impl<'a> ContextT for Context<'a> {
 		tx_buffer.insert(DBKey::from_slice(key), value);
 		Ok(())
 	}
-	fn meta_commit(&self) -> CommonResult<()> {
-		let mut tx_buffer = self.inner.meta_state.tx_buffer.borrow_mut();
-		let mut buffer = self.inner.meta_state.buffer.borrow_mut();
-		for (k, v) in tx_buffer.drain() {
-			buffer.insert(k, v);
-		}
-		Ok(())
+	fn meter_drain_tx_buffer(&self) -> CommonResult<Vec<(DBKey, Option<DBValue>)>>{
+		let tx_buffer = self.inner.meta_state.tx_buffer.borrow_mut().drain().collect();
+		Ok(tx_buffer)
 	}
-	fn meta_rollback(&self) -> CommonResult<()> {
-		let mut tx_buffer = self.inner.meta_state.tx_buffer.borrow_mut();
-		tx_buffer.clear();
+	fn meter_append_buffer(&self, items: Vec<(DBKey, Option<DBValue>)>) -> CommonResult<()>{
+		let mut buffer = self.inner.meta_state.buffer.borrow_mut();
+		buffer.extend(items);
 		Ok(())
 	}
 	fn payload_get(&self, key: &[u8]) -> CommonResult<Option<DBValue>> {
@@ -188,17 +184,13 @@ impl<'a> ContextT for Context<'a> {
 		buffer.insert(DBKey::from_slice(key), value);
 		Ok(())
 	}
-	fn payload_commit(&self) -> CommonResult<()> {
-		let mut tx_buffer = self.inner.payload_state.tx_buffer.borrow_mut();
-		let mut buffer = self.inner.payload_state.buffer.borrow_mut();
-		for (k, v) in tx_buffer.drain() {
-			buffer.insert(k, v);
-		}
-		Ok(())
+	fn payload_drain_tx_buffer(&self) -> CommonResult<Vec<(DBKey, Option<DBValue>)>>{
+		let tx_buffer = self.inner.payload_state.tx_buffer.borrow_mut().drain().collect();
+		Ok(tx_buffer)
 	}
-	fn payload_rollback(&self) -> CommonResult<()> {
-		let mut tx_buffer = self.inner.payload_state.tx_buffer.borrow_mut();
-		tx_buffer.clear();
+	fn payload_append_buffer(&self, items: Vec<(DBKey, Option<DBValue>)>) -> CommonResult<()>{
+		let mut buffer = self.inner.payload_state.buffer.borrow_mut();
+		buffer.extend(items);
 		Ok(())
 	}
 	fn emit_event<E: Encode>(&self, event: E) -> CommonResult<()> {
@@ -531,14 +523,14 @@ impl Executor {
 
 			let (result, events) = match result {
 				Ok(result) => {
-					context.meta_commit()?;
-					context.payload_commit()?;
+					context.meter_append_buffer(context.meter_drain_tx_buffer()?)?;
+					context.payload_append_buffer(context.payload_drain_tx_buffer()?)?;
 					let events = context.drain_events()?;
 					(Ok(result), events)
 				},
 				Err(e) => {
-					context.meta_rollback()?;
-					context.payload_rollback()?;
+					context.meter_drain_tx_buffer()?;
+					context.payload_drain_tx_buffer()?;
 					context.drain_events()?;
 					let events = vec![];
 					(Err(e), events)

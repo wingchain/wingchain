@@ -18,7 +18,7 @@ use std::rc::Rc;
 
 use codec::{Decode, Encode};
 use primitives::errors::CommonResult;
-use primitives::{codec, Address, BlockNumber, Call, DBValue, Event, Hash};
+use primitives::{codec, Address, BlockNumber, Call, DBValue, Event, Hash, DBKey};
 
 pub use crate::errors::{ModuleError, ModuleResult, OpaqueModuleResult};
 
@@ -69,18 +69,18 @@ pub trait Context: Clone {
 	fn meta_get(&self, key: &[u8]) -> CommonResult<Option<DBValue>>;
 	/// set meta state (only save into tx buffer)
 	fn meta_set(&self, key: &[u8], value: Option<DBValue>) -> CommonResult<()>;
-	/// commit meta state (only save into buffer)
-	fn meta_commit(&self) -> CommonResult<()>;
-	/// rollback meta state (discard tx buffer)
-	fn meta_rollback(&self) -> CommonResult<()>;
+	/// drain meta tx buffer
+	fn meter_drain_tx_buffer(&self) -> CommonResult<Vec<(DBKey, Option<DBValue>)>>;
+	/// append meter buffer
+	fn meter_append_buffer(&self, items: Vec<(DBKey, Option<DBValue>)>) -> CommonResult<()>;
 	/// get payload state
 	fn payload_get(&self, key: &[u8]) -> CommonResult<Option<DBValue>>;
 	/// set payload state (only save into tx buffer)
 	fn payload_set(&self, key: &[u8], value: Option<DBValue>) -> CommonResult<()>;
-	/// commit payload state (only save into buffer)
-	fn payload_commit(&self) -> CommonResult<()>;
-	/// rollback payload state (discard tx buffer)
-	fn payload_rollback(&self) -> CommonResult<()>;
+	/// drain payload tx buffer
+	fn payload_drain_tx_buffer(&self) -> CommonResult<Vec<(DBKey, Option<DBValue>)>>;
+	/// append payload buffer
+	fn payload_append_buffer(&self, items: Vec<(DBKey, Option<DBValue>)>) -> CommonResult<()>;
 	/// emit an event
 	fn emit_event<E: Encode>(&self, event: E) -> CommonResult<()>;
 	/// drain events
