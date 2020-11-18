@@ -61,15 +61,33 @@ pub struct CallEnv {
 }
 
 pub trait Context: Clone {
+	/// Env for a context
 	fn env(&self) -> Rc<ContextEnv>;
+	/// Env for a call
 	fn call_env(&self) -> Rc<CallEnv>;
+	/// get meta state
 	fn meta_get(&self, key: &[u8]) -> CommonResult<Option<DBValue>>;
+	/// set meta state (only save into tx buffer)
 	fn meta_set(&self, key: &[u8], value: Option<DBValue>) -> CommonResult<()>;
+	/// commit meta state (only save into buffer)
+	fn meta_commit(&self) -> CommonResult<()>;
+	/// rollback meta state (discard tx buffer)
+	fn meta_rollback(&self) -> CommonResult<()>;
+	/// get payload state
 	fn payload_get(&self, key: &[u8]) -> CommonResult<Option<DBValue>>;
+	/// set payload state (only save into tx buffer)
 	fn payload_set(&self, key: &[u8], value: Option<DBValue>) -> CommonResult<()>;
+	/// commit payload state (only save into buffer)
+	fn payload_commit(&self) -> CommonResult<()>;
+	/// rollback payload state (discard tx buffer)
+	fn payload_rollback(&self) -> CommonResult<()>;
+	/// emit an event
 	fn emit_event<E: Encode>(&self, event: E) -> CommonResult<()>;
+	/// drain events
 	fn drain_events(&self) -> CommonResult<Vec<Event>>;
+	/// compute hash
 	fn hash(&self, data: &[u8]) -> CommonResult<Hash>;
+	/// compute address
 	fn address(&self, data: &[u8]) -> CommonResult<Address>;
 }
 

@@ -113,16 +113,19 @@ struct ContextInner<'a> {
 
 struct ContextState<'a> {
 	statedb_getter: StateDBGetter<'a>,
+	tx_buffer: RefCell<HashMap<DBKey, Option<DBValue>>>,
 	buffer: RefCell<HashMap<DBKey, Option<DBValue>>>,
 }
 
 impl<'a> ContextState<'a> {
 	fn new(statedb_stmt: &'a StateDBStmt) -> CommonResult<Self> {
 		let statedb_getter = StateDB::prepare_get(statedb_stmt)?;
+		let tx_buffer = Default::default();
 		let buffer = Default::default();
 
 		Ok(ContextState {
 			statedb_getter,
+			tx_buffer,
 			buffer,
 		})
 	}
@@ -141,27 +144,61 @@ impl<'a> ContextT for Context<'a> {
 			.clone()
 	}
 	fn meta_get(&self, key: &[u8]) -> CommonResult<Option<DBValue>> {
-		let buffer = self.inner.meta_state.buffer.borrow();
-		match buffer.get(&DBKey::from_slice(key)) {
-			Some(value) => Ok(value.clone()),
-			None => self.inner.meta_state.statedb_getter.get(key),
+		let tx_buffer = self.inner.meta_state.tx_buffer.borrow();
+		if let Some(value) = tx_buffer.get(&DBKey::from_slice(key)) {
+			return Ok(value.clone());
 		}
+		let buffer = self.inner.meta_state.buffer.borrow();
+		if let Some(value) = buffer.get(&DBKey::from_slice(key)) {
+			return Ok(value.clone());
+		}
+		self.inner.meta_state.statedb_getter.get(key);
 	}
 	fn meta_set(&self, key: &[u8], value: Option<DBValue>) -> CommonResult<()> {
+		let mut tx_buffer = self.inner.meta_state.tx_buffer.borrow_mut();
+		tx_buffer.insert(DBKey::from_slice(key), value);
+		Ok(())
+	}
+	fn meta_commit(&self) -> CommonResult<()> {
+		let mut tx_buffer = self.inner.meta_state.tx_buffer.borrow_mut();
 		let mut buffer = self.inner.meta_state.buffer.borrow_mut();
-		buffer.insert(DBKey::from_slice(key), value);
+		for (k, v) in tx_buffer.drain() {
+			buffer.insert(k, v);
+		}
+		Ok(())
+	}
+	fn meta_rollback(&self) -> CommonResult<()> {
+		let mut tx_buffer = self.inner.meta_state.tx_buffer.borrow_mut();
+		tx_buffer.clear();
 		Ok(())
 	}
 	fn payload_get(&self, key: &[u8]) -> CommonResult<Option<DBValue>> {
-		let buffer = self.inner.payload_state.buffer.borrow();
-		match buffer.get(&DBKey::from_slice(key)) {
-			Some(value) => Ok(value.clone()),
-			None => self.inner.payload_state.statedb_getter.get(key),
+		let tx_buffer = self.inner.payload_state.tx_buffer.borrow();
+		if let Some(value) = tx_buffer.get(&DBKey::from_slice(key)) {
+			return Ok(value.clone());
 		}
+		let buffer = self.inner.payload_state.buffer.borrow();
+		if let Some(value) = buffer.get(&DBKey::from_slice(key)) {
+			return Ok(value.clone());
+		}
+		self.inner.payload_state.statedb_getter.get(key);
 	}
 	fn payload_set(&self, key: &[u8], value: Option<DBValue>) -> CommonResult<()> {
 		let mut buffer = self.inner.payload_state.buffer.borrow_mut();
 		buffer.insert(DBKey::from_slice(key), value);
+		Ok(())
+	}
+	fn payload_commit(&self) -> CommonResult<()> {
+		let mut tx_buffer = self.inner.payload_state.tx_buffer.borrow_mut();
+		let mut buffer = self.inner.payload_state.buffer.borrow_mut();
+		for (k, v) in tx_buffer.drain() {
+			buffer.insert(k, v);
+		}
+		Ok(())
+	}
+	fn payload_rollback(&self) -> CommonResult<()> {
+		let mut tx_buffer = self.inner.payload_state.tx_buffer.borrow_mut();
+		tx_buffer.clear();
 		Ok(())
 	}
 	fn emit_event<E: Encode>(&self, event: E) -> CommonResult<()> {
