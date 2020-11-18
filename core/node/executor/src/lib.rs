@@ -152,7 +152,7 @@ impl<'a> ContextT for Context<'a> {
 		if let Some(value) = buffer.get(&DBKey::from_slice(key)) {
 			return Ok(value.clone());
 		}
-		self.inner.meta_state.statedb_getter.get(key);
+		self.inner.meta_state.statedb_getter.get(key)
 	}
 	fn meta_set(&self, key: &[u8], value: Option<DBValue>) -> CommonResult<()> {
 		let mut tx_buffer = self.inner.meta_state.tx_buffer.borrow_mut();
@@ -181,7 +181,7 @@ impl<'a> ContextT for Context<'a> {
 		if let Some(value) = buffer.get(&DBKey::from_slice(key)) {
 			return Ok(value.clone());
 		}
-		self.inner.payload_state.statedb_getter.get(key);
+		self.inner.payload_state.statedb_getter.get(key)
 	}
 	fn payload_set(&self, key: &[u8], value: Option<DBValue>) -> CommonResult<()> {
 		let mut buffer = self.inner.payload_state.buffer.borrow_mut();
@@ -528,7 +528,22 @@ impl Executor {
 
 			let result =
 				Dispatcher::execute_call::<Context>(module, context, sender.as_ref(), &call)?;
-			let events = context.drain_events()?;
+
+			let (result, events) = match result {
+				Ok(result) => {
+					context.meta_commit()?;
+					context.payload_commit()?;
+					let events = context.drain_events()?;
+					(Ok(result), events)
+				},
+				Err(e) => {
+					context.meta_rollback()?;
+					context.payload_rollback()?;
+					context.drain_events()?;
+					let events = vec![];
+					(Err(e), events)
+				}
+			};
 
 			let receipt = Receipt {
 				block_number: context.env().number,
