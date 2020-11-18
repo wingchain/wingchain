@@ -18,7 +18,7 @@ use std::rc::Rc;
 
 use codec::{Decode, Encode};
 use primitives::errors::CommonResult;
-use primitives::{codec, Address, BlockNumber, Call, DBValue, Event, Hash, DBKey};
+use primitives::{codec, Address, BlockNumber, Call, DBKey, DBValue, Event, Hash};
 
 pub use crate::errors::{ModuleError, ModuleResult, OpaqueModuleResult};
 

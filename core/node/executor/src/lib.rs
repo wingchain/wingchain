@@ -159,11 +159,17 @@ impl<'a> ContextT for Context<'a> {
 		tx_buffer.insert(DBKey::from_slice(key), value);
 		Ok(())
 	}
-	fn meter_drain_tx_buffer(&self) -> CommonResult<Vec<(DBKey, Option<DBValue>)>>{
-		let tx_buffer = self.inner.meta_state.tx_buffer.borrow_mut().drain().collect();
+	fn meter_drain_tx_buffer(&self) -> CommonResult<Vec<(DBKey, Option<DBValue>)>> {
+		let tx_buffer = self
+			.inner
+			.meta_state
+			.tx_buffer
+			.borrow_mut()
+			.drain()
+			.collect();
 		Ok(tx_buffer)
 	}
-	fn meter_append_buffer(&self, items: Vec<(DBKey, Option<DBValue>)>) -> CommonResult<()>{
+	fn meter_append_buffer(&self, items: Vec<(DBKey, Option<DBValue>)>) -> CommonResult<()> {
 		let mut buffer = self.inner.meta_state.buffer.borrow_mut();
 		buffer.extend(items);
 		Ok(())
@@ -184,11 +190,17 @@ impl<'a> ContextT for Context<'a> {
 		buffer.insert(DBKey::from_slice(key), value);
 		Ok(())
 	}
-	fn payload_drain_tx_buffer(&self) -> CommonResult<Vec<(DBKey, Option<DBValue>)>>{
-		let tx_buffer = self.inner.payload_state.tx_buffer.borrow_mut().drain().collect();
+	fn payload_drain_tx_buffer(&self) -> CommonResult<Vec<(DBKey, Option<DBValue>)>> {
+		let tx_buffer = self
+			.inner
+			.payload_state
+			.tx_buffer
+			.borrow_mut()
+			.drain()
+			.collect();
 		Ok(tx_buffer)
 	}
-	fn payload_append_buffer(&self, items: Vec<(DBKey, Option<DBValue>)>) -> CommonResult<()>{
+	fn payload_append_buffer(&self, items: Vec<(DBKey, Option<DBValue>)>) -> CommonResult<()> {
 		let mut buffer = self.inner.payload_state.buffer.borrow_mut();
 		buffer.extend(items);
 		Ok(())
@@ -527,7 +539,7 @@ impl Executor {
 					context.payload_append_buffer(context.payload_drain_tx_buffer()?)?;
 					let events = context.drain_events()?;
 					(Ok(result), events)
-				},
+				}
 				Err(e) => {
 					context.meter_drain_tx_buffer()?;
 					context.payload_drain_tx_buffer()?;

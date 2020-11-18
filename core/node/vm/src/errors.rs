@@ -220,3 +220,9 @@ impl From<BusinessError> for VMError {
 		VMError::Application(ApplicationError::BusinessError(e))
 	}
 }
+
+impl From<CommonError> for VMError {
+	fn from(e: CommonError) -> Self {
+		VMError::System(e)
+	}
+}
