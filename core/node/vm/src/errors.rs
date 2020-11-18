@@ -90,8 +90,9 @@ pub enum InvokeError {
 pub enum BusinessError {
 	Panic { msg: String },
 	Deserialize,
-	User { msg: String },
 	IllegalRead,
+	Transfer,
+	User { msg: String },
 }
 
 impl From<wasmer_error::Error> for VMError {
