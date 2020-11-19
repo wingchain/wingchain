@@ -37,7 +37,7 @@ pub fn dispatcher(_attr: TokenStream, item: TokenStream) -> TokenStream {
 		.iter()
 		.map(|x| {
 			let ident = &x.ident;
-			quote! { stringify!(#ident) => Ok(module::#ident::Module::<C>::META_MODULE) }
+			quote! { stringify!(#ident) => Ok(module::#ident::Module::<C, U>::META_MODULE) }
 		})
 		.collect::<Vec<_>>();
 
@@ -46,7 +46,7 @@ pub fn dispatcher(_attr: TokenStream, item: TokenStream) -> TokenStream {
 		.map(|x| {
 			let ident = &x.ident;
 			quote! { stringify!(#ident) => {
-				let result = module::#ident::Module::<C>::validate_call(validator, &call);
+				let result = module::#ident::Module::<C, U>::validate_call(util, &call);
 				match result {
 					Ok(result) => Ok(Ok(result)),
 					Err(e) => match e {
@@ -62,7 +62,7 @@ pub fn dispatcher(_attr: TokenStream, item: TokenStream) -> TokenStream {
 		.iter()
 		.map(|x| {
 			let ident = &x.ident;
-			quote! { stringify!(#ident) => Ok(module::#ident::Module::<C>::is_write_call(&call)) }
+			quote! { stringify!(#ident) => Ok(module::#ident::Module::<C, U>::is_write_call(&call)) }
 		})
 		.collect::<Vec<_>>();
 
@@ -71,7 +71,7 @@ pub fn dispatcher(_attr: TokenStream, item: TokenStream) -> TokenStream {
 		.map(|x| {
 			let ident = &x.ident;
 			quote! { stringify!(#ident) => {
-				let module = module::#ident::Module::<_>::new(context.clone());
+				let module = module::#ident::Module::<_, _>::new(context.clone(), util.clone());
 				let result = module.execute_call(sender, call);
 				match result {
 					Ok(result) => Ok(Ok(result)),
@@ -88,25 +88,25 @@ pub fn dispatcher(_attr: TokenStream, item: TokenStream) -> TokenStream {
 	let gen = quote! {
 		struct #type_name;
 		impl #type_name {
-			fn is_meta<C: ContextT>(module: &str) -> CommonResult<bool>{
+			fn is_meta<C: ContextT, U: UtilT>(module: &str) -> CommonResult<bool>{
 				match module {
 					#(#is_meta_ts_vec),*,
 					other => Err(errors::ErrorKind::InvalidTxModule(other.to_string()).into()),
 				}
 			}
-			fn validate_call<C: ContextT, V: ValidatorT>(module: &str, validator: &V, call: &Call) -> CommonResult<CallResult<()>>{
+			fn validate_call<C: ContextT, U: UtilT>(module: &str, util: &U, call: &Call) -> CommonResult<CallResult<()>>{
 				match module {
 					#(#validate_call_ts_vec),*,
 					other => Err(errors::ErrorKind::InvalidTxModule(other.to_string()).into()),
 				}
 			}
-			fn is_write_call<C: ContextT>(module: &str, call: &Call) -> CommonResult<Option<bool>> {
+			fn is_write_call<C: ContextT, U: UtilT>(module: &str, call: &Call) -> CommonResult<Option<bool>> {
 				match module {
 					#(#is_write_call_ts_vec),*,
 					other => Err(errors::ErrorKind::InvalidTxModule(other.to_string()).into()),
 				}
 			}
-			fn execute_call<C: ContextT>(module: &str, context: &C, sender: Option<&Address>, call: &Call) -> CommonResult<OpaqueCallResult>{
+			fn execute_call<C: ContextT, U: UtilT>(module: &str, context: &C, util: &U, sender: Option<&Address>, call: &Call) -> CommonResult<OpaqueCallResult>{
 				match module {
 					#(#execute_call_ts_vec),*,
 					other => Err(errors::ErrorKind::InvalidTxModule(other.to_string()).into()),
@@ -137,7 +137,7 @@ pub fn module(_attr: TokenStream, item: TokenStream) -> TokenStream {
 			let params_ident = x.params_ident.clone();
 			let validate = match &x.validate_ident {
 				Some(validate_ident) => quote! {
-					Self::#validate_ident(validator, params)
+					Self::#validate_ident(&util, params)
 				},
 				None => quote! {Ok(())},
 			};
@@ -188,16 +188,19 @@ pub fn module(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
 		#impl_item
 
-		impl<C> ModuleT<C> for #type_name<C> where C: Context {
+		impl<C, U> ModuleT for #type_name<C, U> where C: Context, U: Util {
 
 			const META_MODULE: bool = Self::META_MODULE;
 			const STORAGE_KEY: &'static [u8] = Self::STORAGE_KEY;
 
-			fn new(context: C) -> Self {
-				Self::new(context)
+			type C = C;
+			type U = U;
+
+			fn new(context: Self::C, util: Self::U) -> Self {
+				Self::new(context, util)
 			}
 
-			fn validate_call<V: Validator>(validator: &V, call: &Call) -> ModuleResult<()> {
+			fn validate_call(util: &Self::U, call: &Call) -> ModuleResult<()> {
 				let params = &call.params.0[..];
 				match call.method.as_str() {
 					#(#validate_call_ts_vec),*,

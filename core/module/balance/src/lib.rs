@@ -17,30 +17,34 @@ use std::rc::Rc;
 use executor_macro::{call, module};
 use executor_primitives::{
 	errors, Context, ContextEnv, EmptyParams, Module as ModuleT, ModuleResult, OpaqueModuleResult,
-	StorageMap, Validator,
+	StorageMap, Util,
 };
 use primitives::codec::{Decode, Encode};
 use primitives::{codec, Address, Balance, Call};
 
-pub struct Module<C>
+pub struct Module<C, U>
 where
 	C: Context,
+	U: Util,
 {
 	env: Rc<ContextEnv>,
 	context: C,
-	balance: StorageMap<Address, Balance, C>,
+	#[allow(dead_code)]
+	util: U,
+	balance: StorageMap<Address, Balance, Self>,
 }
 
 #[module]
-impl<C: Context> Module<C> {
+impl<C: Context, U: Util> Module<C, U> {
 	const META_MODULE: bool = false;
 	const STORAGE_KEY: &'static [u8] = b"balance";
 
-	fn new(context: C) -> Self {
+	fn new(context: C, util: U) -> Self {
 		Self {
 			env: context.env(),
 			context: context.clone(),
-			balance: StorageMap::new::<Self>(context, b"balance"),
+			util,
+			balance: StorageMap::new(context, b"balance"),
 		}
 	}
 	#[call(write = true)]
@@ -55,9 +59,9 @@ impl<C: Context> Module<C> {
 		Ok(())
 	}
 
-	fn validate_init<V: Validator>(validator: &V, params: InitParams) -> ModuleResult<()> {
+	fn validate_init(util: &U, params: InitParams) -> ModuleResult<()> {
 		for (address, _) in params.endow {
-			validator.validate_address(&address)?;
+			util.validate_address(&address)?;
 		}
 		Ok(())
 	}
@@ -110,8 +114,8 @@ impl<C: Context> Module<C> {
 		Ok(())
 	}
 
-	fn validate_transfer<V: Validator>(validator: &V, params: TransferParams) -> ModuleResult<()> {
-		validator.validate_address(&params.recipient)?;
+	fn validate_transfer(util: &U, params: TransferParams) -> ModuleResult<()> {
+		util.validate_address(&params.recipient)?;
 		Ok(())
 	}
 }

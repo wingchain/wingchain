@@ -18,64 +18,58 @@ use std::rc::Rc;
 use executor_macro::{call, module};
 use executor_primitives::{
 	errors, Context, ContextEnv, Module as ModuleT, ModuleResult, OpaqueModuleResult, StorageMap,
-	Validator,
+	Util,
 };
 use primitives::codec::{Decode, Encode};
 use primitives::{codec, Address, Balance, Call, Hash};
 
-pub struct Module<C>
+pub struct Module<C, U>
 where
 	C: Context,
+	U: Util,
 {
 	#[allow(dead_code)]
 	env: Rc<ContextEnv>,
 	context: C,
+	util: U,
 	/// contract address -> admin
-	admin: StorageMap<Address, Admin, C>,
+	admin: StorageMap<Address, Admin, Self>,
 	/// contract address -> current version
-	version: StorageMap<Address, u32, C>,
+	version: StorageMap<Address, u32, Self>,
 	/// (contract address, version) -> code
-	code: StorageMap<(Address, u32), Vec<u8>, C>,
+	code: StorageMap<(Address, u32), Vec<u8>, Self>,
 	/// (contract address, version) -> code hash
-	code_hash: StorageMap<(Address, u32), Hash, C>,
+	code_hash: StorageMap<(Address, u32), Hash, Self>,
 
 	/// contract address -> update admin proposal id
-	update_admin_proposal_id: StorageMap<Address, u32, C>,
+	update_admin_proposal_id: StorageMap<Address, u32, Self>,
 	/// contract address -> update admin proposal
-	update_admin_proposal: StorageMap<Address, UpdateAdminProposal, C>,
+	update_admin_proposal: StorageMap<Address, UpdateAdminProposal, Self>,
 
 	/// contract address -> update code proposal id
-	update_code_proposal_id: StorageMap<Address, u32, C>,
+	update_code_proposal_id: StorageMap<Address, u32, Self>,
 	/// contract address -> update code proposal
-	update_code_proposal: StorageMap<Address, UpdateCodeProposal, C>,
+	update_code_proposal: StorageMap<Address, UpdateCodeProposal, Self>,
 }
 
 #[module]
-impl<C: Context> Module<C> {
+impl<C: Context, U: Util> Module<C, U> {
 	const META_MODULE: bool = false;
 	const STORAGE_KEY: &'static [u8] = b"contract";
 
-	fn new(context: C) -> Self {
+	fn new(context: C, util: U) -> Self {
 		Self {
 			env: context.env(),
 			context: context.clone(),
-			admin: StorageMap::new::<Self>(context.clone(), b"admin"),
-			version: StorageMap::new::<Self>(context.clone(), b"version"),
-			code: StorageMap::new::<Self>(context.clone(), b"code"),
-			code_hash: StorageMap::new::<Self>(context.clone(), b"code_hash"),
-			update_admin_proposal_id: StorageMap::new::<Self>(
-				context.clone(),
-				b"update_admin_proposal_id",
-			),
-			update_admin_proposal: StorageMap::new::<Self>(
-				context.clone(),
-				b"update_admin_proposal",
-			),
-			update_code_proposal_id: StorageMap::new::<Self>(
-				context.clone(),
-				b"update_code_proposal_id",
-			),
-			update_code_proposal: StorageMap::new::<Self>(context, b"update_code_proposal"),
+			util,
+			admin: StorageMap::new(context.clone(), b"admin"),
+			version: StorageMap::new(context.clone(), b"version"),
+			code: StorageMap::new(context.clone(), b"code"),
+			code_hash: StorageMap::new(context.clone(), b"code_hash"),
+			update_admin_proposal_id: StorageMap::new(context.clone(), b"update_admin_proposal_id"),
+			update_admin_proposal: StorageMap::new(context.clone(), b"update_admin_proposal"),
+			update_code_proposal_id: StorageMap::new(context.clone(), b"update_code_proposal_id"),
+			update_code_proposal: StorageMap::new(context, b"update_code_proposal"),
 		}
 	}
 
@@ -153,10 +147,10 @@ impl<C: Context> Module<C> {
 	fn create(&self, sender: Option<&Address>, params: CreateParams) -> ModuleResult<Address> {
 		let sender = sender.ok_or("should be signed")?;
 		let tx_hash = &self.context.call_env().tx_hash;
-		let contract_address = self.context.address(&self.context.hash(&tx_hash.0)?.0)?;
+		let contract_address = self.util.address(&self.util.hash(&tx_hash.0)?.0)?;
 
 		let code = params.code;
-		let code_hash = self.context.hash(&code)?;
+		let code_hash = self.util.hash(&code)?;
 		let version = 1u32;
 		let admin = Admin {
 			threshold: 1,
@@ -171,12 +165,9 @@ impl<C: Context> Module<C> {
 		Ok(contract_address)
 	}
 
-	fn validate_update_admin<V: Validator>(
-		validator: &V,
-		params: UpdateAdminParams,
-	) -> ModuleResult<()> {
+	fn validate_update_admin(util: &U, params: UpdateAdminParams) -> ModuleResult<()> {
 		for (address, _) in params.admin.members {
-			validator.validate_address(&address)?;
+			util.validate_address(&address)?;
 		}
 		Ok(())
 	}
@@ -258,7 +249,7 @@ impl<C: Context> Module<C> {
 			.update_code_proposal_id
 			.get(&contract_address)?
 			.unwrap_or(1u32);
-		let code_hash = self.context.hash(&code)?;
+		let code_hash = self.util.hash(&code)?;
 		let mut proposal = UpdateCodeProposal {
 			proposal_id,
 			code,
@@ -298,7 +289,7 @@ impl<C: Context> Module<C> {
 
 		let (old_threshold, old_members) = self.verify_sender(sender, &contract_address)?;
 
-		let code_hash = self.context.hash(&proposal.code)?;
+		let code_hash = self.util.hash(&proposal.code)?;
 
 		self.update_code_vote_and_pass(
 			sender,

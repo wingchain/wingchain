@@ -115,6 +115,18 @@ fn test_vm_sender_address() {
 }
 
 #[test]
+fn test_vm_pay_value() {
+	let context = Rc::new(init_context(10));
+	let result = vm_execute(context.clone(), "pay_value", vec![]).unwrap();
+
+	let result: Balance = serde_json::from_slice(&result).unwrap();
+
+	let expected_pay_value = context.contract_env().pay_value.clone();
+
+	assert_eq!(result, expected_pay_value);
+}
+
+#[test]
 fn test_vm_storage_get() {
 	let context = Rc::new(init_context(0));
 	let input = vec![1u8];

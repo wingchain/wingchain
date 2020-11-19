@@ -315,8 +315,6 @@ impl Backend {
 			meta_state_root,
 			self.payload_statedb.clone(),
 			payload_state_root,
-			self.basic.hash.clone(),
-			self.basic.address.clone(),
 		)?;
 
 		let context = Context::new(&context_essence)?;
@@ -436,8 +434,6 @@ impl Backend {
 			meta_state_root,
 			self.payload_statedb.clone(),
 			block_execution.payload_execution_state_root.clone(),
-			self.basic.hash.clone(),
-			self.basic.address.clone(),
 		)?;
 
 		let context = Context::new(&context_essence)?;
@@ -534,8 +530,6 @@ impl Backend {
 			meta_state_root,
 			self.payload_statedb.clone(),
 			payload_state_root,
-			self.basic.hash.clone(),
-			self.basic.address.clone(),
 		)?;
 
 		let context = Context::new(&context_essence)?;
@@ -652,8 +646,6 @@ impl Backend {
 			Hash(self.meta_statedb.default_root()),
 			self.payload_statedb.clone(),
 			Hash(self.payload_statedb.default_root()),
-			self.basic.hash.clone(),
-			self.basic.address.clone(),
 		)?;
 
 		let context = Context::new(&context_essence)?;

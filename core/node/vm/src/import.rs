@@ -54,14 +54,15 @@ pub fn import(state: &mut State, memory: Memory) -> VMResult<ImportObject> {
 			"output_write" => func!(output_write),
 			"error_return" => func!(error_return),
 			"abort" => func!(abort),
-			"block_number" => func!(block_number),
-			"block_timestamp" => func!(block_timestamp),
-			"tx_hash_read" => func!(tx_hash_read),
-			"tx_hash_len" => func!(tx_hash_len),
-			"contract_address_read" => func!(contract_address_read),
-			"contract_address_len" => func!(contract_address_len),
-			"sender_address_read" => func!(sender_address_read),
-			"sender_address_len" => func!(sender_address_len),
+			"env_block_number" => func!(env_block_number),
+			"env_block_timestamp" => func!(env_block_timestamp),
+			"env_tx_hash_read" => func!(env_tx_hash_read),
+			"env_tx_hash_len" => func!(env_tx_hash_len),
+			"env_contract_address_read" => func!(env_contract_address_read),
+			"env_contract_address_len" => func!(env_contract_address_len),
+			"env_sender_address_read" => func!(env_sender_address_read),
+			"env_sender_address_len" => func!(env_sender_address_len),
+			"env_pay_value" => func!(env_pay_value),
 			"storage_read" => func!(storage_read),
 			"storage_exist_len" => func!(storage_exist_len),
 			"storage_write" => func!(storage_write),
@@ -129,17 +130,17 @@ fn abort(_ctx: &mut Ctx, _msg_ptr: u32, _filename_ptr: u32, _line: u32, _col: u3
 	)))
 }
 
-fn block_number(ctx: &mut Ctx) -> VMResult<u64> {
+fn env_block_number(ctx: &mut Ctx) -> VMResult<u64> {
 	let state = get_state(ctx);
 	Ok(state.context.env().number)
 }
 
-fn block_timestamp(ctx: &mut Ctx) -> VMResult<u64> {
+fn env_block_timestamp(ctx: &mut Ctx) -> VMResult<u64> {
 	let state = get_state(ctx);
 	Ok(state.context.env().timestamp)
 }
 
-fn tx_hash_read(ctx: &mut Ctx, ptr: u64) -> VMResult<()> {
+fn env_tx_hash_read(ctx: &mut Ctx, ptr: u64) -> VMResult<()> {
 	let state = get_state(ctx);
 	let memory = &state.memory;
 	let tx_hash = &state.context.call_env().tx_hash.0[..];
@@ -147,13 +148,13 @@ fn tx_hash_read(ctx: &mut Ctx, ptr: u64) -> VMResult<()> {
 	Ok(())
 }
 
-fn tx_hash_len(ctx: &mut Ctx) -> VMResult<u64> {
+fn env_tx_hash_len(ctx: &mut Ctx) -> VMResult<u64> {
 	let state = get_state(ctx);
 	let len = state.context.call_env().tx_hash.0.len() as u64;
 	Ok(len)
 }
 
-fn contract_address_read(ctx: &mut Ctx, ptr: u64) -> VMResult<()> {
+fn env_contract_address_read(ctx: &mut Ctx, ptr: u64) -> VMResult<()> {
 	let state = get_state(ctx);
 	let memory = &state.memory;
 	let contract_address = &state.context.contract_env().contract_address.0[..];
@@ -161,13 +162,13 @@ fn contract_address_read(ctx: &mut Ctx, ptr: u64) -> VMResult<()> {
 	Ok(())
 }
 
-fn contract_address_len(ctx: &mut Ctx) -> VMResult<u64> {
+fn env_contract_address_len(ctx: &mut Ctx) -> VMResult<u64> {
 	let state = get_state(ctx);
 	let len = state.context.contract_env().contract_address.0.len() as u64;
 	Ok(len)
 }
 
-fn sender_address_read(ctx: &mut Ctx, ptr: u64) -> VMResult<()> {
+fn env_sender_address_read(ctx: &mut Ctx, ptr: u64) -> VMResult<()> {
 	let state = get_state(ctx);
 	let memory = &state.memory;
 	let sender_address = &state.context.contract_env().sender_address.0[..];
@@ -175,10 +176,15 @@ fn sender_address_read(ctx: &mut Ctx, ptr: u64) -> VMResult<()> {
 	Ok(())
 }
 
-fn sender_address_len(ctx: &mut Ctx) -> VMResult<u64> {
+fn env_sender_address_len(ctx: &mut Ctx) -> VMResult<u64> {
 	let state = get_state(ctx);
 	let len = state.context.contract_env().sender_address.0.len() as u64;
 	Ok(len)
+}
+
+fn env_pay_value(ctx: &mut Ctx) -> VMResult<u64> {
+	let state = get_state(ctx);
+	Ok(state.context.contract_env().pay_value)
 }
 
 fn storage_read(ctx: &mut Ctx, key_len: u64, key_ptr: u64, result_ptr: u64) -> VMResult<()> {

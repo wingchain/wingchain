@@ -27,20 +27,19 @@ pub mod errors;
 /// Separator to build kv db key
 const SEPARATOR: &[u8] = b"_";
 
-pub trait Module<C>
-where
-	C: Context,
-{
+pub trait Module {
+	type C: Context;
+	type U: Util;
 	/// Specify whether the module is meta module
 	const META_MODULE: bool = false;
 
 	/// Specify the kv db key prefix
 	const STORAGE_KEY: &'static [u8];
 
-	fn new(context: C) -> Self;
+	fn new(context: Self::C, util: Self::U) -> Self;
 
 	/// validate the call
-	fn validate_call<V: Validator>(validator: &V, call: &Call) -> ModuleResult<()>;
+	fn validate_call(util: &Self::U, call: &Call) -> ModuleResult<()>;
 
 	/// check if the call is a write call, a transaction should be built by a write call
 	fn is_write_call(call: &Call) -> Option<bool>;
@@ -85,35 +84,36 @@ pub trait Context: Clone {
 	fn emit_event<E: Encode>(&self, event: E) -> CommonResult<()>;
 	/// drain events
 	fn drain_events(&self) -> CommonResult<Vec<Event>>;
+}
+
+pub trait Util: Clone {
 	/// compute hash
 	fn hash(&self, data: &[u8]) -> CommonResult<Hash>;
 	/// compute address
 	fn address(&self, data: &[u8]) -> CommonResult<Address>;
-}
-
-pub trait Validator {
+	/// validate address
 	fn validate_address(&self, address: &Address) -> CommonResult<()>;
 }
 
 /// Storage type for module
 /// module_storage_key + separator + storage_key => value
-pub struct StorageValue<T, C>
+pub struct StorageValue<T, M>
 where
 	T: Encode + Decode,
-	C: Context,
+	M: Module,
 {
-	context: C,
+	context: M::C,
 	meta_module: bool,
 	key: Vec<u8>,
 	phantom: PhantomData<T>,
 }
 
-impl<T, C> StorageValue<T, C>
+impl<T, M> StorageValue<T, M>
 where
 	T: Encode + Decode,
-	C: Context,
+	M: Module,
 {
-	pub fn new<M: Module<C>>(context: C, storage_key: &'static [u8]) -> Self {
+	pub fn new(context: M::C, storage_key: &'static [u8]) -> Self {
 		let key = [M::STORAGE_KEY, SEPARATOR, storage_key].concat();
 		let meta_module = M::META_MODULE;
 		Self {
@@ -139,25 +139,25 @@ where
 
 /// Storage type for module
 /// module_storage_key + separator + storage_key + separator + key => value
-pub struct StorageMap<K, V, C>
+pub struct StorageMap<K, V, M>
 where
 	K: Encode + Decode,
 	V: Encode + Decode,
-	C: Context,
+	M: Module,
 {
-	context: C,
+	context: M::C,
 	meta_module: bool,
 	key: Vec<u8>,
 	phantom: PhantomData<(K, V)>,
 }
 
-impl<K, V, C> StorageMap<K, V, C>
+impl<K, V, M> StorageMap<K, V, M>
 where
 	K: Encode + Decode,
 	V: Encode + Decode,
-	C: Context,
+	M: Module,
 {
-	pub fn new<M: Module<C>>(context: C, storage_key: &'static [u8]) -> Self {
+	pub fn new(context: M::C, storage_key: &'static [u8]) -> Self {
 		let key = [M::STORAGE_KEY, SEPARATOR, storage_key].concat();
 		let meta_module = M::META_MODULE;
 		Self {

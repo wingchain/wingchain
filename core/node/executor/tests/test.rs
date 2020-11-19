@@ -108,8 +108,6 @@ fn test_executor() {
 		Hash(meta_state_root),
 		payload_statedb.clone(),
 		Hash(payload_state_root),
-		hasher.clone(),
-		address.clone(),
 	)
 	.unwrap();
 	let context = Context::new(&context_essence).unwrap();
@@ -192,8 +190,6 @@ fn test_executor() {
 		meta_state_root,
 		payload_statedb.clone(),
 		payload_state_root,
-		hasher.clone(),
-		address.clone(),
 	)
 	.unwrap();
 	let context = Context::new(&context_essence).unwrap();

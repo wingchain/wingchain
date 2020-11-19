@@ -17,28 +17,32 @@ use std::rc::Rc;
 use executor_macro::{call, module};
 use executor_primitives::{
 	errors, Context, ContextEnv, EmptyParams, Module as ModuleT, ModuleResult, OpaqueModuleResult,
-	StorageValue, Validator,
+	StorageValue, Util,
 };
 use primitives::codec::{Decode, Encode};
 use primitives::{codec, Address, Call};
 
-pub struct Module<C>
+pub struct Module<C, U>
 where
 	C: Context,
+	U: Util,
 {
 	env: Rc<ContextEnv>,
-	block_interval: StorageValue<u64, C>,
+	#[allow(dead_code)]
+	util: U,
+	block_interval: StorageValue<u64, Self>,
 }
 
 #[module]
-impl<C: Context> Module<C> {
+impl<C: Context, U: Util> Module<C, U> {
 	const META_MODULE: bool = true;
 	const STORAGE_KEY: &'static [u8] = b"solo";
 
-	fn new(context: C) -> Self {
+	fn new(context: C, util: U) -> Self {
 		Self {
 			env: context.env(),
-			block_interval: StorageValue::new::<Self>(context.clone(), b"block_interval"),
+			util,
+			block_interval: StorageValue::new(context.clone(), b"block_interval"),
 		}
 	}
 

@@ -17,32 +17,36 @@ use std::rc::Rc;
 use executor_macro::{call, module};
 use executor_primitives::{
 	errors, Context, ContextEnv, EmptyParams, Module as ModuleT, ModuleResult, OpaqueModuleResult,
-	StorageValue, Validator,
+	StorageValue, Util,
 };
 use primitives::codec::{Decode, Encode};
 use primitives::{codec, Address, BlockNumber, Call};
 
-pub struct Module<C>
+pub struct Module<C, U>
 where
 	C: Context,
+	U: Util,
 {
 	env: Rc<ContextEnv>,
-	chain_id: StorageValue<String, C>,
-	timestamp: StorageValue<u64, C>,
-	until_gap: StorageValue<BlockNumber, C>,
+	#[allow(dead_code)]
+	util: U,
+	chain_id: StorageValue<String, Self>,
+	timestamp: StorageValue<u64, Self>,
+	until_gap: StorageValue<BlockNumber, Self>,
 }
 
 #[module]
-impl<C: Context> Module<C> {
+impl<C: Context, U: Util> Module<C, U> {
 	const META_MODULE: bool = true;
 	const STORAGE_KEY: &'static [u8] = b"system";
 
-	fn new(context: C) -> Self {
+	fn new(context: C, util: U) -> Self {
 		Self {
 			env: context.env(),
-			chain_id: StorageValue::new::<Self>(context.clone(), b"chain_id"),
-			timestamp: StorageValue::new::<Self>(context.clone(), b"timestamp"),
-			until_gap: StorageValue::new::<Self>(context, b"until_gap"),
+			util,
+			chain_id: StorageValue::new(context.clone(), b"chain_id"),
+			timestamp: StorageValue::new(context.clone(), b"timestamp"),
+			until_gap: StorageValue::new(context, b"until_gap"),
 		}
 	}
 

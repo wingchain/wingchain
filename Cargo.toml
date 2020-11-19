@@ -21,6 +21,8 @@ members = [
 	"core/node/consensus",
 	"core/node/consensus/solo",
 	"core/node/vm",
+#	"core/node/vm/contract-sdk",
+#	"core/node/vm/contract-sdk-macro",
 	"core/node/vm/contract-samples/hello-world",
 	"core/module/system",
 	"core/module/balance",

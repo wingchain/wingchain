@@ -28,7 +28,7 @@ use node_executor_macro::dispatcher;
 use node_executor_primitives::errors::ErrorKind;
 pub use node_executor_primitives::ContextEnv;
 use node_executor_primitives::{
-	errors, CallEnv, Context as ContextT, Module as ModuleT, ModuleError, Validator as ValidatorT,
+	errors, CallEnv, Context as ContextT, Module as ModuleT, ModuleError, Util as UtilT,
 };
 use node_statedb::{StateDB, StateDBGetter, StateDBStmt, TrieRoot};
 use primitives::codec::Encode;
@@ -52,8 +52,6 @@ pub struct ContextEssence {
 	payload_statedb: Arc<StateDB>,
 	payload_state_root: Rc<Hash>,
 	payload_stmt: StateDBStmt,
-	hash: Arc<HashImpl>,
-	address: Arc<AddressImpl>,
 }
 
 impl ContextEssence {
@@ -64,8 +62,6 @@ impl ContextEssence {
 		meta_state_root: Hash,
 		payload_statedb: Arc<StateDB>,
 		payload_state_root: Hash,
-		hash: Arc<HashImpl>,
-		address: Arc<AddressImpl>,
 	) -> CommonResult<Self> {
 		let meta_stmt = meta_statedb.prepare_stmt(&meta_state_root.0)?;
 		let payload_stmt = payload_statedb.prepare_stmt(&payload_state_root.0)?;
@@ -79,8 +75,6 @@ impl ContextEssence {
 			payload_statedb,
 			payload_state_root: Rc::new(payload_state_root),
 			payload_stmt,
-			hash,
-			address,
 		})
 	}
 }
@@ -107,8 +101,6 @@ struct ContextInner<'a> {
 	events: RefCell<Vec<Event>>,
 	// to mark the context has already started to execution payload txs
 	payload_phase: Cell<bool>,
-	hash: Arc<HashImpl>,
-	address: Arc<AddressImpl>,
 }
 
 struct ContextState<'a> {
@@ -215,16 +207,6 @@ impl<'a> ContextT for Context<'a> {
 		let events = events.drain(..).collect();
 		Ok(events)
 	}
-	fn hash(&self, data: &[u8]) -> CommonResult<Hash> {
-		let mut out = vec![0u8; self.inner.hash.length().into()];
-		self.inner.hash.hash(&mut out, data);
-		Ok(Hash(out))
-	}
-	fn address(&self, data: &[u8]) -> CommonResult<Address> {
-		let mut out = vec![0u8; self.inner.address.length().into()];
-		self.inner.address.address(&mut out, data);
-		Ok(Address(out))
-	}
 }
 
 impl<'a> Context<'a> {
@@ -248,8 +230,6 @@ impl<'a> Context<'a> {
 			payload_receipts: RefCell::new(Vec::with_capacity(PAYLOAD_TXS_SIZE)),
 			events: RefCell::new(Vec::with_capacity(EVENT_SIZE)),
 			payload_phase: Cell::new(false),
-			hash: context_essence.hash.clone(),
-			address: context_essence.address.clone(),
 		});
 
 		Ok(Self { inner })
@@ -338,12 +318,25 @@ impl<'a> Context<'a> {
 	}
 }
 
-/// Default implementation of Validator
-struct Validator {
+/// Default implementation of Util
+#[derive(Clone)]
+struct Util {
+	hash: Arc<HashImpl>,
+	dsa: Arc<DsaImpl>,
 	address: Arc<AddressImpl>,
 }
 
-impl ValidatorT for Validator {
+impl UtilT for Util {
+	fn hash(&self, data: &[u8]) -> CommonResult<Hash> {
+		let mut out = vec![0u8; self.hash.length().into()];
+		self.hash.hash(&mut out, data);
+		Ok(Hash(out))
+	}
+	fn address(&self, data: &[u8]) -> CommonResult<Address> {
+		let mut out = vec![0u8; self.address.length().into()];
+		self.address.address(&mut out, data);
+		Ok(Address(out))
+	}
 	fn validate_address(&self, address: &Address) -> CommonResult<()> {
 		let address_len: usize = self.address.length().into();
 		if address.0.len() != address_len {
@@ -357,13 +350,15 @@ pub struct Executor {
 	hash: Arc<HashImpl>,
 	dsa: Arc<DsaImpl>,
 	address: Arc<AddressImpl>,
-	validator: Validator,
+	util: Util,
 	genesis_hash: Hash,
 }
 
 impl Executor {
 	pub fn new(hash: Arc<HashImpl>, dsa: Arc<DsaImpl>, address: Arc<AddressImpl>) -> Self {
-		let validator = Validator {
+		let util = Util {
+			hash: hash.clone(),
+			dsa: dsa.clone(),
 			address: address.clone(),
 		};
 		let default_hash = Hash(vec![0u8; hash.length().into()]);
@@ -371,7 +366,7 @@ impl Executor {
 			hash,
 			dsa,
 			address,
-			validator,
+			util,
 			genesis_hash: default_hash,
 		}
 	}
@@ -396,7 +391,7 @@ impl Executor {
 			params,
 		};
 
-		Dispatcher::validate_call::<Context, _>(&module, &self.validator, &call)?
+		Dispatcher::validate_call::<Context, _>(&module, &self.util, &call)?
 			.map_err(|e| ErrorKind::Invalid(e))?;
 
 		let witness = match witness {
@@ -452,10 +447,10 @@ impl Executor {
 		};
 
 		let module = &call.module;
-		Dispatcher::validate_call::<Context, _>(module, &self.validator, &call)?
+		Dispatcher::validate_call::<Context, _>(module, &self.util, &call)?
 			.map_err(|e| ErrorKind::Invalid(e))?;
 
-		let write = Dispatcher::is_write_call::<Context>(module, &call)?;
+		let write = Dispatcher::is_write_call::<Context, Util>(module, &call)?;
 		if write != Some(true) {
 			return Err(
 				errors::ErrorKind::InvalidTxMethod(format!("{}: not write", call.method)).into(),
@@ -468,7 +463,7 @@ impl Executor {
 	/// Determine if a transaction is meta transaction
 	pub fn is_meta_tx(&self, tx: &Transaction) -> CommonResult<bool> {
 		let module = &tx.call.module;
-		Dispatcher::is_meta::<Context>(module)
+		Dispatcher::is_meta::<Context, Util>(module)
 	}
 
 	/// Execute a call on a certain block specified by block hash
@@ -480,7 +475,7 @@ impl Executor {
 		call: &Call,
 	) -> CommonResult<OpaqueCallResult> {
 		let module = &call.module;
-		Dispatcher::execute_call::<Context>(module, context, sender, call)
+		Dispatcher::execute_call::<Context, Util>(module, context, &self.util, sender, call)
 	}
 
 	/// Execute a batch of transactions
@@ -502,7 +497,7 @@ impl Executor {
 			let call = &tx.call;
 			let module = &call.module;
 
-			let is_meta = Dispatcher::is_meta::<Context>(module)?;
+			let is_meta = Dispatcher::is_meta::<Context, Util>(module)?;
 			match txs_is_meta {
 				None => {
 					txs_is_meta = Some(is_meta);
@@ -530,8 +525,13 @@ impl Executor {
 			};
 			context.inner.call_env.replace(Some(Rc::new(call_env)));
 
-			let result =
-				Dispatcher::execute_call::<Context>(module, context, sender.as_ref(), &call)?;
+			let result = Dispatcher::execute_call::<Context, Util>(
+				module,
+				context,
+				&self.util,
+				sender.as_ref(),
+				&call,
+			)?;
 
 			let (result, events) = match result {
 				Ok(result) => {
