@@ -350,7 +350,7 @@ fn get_method_params_ident(method: &ImplItemMethod) -> Ident {
 		};
 		params_ident
 	} else {
-		panic!("call method input should be (&self, params: Type)");
+		panic!("call method input should be (&self, sender: Option<&Address>, params: Type)");
 	}
 }
 

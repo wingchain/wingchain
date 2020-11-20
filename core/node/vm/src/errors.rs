@@ -17,6 +17,7 @@ use std::fmt::Debug;
 
 use wasmer_runtime::error as wasmer_error;
 
+pub use contract_sdk_primitives::ContractError;
 use primitives::errors::{CommonError, CommonErrorKind, Display};
 
 #[derive(Debug, Display)]
@@ -50,7 +51,7 @@ pub enum ApplicationError {
 	LinkError { msg: String },
 	ResolveError(ResolveError),
 	RuntimeError(RuntimeError),
-	BusinessError(BusinessError),
+	ContractError(ContractError),
 }
 
 #[derive(Debug, Clone)]
@@ -84,15 +85,6 @@ pub enum RuntimeError {
 pub enum InvokeError {
 	FailedWithNoError,
 	Breakpoint,
-}
-
-#[derive(Debug, Clone)]
-pub enum BusinessError {
-	Panic { msg: String },
-	Deserialize,
-	IllegalRead,
-	Transfer,
-	User { msg: String },
 }
 
 impl From<wasmer_error::Error> for VMError {
@@ -215,9 +207,9 @@ impl From<PreCompileError> for VMError {
 	}
 }
 
-impl From<BusinessError> for VMError {
-	fn from(e: BusinessError) -> Self {
-		VMError::Application(ApplicationError::BusinessError(e))
+impl From<ContractError> for VMError {
+	fn from(e: ContractError) -> Self {
+		VMError::Application(ApplicationError::ContractError(e))
 	}
 }
 

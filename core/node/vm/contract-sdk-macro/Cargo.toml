@@ -1,0 +1,16 @@
+[package]
+name = "node-vm-contract-sdk-macro"
+version = "0.1.0"
+authors = ["guoxbin <guoxbin@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = { version = "1.0", features = ["full"] }
+quote = "1.0"
+
+contract-sdk-primitives = { package = "node-vm-contract-sdk-primitives", path = "../contract-sdk-primitives" }

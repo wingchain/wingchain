@@ -23,7 +23,7 @@ use wasmer_runtime_core::vm::Ctx;
 
 use primitives::Address;
 
-use crate::errors::{ApplicationError, BusinessError, VMError, VMResult};
+use crate::errors::{ApplicationError, ContractError, VMError, VMResult};
 use crate::VMContext;
 
 pub struct State {
@@ -73,6 +73,7 @@ pub fn import(state: &mut State, memory: Memory) -> VMResult<ImportObject> {
 			"compute_address_len" => func!(compute_address_len),
 			"balance_read" => func!(balance_read),
 			"balance_transfer" => func!(balance_transfer),
+			"pay" => func!(pay),
 		}
 	};
 	Ok(import_object)
@@ -116,15 +117,15 @@ fn error_return(ctx: &mut Ctx, len: u64, ptr: u64) -> VMResult<()> {
 	let state = get_state(ctx);
 	let memory = &state.memory;
 	let msg = memory_to_vec(memory, len, ptr);
-	let msg = String::from_utf8(msg).map_err(|_e| BusinessError::Deserialize)?;
-	let error = BusinessError::User { msg };
+	let msg = String::from_utf8(msg).map_err(|_e| ContractError::BadUTF8)?;
+	let error = ContractError::User { msg };
 	Err(error.into())
 }
 
 /// for AssemblyScript
 fn abort(_ctx: &mut Ctx, _msg_ptr: u32, _filename_ptr: u32, _line: u32, _col: u32) -> VMResult<()> {
-	Err(VMError::Application(ApplicationError::BusinessError(
-		BusinessError::Panic {
+	Err(VMError::Application(ApplicationError::ContractError(
+		ContractError::Panic {
 			msg: "AssemblyScript panic".to_string(),
 		},
 	)))
@@ -194,7 +195,7 @@ fn storage_read(ctx: &mut Ctx, key_len: u64, key_ptr: u64, result_ptr: u64) -> V
 	let key = memory_to_vec(memory, key_len, key_ptr);
 
 	let value = state.context.payload_get(&key)?;
-	let value = value.ok_or(BusinessError::IllegalRead)?;
+	let value = value.ok_or(ContractError::IllegalRead)?;
 
 	vec_to_memory(memory, result_ptr, &value);
 	Ok(())
@@ -318,6 +319,22 @@ fn balance_transfer(
 	state
 		.context
 		.balance_transfer(sender_address, &recipient_address, value)?;
+
+	Ok(())
+}
+
+fn pay(ctx: &mut Ctx) -> VMResult<()> {
+	let state = get_state(ctx);
+
+	let sender_address = &state.context.contract_env().sender_address;
+	let contract_address = &state.context.contract_env().contract_address;
+	let pay_value = state.context.contract_env().pay_value;
+
+	if pay_value > 0 {
+		state
+			.context
+			.balance_transfer(sender_address, contract_address, pay_value)?;
+	}
 
 	Ok(())
 }

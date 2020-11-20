@@ -20,7 +20,6 @@ use wasmer_runtime::wasm::MemoryDescriptor;
 use wasmer_runtime::Memory;
 use wasmer_runtime_core::units::Pages;
 
-use primitives::codec::Encode;
 use primitives::errors::CommonResult;
 use primitives::{Address, Balance, BlockNumber, DBKey, DBValue, Hash};
 
@@ -88,19 +87,10 @@ impl VM {
 		let import_object = import::import(&mut state, memory_copy)?;
 
 		let instance = module.instantiate(&import_object)?;
-
-		let contract_env = self.context.contract_env();
-		if contract_env.pay_value > 0 {
-			self.context.balance_transfer(
-				&contract_env.sender_address,
-				&contract_env.contract_address,
-				contract_env.pay_value,
-			)?;
-		}
 		let _result = instance.call("execute_call", &[])?;
 
 		let output = state.output;
-		let output = output.unwrap_or(().encode());
+		let output = output.unwrap_or(serde_json::to_vec(&()).unwrap());
 		Ok(output)
 	}
 }
