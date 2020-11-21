@@ -290,6 +290,15 @@ fn util_address(ctx: &mut Ctx, data_len: u64, data_ptr: u64, share_id: u64) -> V
 	Ok(())
 }
 
+fn util_validate_address(ctx: &mut Ctx, data_len: u64, data_ptr: u64) -> VMResult<()> {
+	let state = State::from_ctx(ctx);
+
+	let address = state.memory_to_vec(data_len, data_ptr);
+	let address = Address(address);
+	state.context.validate_address(&address)?;
+	Ok(())
+}
+
 fn balance_read(ctx: &mut Ctx, address_len: u64, address_ptr: u64) -> VMResult<u64> {
 	let state = State::from_ctx(ctx);
 

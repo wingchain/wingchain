@@ -51,7 +51,7 @@ pub fn dispatcher(_attr: TokenStream, item: TokenStream) -> TokenStream {
 					Ok(result) => Ok(Ok(result)),
 					Err(e) => match e {
 						ModuleError::System(e) => Err(e),
-						ModuleError::Application(e) => Ok(Err(e)),
+						ModuleError::Application(e) => Ok(Err(e.to_string())),
 					}
 				}
 			} }
@@ -77,7 +77,7 @@ pub fn dispatcher(_attr: TokenStream, item: TokenStream) -> TokenStream {
 					Ok(result) => Ok(Ok(result)),
 					Err(e) => match e {
 						ModuleError::System(e) => Err(e),
-						ModuleError::Application(e) => Ok(Err(e)),
+						ModuleError::Application(e) => Ok(Err(e.to_string())),
 					}
 				}
 			} }

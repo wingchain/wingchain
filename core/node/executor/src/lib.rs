@@ -28,7 +28,8 @@ use node_executor_macro::dispatcher;
 use node_executor_primitives::errors::ErrorKind;
 pub use node_executor_primitives::ContextEnv;
 use node_executor_primitives::{
-	errors, CallEnv, Context as ContextT, Module as ModuleT, ModuleError, Util as UtilT,
+	errors, CallEnv, Context as ContextT, Module as ModuleT, ModuleError, ModuleResult,
+	Util as UtilT,
 };
 use node_statedb::{StateDB, StateDBGetter, StateDBStmt, TrieRoot};
 use primitives::codec::Encode;
@@ -135,7 +136,7 @@ impl<'a> ContextT for Context<'a> {
 			.expect("should set before")
 			.clone()
 	}
-	fn meta_get(&self, key: &[u8]) -> CommonResult<Option<DBValue>> {
+	fn meta_get(&self, key: &[u8]) -> ModuleResult<Option<DBValue>> {
 		let tx_buffer = self.inner.meta_state.tx_buffer.borrow();
 		if let Some(value) = tx_buffer.get(&DBKey::from_slice(key)) {
 			return Ok(value.clone());
@@ -144,14 +145,15 @@ impl<'a> ContextT for Context<'a> {
 		if let Some(value) = buffer.get(&DBKey::from_slice(key)) {
 			return Ok(value.clone());
 		}
-		self.inner.meta_state.statedb_getter.get(key)
+		let value = self.inner.meta_state.statedb_getter.get(key)?;
+		Ok(value)
 	}
-	fn meta_set(&self, key: &[u8], value: Option<DBValue>) -> CommonResult<()> {
+	fn meta_set(&self, key: &[u8], value: Option<DBValue>) -> ModuleResult<()> {
 		let mut tx_buffer = self.inner.meta_state.tx_buffer.borrow_mut();
 		tx_buffer.insert(DBKey::from_slice(key), value);
 		Ok(())
 	}
-	fn meter_drain_tx_buffer(&self) -> CommonResult<Vec<(DBKey, Option<DBValue>)>> {
+	fn meter_drain_tx_buffer(&self) -> ModuleResult<Vec<(DBKey, Option<DBValue>)>> {
 		let tx_buffer = self
 			.inner
 			.meta_state
@@ -161,12 +163,12 @@ impl<'a> ContextT for Context<'a> {
 			.collect();
 		Ok(tx_buffer)
 	}
-	fn meter_append_buffer(&self, items: Vec<(DBKey, Option<DBValue>)>) -> CommonResult<()> {
+	fn meter_append_buffer(&self, items: Vec<(DBKey, Option<DBValue>)>) -> ModuleResult<()> {
 		let mut buffer = self.inner.meta_state.buffer.borrow_mut();
 		buffer.extend(items);
 		Ok(())
 	}
-	fn payload_get(&self, key: &[u8]) -> CommonResult<Option<DBValue>> {
+	fn payload_get(&self, key: &[u8]) -> ModuleResult<Option<DBValue>> {
 		let tx_buffer = self.inner.payload_state.tx_buffer.borrow();
 		if let Some(value) = tx_buffer.get(&DBKey::from_slice(key)) {
 			return Ok(value.clone());
@@ -175,14 +177,15 @@ impl<'a> ContextT for Context<'a> {
 		if let Some(value) = buffer.get(&DBKey::from_slice(key)) {
 			return Ok(value.clone());
 		}
-		self.inner.payload_state.statedb_getter.get(key)
+		let value = self.inner.payload_state.statedb_getter.get(key)?;
+		Ok(value)
 	}
-	fn payload_set(&self, key: &[u8], value: Option<DBValue>) -> CommonResult<()> {
+	fn payload_set(&self, key: &[u8], value: Option<DBValue>) -> ModuleResult<()> {
 		let mut buffer = self.inner.payload_state.buffer.borrow_mut();
 		buffer.insert(DBKey::from_slice(key), value);
 		Ok(())
 	}
-	fn payload_drain_tx_buffer(&self) -> CommonResult<Vec<(DBKey, Option<DBValue>)>> {
+	fn payload_drain_tx_buffer(&self) -> ModuleResult<Vec<(DBKey, Option<DBValue>)>> {
 		let tx_buffer = self
 			.inner
 			.payload_state
@@ -192,17 +195,17 @@ impl<'a> ContextT for Context<'a> {
 			.collect();
 		Ok(tx_buffer)
 	}
-	fn payload_append_buffer(&self, items: Vec<(DBKey, Option<DBValue>)>) -> CommonResult<()> {
+	fn payload_append_buffer(&self, items: Vec<(DBKey, Option<DBValue>)>) -> ModuleResult<()> {
 		let mut buffer = self.inner.payload_state.buffer.borrow_mut();
 		buffer.extend(items);
 		Ok(())
 	}
-	fn emit_event<E: Encode>(&self, event: E) -> CommonResult<()> {
+	fn emit_event<E: Encode>(&self, event: E) -> ModuleResult<()> {
 		let mut events = self.inner.events.borrow_mut();
 		events.push(Event::from(&event)?);
 		Ok(())
 	}
-	fn drain_events(&self) -> CommonResult<Vec<Event>> {
+	fn drain_events(&self) -> ModuleResult<Vec<Event>> {
 		let mut events = self.inner.events.borrow_mut();
 		let events = events.drain(..).collect();
 		Ok(events)
@@ -327,20 +330,20 @@ struct Util {
 }
 
 impl UtilT for Util {
-	fn hash(&self, data: &[u8]) -> CommonResult<Hash> {
+	fn hash(&self, data: &[u8]) -> ModuleResult<Hash> {
 		let mut out = vec![0u8; self.hash.length().into()];
 		self.hash.hash(&mut out, data);
 		Ok(Hash(out))
 	}
-	fn address(&self, data: &[u8]) -> CommonResult<Address> {
+	fn address(&self, data: &[u8]) -> ModuleResult<Address> {
 		let mut out = vec![0u8; self.address.length().into()];
 		self.address.address(&mut out, data);
 		Ok(Address(out))
 	}
-	fn validate_address(&self, address: &Address) -> CommonResult<()> {
+	fn validate_address(&self, address: &Address) -> ModuleResult<()> {
 		let address_len: usize = self.address.length().into();
 		if address.0.len() != address_len {
-			return Err(errors::ErrorKind::InvalidAddress(format!("{}", address)).into());
+			return Err(errors::ApplicationError::InvalidAddress(format!("{}", address)).into());
 		}
 		Ok(())
 	}
@@ -392,7 +395,7 @@ impl Executor {
 		};
 
 		Dispatcher::validate_call::<Context, _>(&module, &self.util, &call)?
-			.map_err(|e| ErrorKind::Invalid(e))?;
+			.map_err(|e| ErrorKind::Application(e))?;
 
 		let witness = match witness {
 			Some((secret_key, nonce, until)) => {
@@ -448,7 +451,7 @@ impl Executor {
 
 		let module = &call.module;
 		Dispatcher::validate_call::<Context, _>(module, &self.util, &call)?
-			.map_err(|e| ErrorKind::Invalid(e))?;
+			.map_err(|e| ErrorKind::Application(e))?;
 
 		let write = Dispatcher::is_write_call::<Context, Util>(module, &call)?;
 		if write != Some(true) {

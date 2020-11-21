@@ -17,7 +17,6 @@ use std::marker::PhantomData;
 use std::rc::Rc;
 
 use codec::{Decode, Encode};
-use primitives::errors::CommonResult;
 use primitives::{codec, Address, BlockNumber, Call, DBKey, DBValue, Event, Hash};
 
 pub use crate::errors::{ModuleError, ModuleResult, OpaqueModuleResult};
@@ -65,34 +64,34 @@ pub trait Context: Clone {
 	/// Env for a call
 	fn call_env(&self) -> Rc<CallEnv>;
 	/// get meta state
-	fn meta_get(&self, key: &[u8]) -> CommonResult<Option<DBValue>>;
+	fn meta_get(&self, key: &[u8]) -> ModuleResult<Option<DBValue>>;
 	/// set meta state (only save into tx buffer)
-	fn meta_set(&self, key: &[u8], value: Option<DBValue>) -> CommonResult<()>;
+	fn meta_set(&self, key: &[u8], value: Option<DBValue>) -> ModuleResult<()>;
 	/// drain meta tx buffer
-	fn meter_drain_tx_buffer(&self) -> CommonResult<Vec<(DBKey, Option<DBValue>)>>;
+	fn meter_drain_tx_buffer(&self) -> ModuleResult<Vec<(DBKey, Option<DBValue>)>>;
 	/// append meter buffer
-	fn meter_append_buffer(&self, items: Vec<(DBKey, Option<DBValue>)>) -> CommonResult<()>;
+	fn meter_append_buffer(&self, items: Vec<(DBKey, Option<DBValue>)>) -> ModuleResult<()>;
 	/// get payload state
-	fn payload_get(&self, key: &[u8]) -> CommonResult<Option<DBValue>>;
+	fn payload_get(&self, key: &[u8]) -> ModuleResult<Option<DBValue>>;
 	/// set payload state (only save into tx buffer)
-	fn payload_set(&self, key: &[u8], value: Option<DBValue>) -> CommonResult<()>;
+	fn payload_set(&self, key: &[u8], value: Option<DBValue>) -> ModuleResult<()>;
 	/// drain payload tx buffer
-	fn payload_drain_tx_buffer(&self) -> CommonResult<Vec<(DBKey, Option<DBValue>)>>;
+	fn payload_drain_tx_buffer(&self) -> ModuleResult<Vec<(DBKey, Option<DBValue>)>>;
 	/// append payload buffer
-	fn payload_append_buffer(&self, items: Vec<(DBKey, Option<DBValue>)>) -> CommonResult<()>;
+	fn payload_append_buffer(&self, items: Vec<(DBKey, Option<DBValue>)>) -> ModuleResult<()>;
 	/// emit an event
-	fn emit_event<E: Encode>(&self, event: E) -> CommonResult<()>;
+	fn emit_event<E: Encode>(&self, event: E) -> ModuleResult<()>;
 	/// drain events
-	fn drain_events(&self) -> CommonResult<Vec<Event>>;
+	fn drain_events(&self) -> ModuleResult<Vec<Event>>;
 }
 
 pub trait Util: Clone {
 	/// compute hash
-	fn hash(&self, data: &[u8]) -> CommonResult<Hash>;
+	fn hash(&self, data: &[u8]) -> ModuleResult<Hash>;
 	/// compute address
-	fn address(&self, data: &[u8]) -> CommonResult<Address>;
+	fn address(&self, data: &[u8]) -> ModuleResult<Address>;
 	/// validate address
-	fn validate_address(&self, address: &Address) -> CommonResult<()>;
+	fn validate_address(&self, address: &Address) -> ModuleResult<()>;
 }
 
 /// Storage type for module
@@ -124,15 +123,15 @@ where
 		}
 	}
 
-	pub fn get(&self) -> CommonResult<Option<T>> {
+	pub fn get(&self) -> ModuleResult<Option<T>> {
 		context_get(&self.context, self.meta_module, &self.key)
 	}
 
-	pub fn set(&self, value: &T) -> CommonResult<()> {
+	pub fn set(&self, value: &T) -> ModuleResult<()> {
 		context_set(&self.context, self.meta_module, &self.key, value)
 	}
 
-	pub fn delete(&self) -> CommonResult<()> {
+	pub fn delete(&self) -> ModuleResult<()> {
 		context_delete(&self.context, self.meta_module, &self.key)
 	}
 }
@@ -168,19 +167,19 @@ where
 		}
 	}
 
-	pub fn get(&self, key: &K) -> CommonResult<Option<V>> {
+	pub fn get(&self, key: &K) -> ModuleResult<Option<V>> {
 		let key = codec::encode(&key)?;
 		let key = &[&self.key, SEPARATOR, &key].concat();
 		context_get(&self.context, self.meta_module, key)
 	}
 
-	pub fn set(&self, key: &K, value: &V) -> CommonResult<()> {
+	pub fn set(&self, key: &K, value: &V) -> ModuleResult<()> {
 		let key = codec::encode(&key)?;
 		let key = &[&self.key, SEPARATOR, &key].concat();
 		context_set(&self.context, self.meta_module, key, value)
 	}
 
-	pub fn delete(&self, key: &K) -> CommonResult<()> {
+	pub fn delete(&self, key: &K) -> ModuleResult<()> {
 		let key = codec::encode(&key)?;
 		let key = &[&self.key, SEPARATOR, &key].concat();
 		context_delete(&self.context, self.meta_module, key)
@@ -191,7 +190,7 @@ fn context_get<C: Context, V: Decode>(
 	context: &C,
 	meta_module: bool,
 	key: &[u8],
-) -> CommonResult<Option<V>> {
+) -> ModuleResult<Option<V>> {
 	let value = match meta_module {
 		true => context.meta_get(key),
 		false => context.payload_get(key),
@@ -213,7 +212,7 @@ fn context_set<C: Context, V: Encode>(
 	meta_module: bool,
 	key: &[u8],
 	value: &V,
-) -> CommonResult<()> {
+) -> ModuleResult<()> {
 	let value = codec::encode(value)?;
 	let value = Some(value);
 	match meta_module {
@@ -222,7 +221,7 @@ fn context_set<C: Context, V: Encode>(
 	}
 }
 
-fn context_delete<C: Context>(context: &C, meta_module: bool, key: &[u8]) -> CommonResult<()> {
+fn context_delete<C: Context>(context: &C, meta_module: bool, key: &[u8]) -> ModuleResult<()> {
 	match meta_module {
 		true => context.meta_set(key, None),
 		false => context.payload_set(key, None),

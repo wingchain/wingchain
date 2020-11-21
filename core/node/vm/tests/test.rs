@@ -378,18 +378,17 @@ impl VMContext for TestVMContext {
 		self.hash.hash(&mut out, data);
 		Ok(Hash(out))
 	}
-	fn hash_len(&self) -> VMResult<u32> {
-		let len: usize = self.hash.length().into();
-		Ok(len as u32)
-	}
 	fn address(&self, data: &[u8]) -> VMResult<Address> {
 		let mut out = vec![0u8; self.address.length().into()];
 		self.address.address(&mut out, data);
 		Ok(Address(out))
 	}
-	fn address_len(&self) -> VMResult<u32> {
-		let len: usize = self.address.length().into();
-		Ok(len as u32)
+	fn validate_address(&self, address: &Address) -> VMResult<()> {
+		let address_len: usize = self.address.length().into();
+		if address.0.len() != address_len {
+			return Err(ContractError::InvalidMethod.into());
+		}
+		Ok(())
 	}
 	fn balance_get(&self, address: &Address) -> VMResult<Balance> {
 		let balance: Option<Balance> =

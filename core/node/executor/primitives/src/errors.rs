@@ -34,11 +34,8 @@ pub enum ErrorKind {
 	#[display(fmt = "Invalid tx params: {}", _0)]
 	InvalidTxParams(String),
 
-	#[display(fmt = "Invalid address: {}", _0)]
-	InvalidAddress(String),
-
-	#[display(fmt = "Invalid: {}", _0)]
-	Invalid(String),
+	#[display(fmt = "{}", _0)]
+	Application(String),
 }
 
 impl Error for ErrorKind {}
@@ -58,7 +55,16 @@ pub enum ModuleError {
 	/// System error, should not be accepted
 	System(CommonError),
 	/// Application error, should be accepted
-	Application(String),
+	Application(ApplicationError),
+}
+
+#[derive(Debug, Display)]
+pub enum ApplicationError {
+	#[display(fmt = "Invalid address: {}", _0)]
+	InvalidAddress(String),
+
+	#[display(fmt = "{}", msg)]
+	User { msg: String },
 }
 
 impl From<CommonError> for ModuleError {
@@ -73,14 +79,29 @@ impl From<ErrorKind> for ModuleError {
 	}
 }
 
+impl From<ApplicationError> for ModuleError {
+	fn from(v: ApplicationError) -> Self {
+		ModuleError::Application(v)
+	}
+}
+
 impl From<String> for ModuleError {
 	fn from(v: String) -> Self {
-		ModuleError::Application(v)
+		ModuleError::Application(ApplicationError::User { msg: v })
 	}
 }
 
 impl From<&str> for ModuleError {
 	fn from(v: &str) -> Self {
-		ModuleError::Application(v.to_string())
+		ModuleError::Application(ApplicationError::User { msg: v.to_string() })
+	}
+}
+
+impl From<ModuleError> for CommonError {
+	fn from(error: ModuleError) -> Self {
+		match error {
+			ModuleError::System(e) => e,
+			ModuleError::Application(e) => ErrorKind::Application(e.to_string()).into(),
+		}
 	}
 }

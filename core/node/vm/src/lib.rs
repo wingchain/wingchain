@@ -112,9 +112,8 @@ pub trait VMContext {
 	fn emit_event(&self, event: Vec<u8>) -> VMResult<()>;
 	fn drain_events(&self) -> VMResult<Vec<Vec<u8>>>;
 	fn hash(&self, data: &[u8]) -> VMResult<Hash>;
-	fn hash_len(&self) -> VMResult<u32>;
 	fn address(&self, data: &[u8]) -> VMResult<Address>;
-	fn address_len(&self) -> VMResult<u32>;
+	fn validate_address(&self, address: &Address) -> VMResult<()>;
 	fn balance_get(&self, address: &Address) -> VMResult<Balance>;
 	fn balance_transfer(
 		&self,
