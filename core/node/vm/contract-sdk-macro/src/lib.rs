@@ -77,13 +77,17 @@ pub fn contract(_attr: TokenStream, item: TokenStream) -> TokenStream {
 		}
 
 		fn inner_execute_call() -> ContractResult<()> {
-			let len = import::method_len();
-			let method = vec![0u8; len as usize];
-			import::method_read(method.as_ptr() as _);
+			let share_id = 0u8 as *const u8 as u64;
 
-			let len = import::input_len();
+			import::method_read(share_id);
+			let len = import::share_len(share_id);
+			let method = vec![0u8; len as usize];
+			import::share_read(share_id, method.as_ptr() as _);
+
+			import::input_read(share_id);
+			let len = import::share_len(share_id);
 			let input = vec![0u8; len as usize];
-			import::input_read(input.as_ptr() as _);
+			import::share_read(share_id, input.as_ptr() as _);
 			let input = if input.len() == 0 { "null".as_bytes().to_vec() } else { input };
 
 			let contract = #type_name::new()?;

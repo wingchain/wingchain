@@ -20,14 +20,14 @@ extern crate contract_sdk_macro;
 
 use std::rc::Rc;
 
-use byteorder::ByteOrder;
 use serde::de::DeserializeOwned;
 use serde::export::PhantomData;
 use serde::Serialize;
+#[allow(unused_imports)]
+pub use serde_json;
 
 #[doc(hidden)]
 pub use contract_sdk_macro::*;
-
 #[allow(unused_imports)]
 pub use contract_sdk_primitives::*;
 
@@ -46,19 +46,18 @@ impl Context {
 		let number = import::env_block_number();
 		let timestamp = import::env_block_timestamp();
 
-		let tx_hash_len = import::env_tx_hash_len();
-		let tx_hash = vec![0u8; tx_hash_len as usize];
-		import::env_tx_hash_read(tx_hash.as_ptr() as _);
+		let share_id = 0u8 as *const u8 as u64;
+
+		import::env_tx_hash_read(share_id);
+		let tx_hash = share_get(share_id).expect("qed");
 		let tx_hash = Hash(tx_hash);
 
-		let contract_address_len = import::env_contract_address_len();
-		let contract_address = vec![0u8; contract_address_len as usize];
-		import::env_contract_address_read(contract_address.as_ptr() as _);
+		import::env_contract_address_read(share_id);
+		let contract_address = share_get(share_id).expect("qed");
 		let contract_address = Address(contract_address);
 
-		let sender_address_len = import::env_sender_address_len();
-		let sender_address = vec![0u8; sender_address_len as usize];
-		import::env_sender_address_read(sender_address.as_ptr() as _);
+		import::env_sender_address_read(share_id);
+		let sender_address = share_get(share_id).expect("qed");
 		let sender_address = Address(sender_address);
 
 		let pay_value = import::env_pay_value();
@@ -113,15 +112,15 @@ impl Util {
 		Ok(Util)
 	}
 	pub fn hash(&self, data: &[u8]) -> ContractResult<Hash> {
-		let hash_len = import::compute_hash_len();
-		let result = vec![0u8; hash_len as usize];
-		import::compute_hash(data.len() as _, data.as_ptr() as _, result.as_ptr() as _);
+		let share_id = 0u8 as *const u8 as u64;
+		import::util_hash(data.len() as _, data.as_ptr() as _, share_id);
+		let result = share_get(share_id).expect("qed");
 		Ok(Hash(result))
 	}
 	pub fn address(&self, data: &[u8]) -> ContractResult<Address> {
-		let address_len = import::compute_address_len();
-		let result = vec![0u8; address_len as usize];
-		import::compute_address(data.len() as _, data.as_ptr() as _, result.as_ptr() as _);
+		let share_id = 0u8 as *const u8 as u64;
+		import::util_address(data.len() as _, data.as_ptr() as _, share_id);
+		let result = share_get(share_id).expect("qed");
 		Ok(Address(result))
 	}
 }
@@ -211,18 +210,12 @@ pub struct ContractEnv {
 }
 
 fn storage_get<V: DeserializeOwned>(key: &[u8]) -> ContractResult<Option<V>> {
-	let exist_len = import::storage_exist_len(key.len() as _, key.as_ptr() as _);
-
-	let mut buffer = vec![0u8; 8];
-	byteorder::LittleEndian::write_u64(&mut buffer, exist_len);
-	let mut exist_len = [0; 2];
-	byteorder::LittleEndian::read_u32_into(&buffer, &mut exist_len);
-	let (exist, len) = (exist_len[0], exist_len[1]);
+	let share_id = 0u8 as *const u8 as u64;
+	let exist = import::storage_read(key.len() as _, key.as_ptr() as _, share_id);
 
 	let value = match exist {
 		1 => {
-			let value = vec![0u8; len as usize];
-			import::storage_read(key.len() as _, key.as_ptr() as _, value.as_ptr() as _);
+			let value = share_get(share_id).expect("qed");
 			Some(value)
 		}
 		_ => None,
@@ -250,4 +243,16 @@ fn storage_set<V: Serialize>(key: &[u8], value: &V) -> ContractResult<()> {
 fn storage_delete(key: &[u8]) -> ContractResult<()> {
 	import::storage_write(key.len() as _, key.as_ptr() as _, 0, 0, 0);
 	Ok(())
+}
+
+fn share_get(share_id: u64) -> Option<Vec<u8>> {
+	let len = import::share_len(share_id);
+	match len {
+		u64::MAX => None,
+		_ => {
+			let data = vec![0u8; len as usize];
+			import::share_read(share_id, data.as_ptr() as _);
+			Some(data)
+		}
+	}
 }

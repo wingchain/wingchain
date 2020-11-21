@@ -14,6 +14,7 @@
 
 //! Virtual machine to execute contract
 
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use wasmer_runtime::wasm::MemoryDescriptor;
@@ -34,6 +35,8 @@ pub struct VMConfig {
 	max_stack_height: u32,
 	initial_memory_pages: u32,
 	max_memory_pages: u32,
+	max_share_value_len: u64,
+	max_share_size: u64,
 }
 
 impl Default for VMConfig {
@@ -42,6 +45,8 @@ impl Default for VMConfig {
 			max_stack_height: 16 * 1024,
 			initial_memory_pages: 2u32.pow(10),
 			max_memory_pages: 2u32.pow(11),
+			max_share_value_len: 2u64.pow(20) * 100,
+			max_share_size: 1024,
 		}
 	}
 }
@@ -77,7 +82,9 @@ impl VM {
 		let memory_copy = memory.clone();
 
 		let mut state = State {
+			config: &self.config,
 			memory,
+			shares: HashMap::new(),
 			context: self.context.clone(),
 			method,
 			input,
