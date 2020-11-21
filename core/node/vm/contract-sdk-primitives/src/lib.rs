@@ -29,6 +29,12 @@ pub type Balance = u64;
 
 pub type ContractResult<T> = Result<T, ContractError>;
 
+#[derive(Serialize)]
+pub struct ContractEvent<T: Serialize> {
+	pub name: String,
+	pub data: T,
+}
+
 #[derive(Debug, Clone)]
 pub enum ContractError {
 	Serialize,

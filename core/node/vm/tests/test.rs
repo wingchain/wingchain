@@ -141,7 +141,7 @@ fn test_vm_event() {
 	let event = context.events.borrow().get(0).unwrap().clone();
 	let event = String::from_utf8(event).unwrap();
 
-	assert_eq!(event, "{\"name\":\"MyEvent\"}");
+	assert_eq!(event, "{\"name\":\"MyEvent\",\"data\":{\"foo\":\"bar\"}}");
 }
 
 #[test]

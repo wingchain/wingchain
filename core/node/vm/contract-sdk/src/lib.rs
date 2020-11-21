@@ -82,7 +82,7 @@ impl Context {
 	pub fn contract_env(&self) -> ContractResult<Rc<ContractEnv>> {
 		Ok(self.contract_env.clone())
 	}
-	pub fn emit_event<E: Serialize>(&self, event: E) -> ContractResult<()> {
+	pub fn emit_event<T: Serialize>(&self, event: ContractEvent<T>) -> ContractResult<()> {
 		let event = serde_json::to_vec(&event).map_err(|_| ContractError::Serialize)?;
 		import::event_write(event.len() as _, event.as_ptr() as _);
 		Ok(())
@@ -123,11 +123,13 @@ impl Util {
 		let result = share_get(share_id).ok_or(ContractError::ShareIllegalAccess)?;
 		Ok(Address(result))
 	}
-	pub fn validate_address(&self, data: &[u8]) -> ContractResult<()> {
+	pub fn validate_address(&self, address: &Address) -> ContractResult<()> {
+		let data = address.0.as_slice();
 		import::util_validate_address(data.len() as _, data.as_ptr() as _);
 		Ok(())
 	}
-	pub fn validate_address_ea(&self, data: &[u8]) -> ContractResult<()> {
+	pub fn validate_address_ea(&self, address: &Address) -> ContractResult<()> {
+		let data = address.0.as_slice();
 		let share_id = 0u8 as *const u8 as u64;
 		let error = import::util_validate_address_ea(data.len() as _, data.as_ptr() as _, share_id);
 		from_error_aware(error, share_id, ())

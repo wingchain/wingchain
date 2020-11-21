@@ -3,7 +3,7 @@ use wasm_bindgen::prelude::*;
 
 use sdk::{
 	call, contract, import, serde_json, Address, Balance, BlockNumber, Context, ContractError,
-	ContractResult, EmptyParams, Hash, StorageMap, StorageValue, Util,
+	ContractEvent, ContractResult, EmptyParams, Hash, StorageMap, StorageValue, Util,
 };
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
@@ -116,8 +116,11 @@ impl Contract {
 
 	#[call]
 	fn event(&self, _params: EmptyParams) -> ContractResult<()> {
-		let event = MyEvent {
+		let event = ContractEvent {
 			name: "MyEvent".to_string(),
+			data: MyEvent {
+				foo: "bar".to_string(),
+			},
 		};
 		self.context.emit_event(event)?;
 		Ok(())
@@ -151,13 +154,13 @@ impl Contract {
 
 	#[call]
 	fn validate_address(&self, params: ValidateAddressParams) -> ContractResult<()> {
-		let result = self.util.validate_address(&params.address.0)?;
+		let result = self.util.validate_address(&params.address)?;
 		Ok(result)
 	}
 
 	#[call]
 	fn validate_address_ea(&self, params: ValidateAddressParams) -> ContractResult<String> {
-		let result = self.util.validate_address_ea(&params.address.0);
+		let result = self.util.validate_address_ea(&params.address);
 		let result = match result {
 			Ok(_) => "true".to_string(),
 			Err(e) => format!("false: {}", e),
@@ -221,8 +224,8 @@ struct DeleteMapParams {
 }
 
 #[derive(Serialize)]
-struct MyEvent {
-	name: String,
+pub struct MyEvent {
+	foo: String,
 }
 
 #[derive(Deserialize)]
