@@ -173,6 +173,26 @@ fn test_vm_address() {
 }
 
 #[test]
+fn test_vm_validate_address() {
+	let context = Rc::new(init_context(0));
+	let input = r#"{"address":"aa"}"#;
+	let error = vm_execute(context.clone(), "validate_address", input).unwrap_err();
+
+	let expected_error: VMError = ContractError::InvalidAddress.into();
+
+	assert_eq!(format!("{:?}", error), format!("{:?}", expected_error));
+
+	let input = r#"{"address":"aa"}"#;
+	let result = vm_execute(context, "validate_address_ea", input).unwrap();
+	let result: String = String::from_utf8(result).unwrap();
+
+	assert_eq!(
+		result,
+		r#""false: ContractError: InvalidAddress""#.to_string()
+	);
+}
+
+#[test]
 fn test_vm_balance() {
 	let context = Rc::new(init_context(0));
 	let input = r#"{"address":"b4decd5a5f8f2ba708f8ced72eec89f44f3be96a"}"#;
@@ -386,7 +406,7 @@ impl VMContext for TestVMContext {
 	fn validate_address(&self, address: &Address) -> VMResult<()> {
 		let address_len: usize = self.address.length().into();
 		if address.0.len() != address_len {
-			return Err(ContractError::InvalidMethod.into());
+			return Err(ContractError::InvalidAddress.into());
 		}
 		Ok(())
 	}

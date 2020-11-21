@@ -49,15 +49,15 @@ impl Context {
 		let share_id = 0u8 as *const u8 as u64;
 
 		import::env_tx_hash_read(share_id);
-		let tx_hash = share_get(share_id).expect("qed");
+		let tx_hash = share_get(share_id).ok_or(ContractError::ShareIllegalAccess)?;
 		let tx_hash = Hash(tx_hash);
 
 		import::env_contract_address_read(share_id);
-		let contract_address = share_get(share_id).expect("qed");
+		let contract_address = share_get(share_id).ok_or(ContractError::ShareIllegalAccess)?;
 		let contract_address = Address(contract_address);
 
 		import::env_sender_address_read(share_id);
-		let sender_address = share_get(share_id).expect("qed");
+		let sender_address = share_get(share_id).ok_or(ContractError::ShareIllegalAccess)?;
 		let sender_address = Address(sender_address);
 
 		let pay_value = import::env_pay_value();
@@ -114,14 +114,23 @@ impl Util {
 	pub fn hash(&self, data: &[u8]) -> ContractResult<Hash> {
 		let share_id = 0u8 as *const u8 as u64;
 		import::util_hash(data.len() as _, data.as_ptr() as _, share_id);
-		let result = share_get(share_id).expect("qed");
+		let result = share_get(share_id).ok_or(ContractError::ShareIllegalAccess)?;
 		Ok(Hash(result))
 	}
 	pub fn address(&self, data: &[u8]) -> ContractResult<Address> {
 		let share_id = 0u8 as *const u8 as u64;
 		import::util_address(data.len() as _, data.as_ptr() as _, share_id);
-		let result = share_get(share_id).expect("qed");
+		let result = share_get(share_id).ok_or(ContractError::ShareIllegalAccess)?;
 		Ok(Address(result))
+	}
+	pub fn validate_address(&self, data: &[u8]) -> ContractResult<()> {
+		import::util_validate_address(data.len() as _, data.as_ptr() as _);
+		Ok(())
+	}
+	pub fn validate_address_ea(&self, data: &[u8]) -> ContractResult<()> {
+		let share_id = 0u8 as *const u8 as u64;
+		let error = import::util_validate_address_ea(data.len() as _, data.as_ptr() as _, share_id);
+		from_error_aware(error, share_id, ())
 	}
 }
 
@@ -215,7 +224,7 @@ fn storage_get<V: DeserializeOwned>(key: &[u8]) -> ContractResult<Option<V>> {
 
 	let value = match exist {
 		1 => {
-			let value = share_get(share_id).expect("qed");
+			let value = share_get(share_id).ok_or(ContractError::ShareIllegalAccess)?;
 			Some(value)
 		}
 		_ => None,
@@ -254,5 +263,16 @@ fn share_get(share_id: u64) -> Option<Vec<u8>> {
 			import::share_read(share_id, data.as_ptr() as _);
 			Some(data)
 		}
+	}
+}
+
+fn from_error_aware<T>(error: u64, share_id: u64, data: T) -> ContractResult<T> {
+	match error {
+		1 => {
+			let error = share_get(share_id).ok_or(ContractError::ShareIllegalAccess)?;
+			let error = String::from_utf8(error).map_err(|_| ContractError::BadUTF8)?;
+			Err(error.as_str().into())
+		}
+		_ => Ok(data),
 	}
 }

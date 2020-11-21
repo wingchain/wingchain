@@ -38,6 +38,8 @@ mod env {
 		pub fn event_write(len: u64, ptr: u64);
 		pub fn util_hash(data_len: u64, data_ptr: u64, share_id: u64);
 		pub fn util_address(data_len: u64, data_ptr: u64, share_id: u64);
+		pub fn util_validate_address(data_len: u64, data_ptr: u64);
+		pub fn util_validate_address_ea(data_len: u64, data_ptr: u64, error_share_id: u64) -> u64;
 		pub fn balance_read(address_len: u64, address_ptr: u64) -> u64;
 		pub fn balance_transfer(recipient_address_len: u64, recipient_address_ptr: u64, value: u64);
 		pub fn pay();
@@ -114,6 +116,14 @@ pub fn util_hash(data_len: u64, data_ptr: u64, share_id: u64) {
 
 pub fn util_address(data_len: u64, data_ptr: u64, share_id: u64) {
 	unsafe { env::util_address(data_len, data_ptr, share_id) }
+}
+
+pub fn util_validate_address(data_len: u64, data_ptr: u64) {
+	unsafe { env::util_validate_address(data_len, data_ptr) }
+}
+
+pub fn util_validate_address_ea(data_len: u64, data_ptr: u64, error_share_id: u64) -> u64 {
+	unsafe { env::util_validate_address_ea(data_len, data_ptr, error_share_id) }
 }
 
 pub fn balance_read(address_len: u64, address_ptr: u64) -> u64 {

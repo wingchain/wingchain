@@ -148,6 +148,22 @@ impl Contract {
 		let result = self.util.address(&params.data)?;
 		Ok(result)
 	}
+
+	#[call]
+	fn validate_address(&self, params: ValidateAddressParams) -> ContractResult<()> {
+		let result = self.util.validate_address(&params.address.0)?;
+		Ok(result)
+	}
+
+	#[call]
+	fn validate_address_ea(&self, params: ValidateAddressParams) -> ContractResult<String> {
+		let result = self.util.validate_address_ea(&params.address.0);
+		let result = match result {
+			Ok(_) => "true".to_string(),
+			Err(e) => format!("false: {}", e),
+		};
+		Ok(result)
+	}
 }
 
 #[derive(Deserialize)]
@@ -228,4 +244,9 @@ struct ComputeHashParams {
 #[derive(Deserialize)]
 struct ComputeAddressParams {
 	data: Vec<u8>,
+}
+
+#[derive(Deserialize)]
+struct ValidateAddressParams {
+	address: Address,
 }

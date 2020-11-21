@@ -87,6 +87,19 @@ impl<'a> State<'a> {
 		}
 		Ok(())
 	}
+
+	fn to_error_aware<T>(&mut self, result: VMResult<T>, error_share_id: u64) -> VMResult<u64> {
+		match result {
+			Ok(_) => Ok(0),
+			Err(VMError::System(e)) => Err(VMError::System(e)),
+			Err(VMError::Application(e)) => {
+				let e = e.to_string();
+				let e = e.into_bytes();
+				self.vec_to_share(error_share_id, e)?;
+				Ok(1)
+			}
+		}
+	}
 }
 
 struct StateRef(*mut c_void);
@@ -121,6 +134,8 @@ pub fn import(state: &mut State, memory: Memory) -> VMResult<ImportObject> {
 			"event_write" => func!(event_write),
 			"util_hash" => func!(util_hash),
 			"util_address" => func!(util_address),
+			"util_validate_address" => func!(util_validate_address),
+			"util_validate_address_ea" => func!(util_validate_address_ea),
 			"balance_read" => func!(balance_read),
 			"balance_transfer" => func!(balance_transfer),
 			"pay" => func!(pay),
@@ -297,6 +312,19 @@ fn util_validate_address(ctx: &mut Ctx, data_len: u64, data_ptr: u64) -> VMResul
 	let address = Address(address);
 	state.context.validate_address(&address)?;
 	Ok(())
+}
+
+fn util_validate_address_ea(
+	ctx: &mut Ctx,
+	data_len: u64,
+	data_ptr: u64,
+	error_share_id: u64,
+) -> VMResult<u64> {
+	let result = util_validate_address(ctx, data_len, data_ptr);
+
+	let state = State::from_ctx(ctx);
+
+	state.to_error_aware(result, error_share_id)
 }
 
 fn balance_read(ctx: &mut Ctx, address_len: u64, address_ptr: u64) -> VMResult<u64> {

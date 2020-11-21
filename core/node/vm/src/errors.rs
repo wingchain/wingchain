@@ -44,46 +44,65 @@ pub enum VMError {
 	Application(ApplicationError),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Display)]
 pub enum ApplicationError {
+	#[display(fmt = "PreCompileError: {}", _0)]
 	PreCompileError(PreCompileError),
+	#[display(fmt = "CompileError: {}", _0)]
 	CompileError(CompileError),
+	#[display(fmt = "LinkError: {}", msg)]
 	LinkError { msg: String },
+	#[display(fmt = "ResolveError: {}", _0)]
 	ResolveError(ResolveError),
+	#[display(fmt = "RuntimeError: {}", _0)]
 	RuntimeError(RuntimeError),
+	#[display(fmt = "ContractError: {}", _0)]
 	ContractError(ContractError),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Display)]
 pub enum PreCompileError {
+	#[display(fmt = "ValidationError: {}", msg)]
 	ValidationError { msg: String },
+	#[display(fmt = "Serialize")]
 	Serialize,
+	#[display(fmt = "Deserialize")]
 	Deserialize,
+	#[display(fmt = "InternalMemoryDeclared")]
 	InternalMemoryDeclared,
+	#[display(fmt = "StackHeightMetering")]
 	StackHeightMetering,
+	#[display(fmt = "Imports")]
 	Imports,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Display)]
 pub enum CompileError {
+	#[display(fmt = "ValidationError: {}", msg)]
 	ValidationError { msg: String },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Display)]
 pub enum ResolveError {
+	#[display(fmt = "Signature: {}", msg)]
 	Signature { msg: String },
+	#[display(fmt = "ExportNotFound: {}", name)]
 	ExportNotFound { name: String },
+	#[display(fmt = "ExportWrongType: {}", name)]
 	ExportWrongType { name: String },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Display)]
 pub enum RuntimeError {
+	#[display(fmt = "InvokeError: {}", _0)]
 	InvokeError(InvokeError),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Display)]
 pub enum InvokeError {
+	#[display(fmt = "FailedWithNoError")]
 	FailedWithNoError,
+	#[display(fmt = "Breakpoint")]
 	Breakpoint,
 }
 
