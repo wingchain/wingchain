@@ -32,7 +32,7 @@ use primitives::{Address, Hash};
 use utils_test::test_accounts;
 
 #[tokio::test]
-async fn test_contract_create() {
+async fn test_solo_contract_create() {
 	let _ = env_logger::try_init();
 
 	let dsa = Arc::new(DsaImpl::Ed25519);
@@ -139,7 +139,7 @@ async fn test_contract_create() {
 }
 
 #[tokio::test]
-async fn test_contract_update_admin() {
+async fn test_solo_contract_update_admin() {
 	let _ = env_logger::try_init();
 
 	let dsa = Arc::new(DsaImpl::Ed25519);
@@ -350,7 +350,7 @@ async fn test_contract_update_admin() {
 }
 
 #[tokio::test]
-async fn test_contract_update_code() {
+async fn test_solo_contract_update_code() {
 	let _ = env_logger::try_init();
 
 	let dsa = Arc::new(DsaImpl::Ed25519);

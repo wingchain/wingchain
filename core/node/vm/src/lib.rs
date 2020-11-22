@@ -119,6 +119,7 @@ pub trait VMContext {
 	fn payload_get(&self, key: &[u8]) -> VMResult<Option<DBValue>>;
 	fn payload_set(&self, key: &[u8], value: Option<DBValue>) -> VMResult<()>;
 	fn payload_drain_buffer(&self) -> VMResult<Vec<(DBKey, Option<DBValue>)>>;
+	fn payload_apply(&self, items: Vec<(DBKey, Option<DBValue>)>) -> VMResult<()>;
 	fn emit_event(&self, event: Vec<u8>) -> VMResult<()>;
 	fn drain_events(&self) -> VMResult<Vec<Vec<u8>>>;
 	fn hash(&self, data: &[u8]) -> VMResult<Hash>;

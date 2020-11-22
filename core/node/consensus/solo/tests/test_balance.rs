@@ -31,7 +31,7 @@ use primitives::{codec, Address, Balance, Event, Receipt};
 use utils_test::test_accounts;
 
 #[tokio::test]
-async fn test_consensus_solo() {
+async fn test_solo_balance() {
 	env_logger::init();
 
 	let dsa = Arc::new(DsaImpl::Ed25519);

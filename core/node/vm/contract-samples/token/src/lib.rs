@@ -40,8 +40,14 @@ impl Contract {
 	}
 
 	#[init]
-	fn init(&self, _params: EmptyParams) -> ContractResult<String> {
-		unimplemented!()
+	fn init(&self, params: InitParams) -> ContractResult<()> {
+		self.name.set(&params.name)?;
+		self.symbol.set(&params.symbol)?;
+		self.decimals.set(&params.decimals)?;
+		self.total_supply.set(&params.total_supply)?;
+		let sender_address = &self.context.contract_env()?.sender_address;
+		self.balance.set(&sender_address.0, &params.total_supply)?;
+		Ok(())
 	}
 
 	#[call]
@@ -190,6 +196,14 @@ impl Contract {
 
 		Ok(())
 	}
+}
+
+#[derive(Deserialize)]
+struct InitParams {
+	name: String,
+	symbol: String,
+	decimals: u8,
+	total_supply: Balance,
 }
 
 #[derive(Deserialize)]
