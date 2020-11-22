@@ -56,6 +56,11 @@ pub struct VM {
 	context: Rc<dyn VMContext>,
 }
 
+pub enum Mode {
+	Init,
+	Call,
+}
+
 impl VM {
 	pub fn new(config: VMConfig, context: Rc<dyn VMContext>) -> CommonResult<Self> {
 		let vm = VM { config, context };
@@ -64,6 +69,7 @@ impl VM {
 
 	pub fn execute(
 		&self,
+		mode: Mode,
 		code_hash: &Hash,
 		code: &[u8],
 		method: Vec<u8>,
@@ -94,7 +100,11 @@ impl VM {
 		let import_object = import::import(&mut state, memory_copy)?;
 
 		let instance = module.instantiate(&import_object)?;
-		let _result = instance.call("execute_call", &[])?;
+		let name = match mode {
+			Mode::Init => "execute_init",
+			Mode::Call => "execute_call",
+		};
+		let _result = instance.call(name, &[])?;
 
 		let output = state.output;
 		let output = output.unwrap_or(serde_json::to_vec(&()).unwrap());

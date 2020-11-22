@@ -23,16 +23,31 @@ use crypto::address::{Address as AddressT, AddressImpl};
 use crypto::dsa::DsaImpl;
 use crypto::hash::{Hash as HashT, HashImpl};
 use node_vm::errors::{ContractError, VMError, VMResult};
-use node_vm::{VMCallEnv, VMConfig, VMContext, VMContextEnv, VMContractEnv, VM};
+use node_vm::{Mode, VMCallEnv, VMConfig, VMContext, VMContextEnv, VMContractEnv, VM};
 use primitives::codec::{Decode, Encode};
 use primitives::{codec, Address, Balance, DBKey, DBValue, Hash};
 use utils_test::test_accounts;
 
 #[test]
+fn test_vm_init() {
+	let context = Rc::new(init_context(0));
+	let input = r#"{"value":"abc"}"#;
+	let result = vm_execute(context.clone(), Mode::Init, "init", input).unwrap();
+
+	let result: String = String::from_utf8(result).unwrap();
+	assert_eq!(result, r#"null"#.to_string());
+
+	let input = r#""#;
+	let result = vm_execute(context.clone(), Mode::Call, "get_value", input).unwrap();
+	let result: String = String::from_utf8(result).unwrap();
+	assert_eq!(result, r#"{"value":"abc"}"#.to_string());
+}
+
+#[test]
 fn test_vm_hello() {
 	let context = Rc::new(init_context(0));
 	let input = r#"{"name": "world"}"#;
-	let result = vm_execute(context, "hello", input).unwrap();
+	let result = vm_execute(context, Mode::Call, "hello", input).unwrap();
 
 	let result: String = String::from_utf8(result).unwrap();
 
@@ -44,7 +59,7 @@ fn test_vm_error() {
 	let context = Rc::new(init_context(0));
 
 	let input = r#""#;
-	let error = vm_execute(context, "error", input).unwrap_err();
+	let error = vm_execute(context, Mode::Call, "error", input).unwrap_err();
 
 	let expected_error: VMError = ContractError::User {
 		msg: "custom error".to_string(),
@@ -58,7 +73,7 @@ fn test_vm_error() {
 fn test_vm_get_env() {
 	let context = Rc::new(init_context(0));
 	let input = r#""#;
-	let result = vm_execute(context, "get_env", input).unwrap();
+	let result = vm_execute(context, Mode::Call, "get_env", input).unwrap();
 
 	let result: String = String::from_utf8(result).unwrap();
 
@@ -69,7 +84,7 @@ fn test_vm_get_env() {
 fn test_vm_get_call_env() {
 	let context = Rc::new(init_context(0));
 	let input = r#""#;
-	let result = vm_execute(context, "get_call_env", input).unwrap();
+	let result = vm_execute(context, Mode::Call, "get_call_env", input).unwrap();
 
 	let result: String = String::from_utf8(result).unwrap();
 
@@ -84,7 +99,7 @@ fn test_vm_get_call_env() {
 fn test_vm_get_contract_env() {
 	let context = Rc::new(init_context(10));
 	let input = r#""#;
-	let result = vm_execute(context, "get_contract_env", input).unwrap();
+	let result = vm_execute(context, Mode::Call, "get_contract_env", input).unwrap();
 
 	let result: String = String::from_utf8(result).unwrap();
 
@@ -96,17 +111,17 @@ fn test_vm_value() {
 	let context = Rc::new(init_context(0));
 
 	let input = r#""#;
-	let result = vm_execute(context.clone(), "get_value", input).unwrap();
+	let result = vm_execute(context.clone(), Mode::Call, "get_value", input).unwrap();
 	let result: String = String::from_utf8(result).unwrap();
 	assert_eq!(result, r#"{"value":null}"#.to_string());
 
 	let input = r#"{"value":"abc"}"#;
-	let result = vm_execute(context.clone(), "set_value", input).unwrap();
+	let result = vm_execute(context.clone(), Mode::Call, "set_value", input).unwrap();
 	let result: String = String::from_utf8(result).unwrap();
 	assert_eq!(result, r#"null"#.to_string());
 
 	let input = r#""#;
-	let result = vm_execute(context.clone(), "get_value", input).unwrap();
+	let result = vm_execute(context.clone(), Mode::Call, "get_value", input).unwrap();
 	let result: String = String::from_utf8(result).unwrap();
 	assert_eq!(result, r#"{"value":"abc"}"#.to_string());
 }
@@ -116,17 +131,17 @@ fn test_vm_map() {
 	let context = Rc::new(init_context(0));
 
 	let input = r#"{"key":[1,2,3]}"#;
-	let result = vm_execute(context.clone(), "get_map", input).unwrap();
+	let result = vm_execute(context.clone(), Mode::Call, "get_map", input).unwrap();
 	let result: String = String::from_utf8(result).unwrap();
 	assert_eq!(result, r#"{"value":null}"#.to_string());
 
 	let input = r#"{"key":[1,2,3],"value":"abc"}"#;
-	let result = vm_execute(context.clone(), "set_map", input).unwrap();
+	let result = vm_execute(context.clone(), Mode::Call, "set_map", input).unwrap();
 	let result: String = String::from_utf8(result).unwrap();
 	assert_eq!(result, r#"null"#.to_string());
 
 	let input = r#"{"key":[1,2,3]}"#;
-	let result = vm_execute(context.clone(), "get_map", input).unwrap();
+	let result = vm_execute(context.clone(), Mode::Call, "get_map", input).unwrap();
 	let result: String = String::from_utf8(result).unwrap();
 	assert_eq!(result, r#"{"value":"abc"}"#.to_string());
 }
@@ -136,7 +151,7 @@ fn test_vm_event() {
 	let context = Rc::new(init_context(0));
 
 	let input = r#""#;
-	let _result = vm_execute(context.clone(), "event", input).unwrap();
+	let _result = vm_execute(context.clone(), Mode::Call, "event", input).unwrap();
 
 	let event = context.events.borrow().get(0).unwrap().clone();
 	let event = String::from_utf8(event).unwrap();
@@ -148,7 +163,7 @@ fn test_vm_event() {
 fn test_vm_hash() {
 	let context = Rc::new(init_context(0));
 	let input = r#"{"data":[1]}"#;
-	let result = vm_execute(context, "hash", input).unwrap();
+	let result = vm_execute(context, Mode::Call, "hash", input).unwrap();
 
 	let result: String = String::from_utf8(result).unwrap();
 
@@ -162,7 +177,7 @@ fn test_vm_hash() {
 fn test_vm_address() {
 	let context = Rc::new(init_context(0));
 	let input = r#"{"data":[1]}"#;
-	let result = vm_execute(context, "address", input).unwrap();
+	let result = vm_execute(context, Mode::Call, "address", input).unwrap();
 
 	let result: String = String::from_utf8(result).unwrap();
 
@@ -176,14 +191,14 @@ fn test_vm_address() {
 fn test_vm_validate_address() {
 	let context = Rc::new(init_context(0));
 	let input = r#"{"address":"aa"}"#;
-	let error = vm_execute(context.clone(), "validate_address", input).unwrap_err();
+	let error = vm_execute(context.clone(), Mode::Call, "validate_address", input).unwrap_err();
 
 	let expected_error: VMError = ContractError::InvalidAddress.into();
 
 	assert_eq!(format!("{:?}", error), format!("{:?}", expected_error));
 
 	let input = r#"{"address":"aa"}"#;
-	let result = vm_execute(context, "validate_address_ea", input).unwrap();
+	let result = vm_execute(context, Mode::Call, "validate_address_ea", input).unwrap();
 	let result: String = String::from_utf8(result).unwrap();
 
 	assert_eq!(
@@ -196,7 +211,7 @@ fn test_vm_validate_address() {
 fn test_vm_balance() {
 	let context = Rc::new(init_context(0));
 	let input = r#"{"address":"b4decd5a5f8f2ba708f8ced72eec89f44f3be96a"}"#;
-	let result = vm_execute(context, "get_balance", input).unwrap();
+	let result = vm_execute(context, Mode::Call, "get_balance", input).unwrap();
 
 	let result: String = String::from_utf8(result).unwrap();
 
@@ -221,7 +236,7 @@ fn test_vm_balance_transfer() {
 		r#"{{"recipient":"{}", "value": 10}}"#,
 		hex::encode((account2.3).0.clone())
 	);
-	let _result = vm_execute(context.clone(), "balance_transfer", &input).unwrap();
+	let _result = vm_execute(context.clone(), Mode::Call, "balance_transfer", &input).unwrap();
 
 	for (k, v) in context.buffer.borrow_mut().drain() {
 		if let Some(v) = v {
@@ -290,7 +305,12 @@ fn init_context(pay_value: Balance) -> TestVMContext {
 	context
 }
 
-fn vm_execute(context: Rc<dyn VMContext>, method: &str, input: &str) -> VMResult<Vec<u8>> {
+fn vm_execute(
+	context: Rc<dyn VMContext>,
+	mode: Mode,
+	method: &str,
+	input: &str,
+) -> VMResult<Vec<u8>> {
 	let hash = Arc::new(HashImpl::Blake2b256);
 	let config = VMConfig::default();
 
@@ -306,7 +326,7 @@ fn vm_execute(context: Rc<dyn VMContext>, method: &str, input: &str) -> VMResult
 	};
 	let method = method.as_bytes().to_vec();
 	let input = input.as_bytes().to_vec();
-	let result = vm.execute(&code_hash, &code, method, input)?;
+	let result = vm.execute(mode, &code_hash, &code, method, input)?;
 	Ok(result)
 }
 

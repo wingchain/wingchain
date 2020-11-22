@@ -26,69 +26,123 @@ pub fn call(_attr: TokenStream, item: TokenStream) -> TokenStream {
 }
 
 #[proc_macro_attribute]
+pub fn init(_attr: TokenStream, item: TokenStream) -> TokenStream {
+	item
+}
+
+#[proc_macro_attribute]
 pub fn contract(_attr: TokenStream, item: TokenStream) -> TokenStream {
 	let item_copy = item.clone();
 	let impl_item = parse_macro_input!(item_copy as ItemImpl);
 
 	let type_name = get_module_ident(&impl_item);
 
-	let methods = get_module_call_methods(&impl_item);
+	let init_methods = get_module_init_methods(&impl_item);
+	let call_methods = get_module_call_methods(&impl_item);
 
-	let execute_call_ts_vec = methods
-		.iter()
-		.map(|x| {
-			let method_ident = &x.method_ident;
-			let is_payable = x.payable;
-			quote! {
-				stringify!(#method_ident) => {
+	let get_ts_vec = |methods: Vec<ModuleMethod>| {
+		methods
+			.iter()
+			.map(|x| {
+				let method_ident = &x.method_ident;
+				let is_payable = x.payable;
+				quote! {
+					stringify!(#method_ident) => {
 
-					let contract_env = self.context.contract_env()?;
-					let pay_value = contract_env.pay_value;
-					if pay_value > 0 {
-						if #is_payable {
-							import::pay();
-						} else{
-							return Err(ContractError::NotPayable);
+						let contract_env = self.context.contract_env()?;
+						let pay_value = contract_env.pay_value;
+						if pay_value > 0 {
+							if #is_payable {
+								import::pay();
+							} else{
+								return Err(ContractError::NotPayable);
+							}
 						}
-					}
 
-					let params = serde_json::from_slice(&params).map_err(|_|ContractError::Deserialize)?;
-					let result = self.#method_ident(params)?;
-					let result = serde_json::to_vec(&result).map_err(|_|ContractError::Serialize)?;
-					Ok(result)
+						let params = serde_json::from_slice(&params).map_err(|_|ContractError::Deserialize)?;
+						let result = self.#method_ident(params)?;
+						let result = serde_json::to_vec(&result).map_err(|_|ContractError::Serialize)?;
+						Ok(result)
+					},
 				}
-			}
-		})
-		.collect::<Vec<_>>();
+			})
+			.collect::<Vec<_>>()
+	};
+
+	let execute_init_ts_vec = get_ts_vec(init_methods);
+	let execute_call_ts_vec = get_ts_vec(call_methods);
 
 	let gen = quote! {
 
 		#impl_item
 
 		impl #type_name {
+
+			fn execute_init(&self, method: Vec<u8>, params: Vec<u8>) -> ContractResult<Vec<u8>> {
+				let method = String::from_utf8(method).map_err(|_|ContractError::Deserialize)?;
+				let method = method.as_str();
+				match method {
+					#(#execute_init_ts_vec)*
+					other => Err(ContractError::InvalidMethod),
+				}
+			}
+
 			fn execute_call(&self, method: Vec<u8>, params: Vec<u8>) -> ContractResult<Vec<u8>> {
 				let method = String::from_utf8(method).map_err(|_|ContractError::Deserialize)?;
 				let method = method.as_str();
 				match method {
-					#(#execute_call_ts_vec),*,
+					#(#execute_call_ts_vec)*
 					other => Err(ContractError::InvalidMethod),
 				}
 			}
 		}
 
-		fn inner_execute_call() -> ContractResult<()> {
+		fn get_method() -> ContractResult<Vec<u8>> {
 			let share_id = 0u8 as *const u8 as u64;
-
 			import::method_read(share_id);
 			let len = import::share_len(share_id);
 			let method = vec![0u8; len as usize];
 			import::share_read(share_id, method.as_ptr() as _);
 
+			Ok(method)
+		}
+
+		fn get_input() -> ContractResult<Vec<u8>> {
+			let share_id = 0u8 as *const u8 as u64;
 			import::input_read(share_id);
 			let len = import::share_len(share_id);
 			let input = vec![0u8; len as usize];
 			import::share_read(share_id, input.as_ptr() as _);
 			let input = if input.len() == 0 { "null".as_bytes().to_vec() } else { input };
+
+			Ok(input)
+		}
+
+		fn output_result(result: ContractResult<()>) {
+			match result {
+				Ok(_) => (),
+				Err(e) => {
+					let error = e.to_string().into_bytes();
+					import::error_return(error.len() as _, error.as_ptr() as _);
+				}
+			}
+		}
+
+		fn inner_execute_init() -> ContractResult<()> {
+			let method = get_method()?;
+			let input = get_input()?;
+
+			let contract = #type_name::new()?;
+			let output = contract.execute_init(method, input)?;
+			import::output_write(output.len() as _, output.as_ptr() as _);
+
+			Ok(())
+		}
+
+		fn inner_execute_call() -> ContractResult<()> {
+
+			let method = get_method()?;
+			let input = get_input()?;
 
 			let contract = #type_name::new()?;
 			let output = contract.execute_call(method, input)?;
@@ -98,15 +152,15 @@ pub fn contract(_attr: TokenStream, item: TokenStream) -> TokenStream {
 		}
 
 		#[wasm_bindgen]
+		pub fn execute_init() {
+			let result = inner_execute_init();
+			output_result(result);
+		}
+
+		#[wasm_bindgen]
 		pub fn execute_call() {
 			let result = inner_execute_call();
-			match result {
-				Ok(result) => (),
-				Err(e) => {
-					let error = e.to_string().into_bytes();
-					import::error_return(error.len() as _, error.as_ptr() as _);
-				}
-			}
+			output_result(result);
 		}
 	};
 	gen.into()
@@ -119,8 +173,16 @@ fn get_module_ident(impl_item: &ItemImpl) -> Ident {
 	}
 }
 
+fn get_module_init_methods(impl_item: &ItemImpl) -> Vec<ModuleMethod> {
+	get_module_methods_by_name(impl_item, "init")
+}
+
 fn get_module_call_methods(impl_item: &ItemImpl) -> Vec<ModuleMethod> {
-	let call_methods = impl_item
+	get_module_methods_by_name(impl_item, "call")
+}
+
+fn get_module_methods_by_name(impl_item: &ItemImpl, name: &str) -> Vec<ModuleMethod> {
+	let methods = impl_item
 		.items
 		.iter()
 		.filter_map(|item| {
@@ -129,7 +191,7 @@ fn get_module_call_methods(impl_item: &ItemImpl) -> Vec<ModuleMethod> {
 					let meta = attr.parse_meta().unwrap();
 					match meta {
 						Meta::Path(word) => {
-							if word.segments[0].ident == "call" {
+							if word.segments[0].ident == name {
 								Some(ModuleMethod {
 									payable: false,
 									method_ident: method.sig.ident.clone(),
@@ -141,14 +203,14 @@ fn get_module_call_methods(impl_item: &ItemImpl) -> Vec<ModuleMethod> {
 							}
 						}
 						Meta::List(list) => {
-							if list.path.segments[0].ident == "call" {
+							if list.path.segments[0].ident == name {
 								let payable = list.nested.iter().find_map(|nm| match nm {
 									NestedMeta::Meta(Meta::NameValue(nv))
 										if nv.path.segments[0].ident == "payable" =>
 									{
 										match &nv.lit {
 											syn::Lit::Bool(value) => Some(value.value),
-											_ => panic!("write should have a bool value"),
+											_ => panic!("payable should have a bool value"),
 										}
 									}
 									_ => None,
@@ -174,7 +236,7 @@ fn get_module_call_methods(impl_item: &ItemImpl) -> Vec<ModuleMethod> {
 		})
 		.collect::<Vec<_>>();
 
-	call_methods
+	methods
 }
 
 fn get_method_params_ident(method: &ImplItemMethod) -> Ident {

@@ -2,8 +2,9 @@ use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
 use sdk::{
-	call, contract, import, serde_json, Address, Balance, BlockNumber, Context, ContractError,
-	ContractEvent, ContractResult, EmptyParams, Hash, StorageMap, StorageValue, Util,
+	call, contract, import, init, serde_json, Address, Balance, BlockNumber, Context,
+	ContractError, ContractEvent, ContractResult, EmptyParams, Hash, StorageMap, StorageValue,
+	Util,
 };
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
@@ -29,6 +30,12 @@ impl Contract {
 			map: StorageMap::new(b"map"),
 		};
 		Ok(contract)
+	}
+
+	#[init]
+	fn init(&self, params: DeployParams) -> ContractResult<()> {
+		self.value.set(&params.value)?;
+		Ok(())
 	}
 
 	#[call]
@@ -167,6 +174,11 @@ impl Contract {
 		};
 		Ok(result)
 	}
+}
+
+#[derive(Deserialize)]
+struct DeployParams {
+	pub value: String,
 }
 
 #[derive(Deserialize)]
