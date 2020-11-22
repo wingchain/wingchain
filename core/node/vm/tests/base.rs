@@ -18,62 +18,20 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use crypto::address::{Address as AddressT, AddressImpl};
-use crypto::dsa::DsaImpl;
+use crypto::dsa::{DsaImpl, KeyPairImpl};
 use crypto::hash::{Hash as HashT, HashImpl};
 use node_vm::errors::{ContractError, VMResult};
 use node_vm::{Mode, VMCallEnv, VMConfig, VMContext, VMContextEnv, VMContractEnv, VM};
 use primitives::codec::{Decode, Encode};
-use primitives::{codec, Address, Balance, DBKey, DBValue, Hash};
-use utils_test::test_accounts;
+use primitives::{codec, Address, Balance, DBKey, DBValue, Hash, PublicKey, SecretKey};
 
-pub fn init_context(pay_value: Balance) -> TestVMContext {
-	let hash = Arc::new(HashImpl::Blake2b256);
+pub fn test_accounts() -> (
+	(SecretKey, PublicKey, KeyPairImpl, Address),
+	(SecretKey, PublicKey, KeyPairImpl, Address),
+) {
 	let address = Arc::new(AddressImpl::Blake2b160);
 	let dsa = Arc::new(DsaImpl::Ed25519);
-	let payload = vec![(vec![1u8], vec![2u8])]
-		.into_iter()
-		.collect::<HashMap<_, _>>();
-	let tx_hash = {
-		let mut out = vec![0u8; hash.length().into()];
-		hash.hash(&mut out, &vec![1]);
-		Hash(out)
-	};
-	let contract_address = {
-		let mut out = vec![0u8; address.length().into()];
-		address.address(&mut out, &vec![1]);
-		Address(out)
-	};
-	let (account1, _account2) = test_accounts(dsa, address.clone());
-	let sender_address = account1.3;
-	let context = TestVMContext {
-		env: Rc::new(VMContextEnv {
-			number: 10,
-			timestamp: 12345,
-		}),
-		call_env: Rc::new(VMCallEnv { tx_hash }),
-		contract_env: Rc::new(VMContractEnv {
-			contract_address,
-			sender_address: sender_address.clone(),
-			pay_value,
-		}),
-		payload: RefCell::new(payload),
-		buffer: RefCell::new(HashMap::new()),
-		events: RefCell::new(Vec::new()),
-		hash: hash.clone(),
-		address: address.clone(),
-	};
-
-	let balance: Balance = 1000;
-	context
-		.payload_storage_map_set(b"balance", b"balance", &sender_address, &balance)
-		.unwrap();
-	for (k, v) in context.buffer.borrow_mut().drain() {
-		if let Some(v) = v {
-			context.payload.borrow_mut().insert(k.to_vec(), v);
-		}
-	}
-
-	context
+	utils_test::test_accounts(dsa, address)
 }
 
 pub fn vm_execute(
@@ -100,21 +58,43 @@ pub fn vm_execute(
 	Ok(result)
 }
 
-#[derive(Clone)]
-pub struct TestVMContext {
-	env: Rc<VMContextEnv>,
-	call_env: Rc<VMCallEnv>,
-	contract_env: Rc<VMContractEnv>,
-	payload: RefCell<HashMap<Vec<u8>, DBValue>>,
-	buffer: RefCell<HashMap<DBKey, Option<DBValue>>>,
-	events: RefCell<Vec<Vec<u8>>>,
-	hash: Arc<HashImpl>,
-	address: Arc<AddressImpl>,
-}
-
 const SEPARATOR: &[u8] = b"_";
 
-impl TestVMContext {
+pub struct TestStorage {
+	payload: HashMap<DBKey, DBValue>,
+}
+
+impl TestStorage {
+	pub fn new() -> Self {
+		TestStorage {
+			payload: HashMap::new(),
+		}
+	}
+
+	#[allow(dead_code)]
+	pub fn mint(&mut self, items: Vec<(Address, Balance)>) -> VMResult<()> {
+		for (address, balance) in items {
+			self.payload_storage_map_set(b"balance", b"balance", &address, &balance)?;
+		}
+		Ok(())
+	}
+
+	fn payload_get(&self, key: &[u8]) -> VMResult<Option<DBValue>> {
+		Ok(self.payload.get(&DBKey::from_slice(key)).cloned())
+	}
+
+	fn payload_set(&mut self, key: &[u8], value: Option<DBValue>) -> VMResult<()> {
+		match value {
+			Some(value) => {
+				self.payload.insert(DBKey::from_slice(key), value);
+			}
+			None => {
+				self.payload.remove(&DBKey::from_slice(key));
+			}
+		}
+		Ok(())
+	}
+
 	fn payload_storage_map_get<K: Encode, V: Decode>(
 		&self,
 		module_name: &[u8],
@@ -135,7 +115,7 @@ impl TestVMContext {
 		value
 	}
 	fn payload_storage_map_set<K: Encode, V: Encode>(
-		&self,
+		&mut self,
 		module_name: &[u8],
 		storage_name: &[u8],
 		key: &K,
@@ -147,6 +127,59 @@ impl TestVMContext {
 		let value = codec::encode(value)?;
 		self.payload_set(key, Some(value))?;
 		Ok(())
+	}
+}
+
+#[derive(Clone)]
+pub struct TestVMContext {
+	env: Rc<VMContextEnv>,
+	call_env: Rc<VMCallEnv>,
+	contract_env: Rc<VMContractEnv>,
+	storage: Rc<RefCell<TestStorage>>,
+	buffer: Rc<RefCell<HashMap<DBKey, Option<DBValue>>>>,
+	events: Rc<RefCell<Vec<Vec<u8>>>>,
+	hash: Arc<HashImpl>,
+	address: Arc<AddressImpl>,
+}
+
+impl TestVMContext {
+	pub fn new(
+		sender_address: Address,
+		pay_value: Balance,
+		storage: Rc<RefCell<TestStorage>>,
+	) -> Self {
+		let hash = Arc::new(HashImpl::Blake2b256);
+		let address = Arc::new(AddressImpl::Blake2b160);
+
+		let tx_hash = {
+			let mut out = vec![0u8; hash.length().into()];
+			hash.hash(&mut out, &vec![1]);
+			Hash(out)
+		};
+		let contract_address = {
+			let mut out = vec![0u8; address.length().into()];
+			address.address(&mut out, &vec![1]);
+			Address(out)
+		};
+		let context = TestVMContext {
+			env: Rc::new(VMContextEnv {
+				number: 10,
+				timestamp: 12345,
+			}),
+			call_env: Rc::new(VMCallEnv { tx_hash }),
+			contract_env: Rc::new(VMContractEnv {
+				contract_address,
+				sender_address,
+				pay_value,
+			}),
+			storage,
+			buffer: Rc::new(RefCell::new(HashMap::new())),
+			events: Rc::new(RefCell::new(Vec::new())),
+			hash: hash.clone(),
+			address: address.clone(),
+		};
+
+		context
 	}
 }
 
@@ -164,7 +197,7 @@ impl VMContext for TestVMContext {
 		if let Some(value) = self.buffer.borrow().get(&DBKey::from_slice(key)) {
 			return Ok(value.clone());
 		}
-		Ok(self.payload.borrow().get(key).cloned())
+		self.storage.borrow().payload_get(key)
 	}
 	fn payload_set(&self, key: &[u8], value: Option<DBValue>) -> VMResult<()> {
 		let mut buffer = self.buffer.borrow_mut();
@@ -176,13 +209,10 @@ impl VMContext for TestVMContext {
 		Ok(buffer)
 	}
 	fn payload_apply(&self, items: Vec<(DBKey, Option<DBValue>)>) -> VMResult<()> {
-		let mut payload = self.payload.borrow_mut();
+		let mut storage = self.storage.borrow_mut();
 
 		for (k, v) in items {
-			match v {
-				Some(v) => payload.insert(k.to_vec(), v),
-				None => payload.remove(k.as_slice()),
-			};
+			storage.payload_set(k.as_slice(), v)?;
 		}
 		Ok(())
 	}
@@ -212,8 +242,10 @@ impl VMContext for TestVMContext {
 		Ok(())
 	}
 	fn balance_get(&self, address: &Address) -> VMResult<Balance> {
-		let balance: Option<Balance> =
-			self.payload_storage_map_get(b"balance", b"balance", address)?;
+		let balance: Option<Balance> = self
+			.storage
+			.borrow()
+			.payload_storage_map_get(b"balance", b"balance", address)?;
 		let balance = balance.unwrap_or(0);
 		Ok(balance)
 	}
@@ -233,8 +265,18 @@ impl VMContext for TestVMContext {
 		sender_balance -= value;
 		recipient_balance += value;
 
-		self.payload_storage_map_set(b"balance", b"balance", sender, &sender_balance)?;
-		self.payload_storage_map_set(b"balance", b"balance", recipient, &recipient_balance)?;
+		self.storage.borrow_mut().payload_storage_map_set(
+			b"balance",
+			b"balance",
+			sender,
+			&sender_balance,
+		)?;
+		self.storage.borrow_mut().payload_storage_map_set(
+			b"balance",
+			b"balance",
+			recipient,
+			&recipient_balance,
+		)?;
 		Ok(())
 	}
 }
