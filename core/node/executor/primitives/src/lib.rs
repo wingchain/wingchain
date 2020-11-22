@@ -69,16 +69,16 @@ pub trait Context: Clone {
 	fn meta_set(&self, key: &[u8], value: Option<DBValue>) -> ModuleResult<()>;
 	/// drain meta tx buffer
 	fn meter_drain_tx_buffer(&self) -> ModuleResult<Vec<(DBKey, Option<DBValue>)>>;
-	/// append meter buffer
-	fn meter_append_buffer(&self, items: Vec<(DBKey, Option<DBValue>)>) -> ModuleResult<()>;
+	/// apply meter
+	fn meter_apply(&self, items: Vec<(DBKey, Option<DBValue>)>) -> ModuleResult<()>;
 	/// get payload state
 	fn payload_get(&self, key: &[u8]) -> ModuleResult<Option<DBValue>>;
 	/// set payload state (only save into tx buffer)
 	fn payload_set(&self, key: &[u8], value: Option<DBValue>) -> ModuleResult<()>;
 	/// drain payload tx buffer
 	fn payload_drain_tx_buffer(&self) -> ModuleResult<Vec<(DBKey, Option<DBValue>)>>;
-	/// append payload buffer
-	fn payload_append_buffer(&self, items: Vec<(DBKey, Option<DBValue>)>) -> ModuleResult<()>;
+	/// apply payload
+	fn payload_apply(&self, items: Vec<(DBKey, Option<DBValue>)>) -> ModuleResult<()>;
 	/// emit an event
 	fn emit_event<E: Encode>(&self, event: E) -> ModuleResult<()>;
 	/// drain events

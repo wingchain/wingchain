@@ -163,7 +163,7 @@ impl<'a> ContextT for Context<'a> {
 			.collect();
 		Ok(tx_buffer)
 	}
-	fn meter_append_buffer(&self, items: Vec<(DBKey, Option<DBValue>)>) -> ModuleResult<()> {
+	fn meter_apply(&self, items: Vec<(DBKey, Option<DBValue>)>) -> ModuleResult<()> {
 		let mut buffer = self.inner.meta_state.buffer.borrow_mut();
 		buffer.extend(items);
 		Ok(())
@@ -195,7 +195,7 @@ impl<'a> ContextT for Context<'a> {
 			.collect();
 		Ok(tx_buffer)
 	}
-	fn payload_append_buffer(&self, items: Vec<(DBKey, Option<DBValue>)>) -> ModuleResult<()> {
+	fn payload_apply(&self, items: Vec<(DBKey, Option<DBValue>)>) -> ModuleResult<()> {
 		let mut buffer = self.inner.payload_state.buffer.borrow_mut();
 		buffer.extend(items);
 		Ok(())
@@ -538,8 +538,8 @@ impl Executor {
 
 			let (result, events) = match result {
 				Ok(result) => {
-					context.meter_append_buffer(context.meter_drain_tx_buffer()?)?;
-					context.payload_append_buffer(context.payload_drain_tx_buffer()?)?;
+					context.meter_apply(context.meter_drain_tx_buffer()?)?;
+					context.payload_apply(context.payload_drain_tx_buffer()?)?;
 					let events = context.drain_events()?;
 					(Ok(result), events)
 				}
