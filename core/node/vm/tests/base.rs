@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -60,94 +60,140 @@ pub fn vm_execute(
 
 const SEPARATOR: &[u8] = b"_";
 
-pub struct TestStorage {
-	payload: HashMap<DBKey, DBValue>,
+pub trait ExecutorContext: Clone {
+	fn payload_get(&self, key: &[u8]) -> VMResult<Option<DBValue>>;
+	fn payload_set(&self, key: &[u8], value: Option<DBValue>) -> VMResult<()>;
+	fn payload_drain_tx_buffer(&self) -> VMResult<Vec<(DBKey, Option<DBValue>)>>;
+	fn payload_apply(&self, items: Vec<(DBKey, Option<DBValue>)>) -> VMResult<()>;
 }
 
-impl TestStorage {
+#[derive(Clone)]
+pub struct TestExecutorContext {
+	payload: Rc<RefCell<HashMap<DBKey, DBValue>>>,
+}
+
+impl TestExecutorContext {
 	pub fn new() -> Self {
-		TestStorage {
-			payload: HashMap::new(),
+		TestExecutorContext {
+			payload: Rc::new(RefCell::new(HashMap::new())),
 		}
 	}
+}
 
-	#[allow(dead_code)]
-	pub fn mint(&mut self, items: Vec<(Address, Balance)>) -> VMResult<()> {
-		for (address, balance) in items {
-			self.payload_storage_map_set(b"balance", b"balance", &address, &balance)?;
-		}
-		Ok(())
-	}
-
+impl ExecutorContext for TestExecutorContext {
 	fn payload_get(&self, key: &[u8]) -> VMResult<Option<DBValue>> {
-		Ok(self.payload.get(&DBKey::from_slice(key)).cloned())
+		Ok(self.payload.borrow().get(&DBKey::from_slice(key)).cloned())
 	}
 
-	fn payload_set(&mut self, key: &[u8], value: Option<DBValue>) -> VMResult<()> {
+	fn payload_set(&self, key: &[u8], value: Option<DBValue>) -> VMResult<()> {
 		match value {
 			Some(value) => {
-				self.payload.insert(DBKey::from_slice(key), value);
+				self.payload
+					.borrow_mut()
+					.insert(DBKey::from_slice(key), value);
 			}
 			None => {
-				self.payload.remove(&DBKey::from_slice(key));
+				self.payload.borrow_mut().remove(&DBKey::from_slice(key));
 			}
 		}
 		Ok(())
 	}
 
-	fn payload_storage_map_get<K: Encode, V: Decode>(
-		&self,
-		module_name: &[u8],
-		storage_name: &[u8],
-		key: &K,
-	) -> VMResult<Option<V>> {
-		let key = codec::encode(key)?;
-		let key = &[module_name, SEPARATOR, storage_name, SEPARATOR, &key].concat();
-		let value = self.payload_get(key)?;
-		let value = match value {
-			Some(value) => {
-				let value = codec::decode(&value[..])?;
-				Ok(Some(value))
-			}
-			None => Ok(None),
-		};
-
-		value
+	fn payload_drain_tx_buffer(&self) -> VMResult<Vec<(DBKey, Option<DBValue>)>> {
+		unreachable!()
 	}
-	fn payload_storage_map_set<K: Encode, V: Encode>(
-		&mut self,
-		module_name: &[u8],
-		storage_name: &[u8],
-		key: &K,
-		value: &V,
-	) -> VMResult<()> {
-		let key = codec::encode(key)?;
-		let key = &[module_name, SEPARATOR, storage_name, SEPARATOR, &key].concat();
-
-		let value = codec::encode(value)?;
-		self.payload_set(key, Some(value))?;
-		Ok(())
+	fn payload_apply(&self, _items: Vec<(DBKey, Option<DBValue>)>) -> VMResult<()> {
+		unreachable!()
 	}
 }
 
 #[derive(Clone)]
-pub struct TestVMContext {
+struct StackedExecutorContext<EC: ExecutorContext> {
+	executor_context: EC,
+	buffers: Rc<VecDeque<Rc<RefCell<HashMap<DBKey, Option<DBValue>>>>>>,
+}
+
+impl<EC: ExecutorContext> StackedExecutorContext<EC> {
+	fn new(executor_context: EC) -> Self {
+		StackedExecutorContext {
+			executor_context,
+			buffers: {
+				let mut buffers = VecDeque::new();
+				buffers.push_back(Rc::new(RefCell::new(HashMap::new())));
+				Rc::new(buffers)
+			},
+		}
+	}
+	fn derive(&self) -> Self {
+		let executor_context = self.executor_context.clone();
+		let mut buffers = (*self.buffers).clone();
+		buffers.push_back(Rc::new(RefCell::new(HashMap::new())));
+		let buffers = Rc::new(buffers);
+		StackedExecutorContext {
+			executor_context,
+			buffers,
+		}
+	}
+}
+
+impl<EC: ExecutorContext> ExecutorContext for StackedExecutorContext<EC> {
+	fn payload_get(&self, key: &[u8]) -> VMResult<Option<DBValue>> {
+		for buffer in self.buffers.iter().rev() {
+			if let Some(value) = buffer.borrow().get(&DBKey::from_slice(key)) {
+				return Ok(value.clone());
+			}
+		}
+		self.executor_context.payload_get(key)
+	}
+	fn payload_set(&self, key: &[u8], value: Option<DBValue>) -> VMResult<()> {
+		let buffer = self
+			.buffers
+			.back()
+			.expect("StackedExecutorContext should have at least 1 buffer");
+		buffer.borrow_mut().insert(DBKey::from_slice(key), value);
+		Ok(())
+	}
+	fn payload_drain_tx_buffer(&self) -> VMResult<Vec<(DBKey, Option<DBValue>)>> {
+		let buffer = self
+			.buffers
+			.back()
+			.expect("StackedExecutorContext should have at least 1 buffer");
+		let buffer = buffer.borrow_mut().drain().collect();
+		Ok(buffer)
+	}
+	fn payload_apply(&self, items: Vec<(DBKey, Option<DBValue>)>) -> VMResult<()> {
+		let second_last = if self.buffers.len() >= 2 {
+			self.buffers.get(self.buffers.len() - 2)
+		} else {
+			None
+		};
+
+		match second_last {
+			Some(second_last) => second_last.borrow_mut().extend(items),
+			None => {
+				let executor_context = &self.executor_context;
+				for (k, v) in items {
+					executor_context.payload_set(k.as_slice(), v)?;
+				}
+			}
+		}
+		Ok(())
+	}
+}
+
+pub struct TestVMContext<EC: ExecutorContext> {
 	env: Rc<VMContextEnv>,
 	call_env: Rc<VMCallEnv>,
 	contract_env: Rc<VMContractEnv>,
-	storage: Rc<RefCell<TestStorage>>,
-	buffer: Rc<RefCell<HashMap<DBKey, Option<DBValue>>>>,
-	events: Rc<RefCell<Vec<Vec<u8>>>>,
+	base_context: StackedExecutorContext<EC>,
+	events: RefCell<Vec<Vec<u8>>>,
 	hash: Arc<HashImpl>,
 	address: Arc<AddressImpl>,
+	module_context: StackedExecutorContext<EC>,
 }
 
-impl TestVMContext {
-	pub fn new(
-		sender_address: Address,
-		pay_value: Balance,
-		storage: Rc<RefCell<TestStorage>>,
-	) -> Self {
+impl<EC: ExecutorContext> TestVMContext<EC> {
+	pub fn new(sender_address: Address, pay_value: Balance, executor_context: EC) -> Self {
 		let hash = Arc::new(HashImpl::Blake2b256);
 		let address = Arc::new(AddressImpl::Blake2b160);
 
@@ -161,6 +207,8 @@ impl TestVMContext {
 			address.address(&mut out, &vec![1]);
 			Address(out)
 		};
+		let base_context = StackedExecutorContext::new(executor_context);
+		let module_context = base_context.derive();
 		let context = TestVMContext {
 			env: Rc::new(VMContextEnv {
 				number: 10,
@@ -172,18 +220,18 @@ impl TestVMContext {
 				sender_address,
 				pay_value,
 			}),
-			storage,
-			buffer: Rc::new(RefCell::new(HashMap::new())),
-			events: Rc::new(RefCell::new(Vec::new())),
+			base_context,
+			events: RefCell::new(Vec::new()),
 			hash: hash.clone(),
 			address: address.clone(),
+			module_context,
 		};
 
 		context
 	}
 }
 
-impl VMContext for TestVMContext {
+impl<EC: ExecutorContext> VMContext for TestVMContext<EC> {
 	fn env(&self) -> Rc<VMContextEnv> {
 		self.env.clone()
 	}
@@ -194,27 +242,16 @@ impl VMContext for TestVMContext {
 		self.contract_env.clone()
 	}
 	fn payload_get(&self, key: &[u8]) -> VMResult<Option<DBValue>> {
-		if let Some(value) = self.buffer.borrow().get(&DBKey::from_slice(key)) {
-			return Ok(value.clone());
-		}
-		self.storage.borrow().payload_get(key)
+		self.base_context.payload_get(key)
 	}
 	fn payload_set(&self, key: &[u8], value: Option<DBValue>) -> VMResult<()> {
-		let mut buffer = self.buffer.borrow_mut();
-		buffer.insert(DBKey::from_slice(key), value);
-		Ok(())
+		self.base_context.payload_set(key, value)
 	}
 	fn payload_drain_buffer(&self) -> VMResult<Vec<(DBKey, Option<DBValue>)>> {
-		let buffer = self.buffer.borrow_mut().drain().collect();
-		Ok(buffer)
+		self.base_context.payload_drain_tx_buffer()
 	}
 	fn payload_apply(&self, items: Vec<(DBKey, Option<DBValue>)>) -> VMResult<()> {
-		let mut storage = self.storage.borrow_mut();
-
-		for (k, v) in items {
-			storage.payload_set(k.as_slice(), v)?;
-		}
-		Ok(())
+		self.base_context.payload_apply(items)
 	}
 	fn emit_event(&self, event: Vec<u8>) -> VMResult<()> {
 		self.events.borrow_mut().push(event);
@@ -241,22 +278,20 @@ impl VMContext for TestVMContext {
 		}
 		Ok(())
 	}
-	fn balance_get(&self, address: &Address) -> VMResult<Balance> {
-		let balance: Option<Balance> = self
-			.storage
-			.borrow()
-			.payload_storage_map_get(b"balance", b"balance", address)?;
+	fn module_balance_get(&self, address: &Address) -> VMResult<Balance> {
+		let balance: Option<Balance> =
+			storage_map_get(self.module_context.clone(), b"balance", b"balance", address)?;
 		let balance = balance.unwrap_or(0);
 		Ok(balance)
 	}
-	fn balance_transfer(
+	fn module_balance_transfer(
 		&self,
 		sender: &Address,
 		recipient: &Address,
 		value: Balance,
 	) -> VMResult<()> {
-		let mut sender_balance = self.balance_get(sender)?;
-		let mut recipient_balance = self.balance_get(recipient)?;
+		let mut sender_balance = self.module_balance_get(sender)?;
+		let mut recipient_balance = self.module_balance_get(recipient)?;
 
 		if sender_balance < value {
 			return Err(ContractError::Transfer.into());
@@ -265,13 +300,15 @@ impl VMContext for TestVMContext {
 		sender_balance -= value;
 		recipient_balance += value;
 
-		self.storage.borrow_mut().payload_storage_map_set(
+		storage_map_set(
+			self.module_context.clone(),
 			b"balance",
 			b"balance",
 			sender,
 			&sender_balance,
 		)?;
-		self.storage.borrow_mut().payload_storage_map_set(
+		storage_map_set(
+			self.module_context.clone(),
 			b"balance",
 			b"balance",
 			recipient,
@@ -279,4 +316,63 @@ impl VMContext for TestVMContext {
 		)?;
 		Ok(())
 	}
+
+	fn module_payload_drain_buffer(&self) -> VMResult<Vec<(DBKey, Option<DBValue>)>> {
+		self.module_context.payload_drain_tx_buffer()
+	}
+	fn module_payload_apply(&self, items: Vec<(DBKey, Option<DBValue>)>) -> VMResult<()> {
+		self.module_context.payload_apply(items)
+	}
+}
+
+#[allow(dead_code)]
+pub fn storage_mint<EC: ExecutorContext>(
+	executor_context: EC,
+	items: Vec<(Address, Balance)>,
+) -> VMResult<()> {
+	for (address, balance) in items {
+		storage_map_set(
+			executor_context.clone(),
+			b"balance",
+			b"balance",
+			&address,
+			&balance,
+		)?;
+	}
+	Ok(())
+}
+
+fn storage_map_get<K: Encode, V: Decode, EC: ExecutorContext>(
+	executor_context: EC,
+	module_name: &[u8],
+	storage_name: &[u8],
+	key: &K,
+) -> VMResult<Option<V>> {
+	let key = codec::encode(key)?;
+	let key = &[module_name, SEPARATOR, storage_name, SEPARATOR, &key].concat();
+	let value = executor_context.payload_get(key)?;
+	let value = match value {
+		Some(value) => {
+			let value = codec::decode(&value[..])?;
+			Ok(Some(value))
+		}
+		None => Ok(None),
+	};
+
+	value
+}
+
+fn storage_map_set<K: Encode, V: Encode, EC: ExecutorContext>(
+	executor_context: EC,
+	module_name: &[u8],
+	storage_name: &[u8],
+	key: &K,
+	value: &V,
+) -> VMResult<()> {
+	let key = codec::encode(key)?;
+	let key = &[module_name, SEPARATOR, storage_name, SEPARATOR, &key].concat();
+
+	let value = codec::encode(value)?;
+	executor_context.payload_set(key, Some(value))?;
+	Ok(())
 }

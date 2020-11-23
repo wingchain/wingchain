@@ -12,10 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::cell::RefCell;
 use std::rc::Rc;
 
-use base::{TestStorage, TestVMContext};
+use base::{TestExecutorContext, TestVMContext};
 use node_vm::errors::VMResult;
 use node_vm::{Mode, VMContext};
 
@@ -25,9 +24,9 @@ mod base;
 fn test_vm_token_transfer() {
 	let (account1, account2) = base::test_accounts();
 
-	let storage = Rc::new(RefCell::new(TestStorage::new()));
+	let executor_context = TestExecutorContext::new();
 
-	let context = Rc::new(TestVMContext::new(account1.3.clone(), 0, storage));
+	let context = Rc::new(TestVMContext::new(account1.3.clone(), 0, executor_context));
 
 	// init
 	let input = r#"{"name":"Bitcoin","symbol":"BTC","decimals":8,"total_supply":2100000000000000}"#;
@@ -94,9 +93,13 @@ fn test_vm_token_transfer() {
 fn test_vm_token_transfer_from() {
 	let (account1, account2) = base::test_accounts();
 
-	let storage = Rc::new(RefCell::new(TestStorage::new()));
+	let executor_context = TestExecutorContext::new();
 
-	let context = Rc::new(TestVMContext::new(account1.3.clone(), 0, storage.clone()));
+	let context = Rc::new(TestVMContext::new(
+		account1.3.clone(),
+		0,
+		executor_context.clone(),
+	));
 
 	// init
 	let input = r#"{"name":"Bitcoin","symbol":"BTC","decimals":8,"total_supply":2100000000000000}"#;
@@ -138,7 +141,7 @@ fn test_vm_token_transfer_from() {
 		.unwrap();
 
 	// shift to account2
-	let context = Rc::new(TestVMContext::new(account2.3.clone(), 0, storage));
+	let context = Rc::new(TestVMContext::new(account2.3.clone(), 0, executor_context));
 
 	// transfer from
 	let input = format!(

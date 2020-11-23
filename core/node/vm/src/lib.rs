@@ -125,13 +125,15 @@ pub trait VMContext {
 	fn hash(&self, data: &[u8]) -> VMResult<Hash>;
 	fn address(&self, data: &[u8]) -> VMResult<Address>;
 	fn validate_address(&self, address: &Address) -> VMResult<()>;
-	fn balance_get(&self, address: &Address) -> VMResult<Balance>;
-	fn balance_transfer(
+	fn module_balance_get(&self, address: &Address) -> VMResult<Balance>;
+	fn module_balance_transfer(
 		&self,
 		sender: &Address,
 		recipient: &Address,
 		value: Balance,
 	) -> VMResult<()>;
+	fn module_payload_drain_buffer(&self) -> VMResult<Vec<(DBKey, Option<DBValue>)>>;
+	fn module_payload_apply(&self, items: Vec<(DBKey, Option<DBValue>)>) -> VMResult<()>;
 }
 
 pub struct VMContextEnv {

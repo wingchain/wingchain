@@ -138,6 +138,7 @@ pub fn import(state: &mut State, memory: Memory) -> VMResult<ImportObject> {
 			"util_validate_address_ea" => func!(util_validate_address_ea),
 			"balance_read" => func!(balance_read),
 			"balance_transfer" => func!(balance_transfer),
+			"balance_transfer_ea" => func!(balance_transfer_ea),
 			"pay" => func!(pay),
 		}
 	};
@@ -333,7 +334,7 @@ fn balance_read(ctx: &mut Ctx, address_len: u64, address_ptr: u64) -> VMResult<u
 	let address = state.memory_to_vec(address_len, address_ptr);
 	let address = Address(address);
 
-	let balance = state.context.balance_get(&address)?;
+	let balance = state.context.module_balance_get(&address)?;
 
 	Ok(balance)
 }
@@ -353,9 +354,30 @@ fn balance_transfer(
 
 	state
 		.context
-		.balance_transfer(sender_address, &recipient_address, value)?;
+		.module_balance_transfer(sender_address, &recipient_address, value)?;
+
+	state
+		.context
+		.module_payload_apply(state.context.module_payload_drain_buffer()?)?;
 
 	Ok(())
+}
+
+fn balance_transfer_ea(
+	ctx: &mut Ctx,
+	recipient_address_len: u64,
+	recipient_address_ptr: u64,
+	value: u64,
+	error_share_id: u64,
+) -> VMResult<u64> {
+	let result = balance_transfer(ctx, recipient_address_len, recipient_address_ptr, value);
+
+	let state = State::from_ctx(ctx);
+
+	if result.is_err() {
+		state.context.module_payload_drain_buffer()?;
+	}
+	state.to_error_aware(result, error_share_id)
 }
 
 fn pay(ctx: &mut Ctx) -> VMResult<()> {
@@ -368,8 +390,12 @@ fn pay(ctx: &mut Ctx) -> VMResult<()> {
 	if pay_value > 0 {
 		state
 			.context
-			.balance_transfer(sender_address, contract_address, pay_value)?;
+			.module_balance_transfer(sender_address, contract_address, pay_value)?;
 	}
+
+	state
+		.context
+		.module_payload_apply(state.context.module_payload_drain_buffer()?)?;
 
 	Ok(())
 }

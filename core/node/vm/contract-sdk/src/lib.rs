@@ -105,6 +105,21 @@ impl Context {
 		);
 		Ok(())
 	}
+	pub fn balance_transfer_ea(
+		&self,
+		recipient_address: &Address,
+		value: Balance,
+	) -> ContractResult<()> {
+		let share_id = 0u8 as *const u8 as u64;
+		let recipient_address = &recipient_address.0;
+		let error = import::balance_transfer_ea(
+			recipient_address.len() as _,
+			recipient_address.as_ptr() as _,
+			value,
+			share_id,
+		);
+		from_error_aware(error, share_id, ())
+	}
 }
 
 impl Util {

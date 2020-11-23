@@ -67,7 +67,11 @@ impl<C: Context, U: Util> Module<C, U> {
 	}
 
 	#[call]
-	fn get_balance(&self, sender: Option<&Address>, _params: EmptyParams) -> ModuleResult<Balance> {
+	pub fn get_balance(
+		&self,
+		sender: Option<&Address>,
+		_params: EmptyParams,
+	) -> ModuleResult<Balance> {
 		let sender = sender.ok_or("should be signed")?;
 		let balance = self.balance.get(sender)?;
 		let balance = balance.unwrap_or(0);
@@ -75,7 +79,7 @@ impl<C: Context, U: Util> Module<C, U> {
 	}
 
 	#[call(write = true)]
-	fn transfer(&self, sender: Option<&Address>, params: TransferParams) -> ModuleResult<()> {
+	pub fn transfer(&self, sender: Option<&Address>, params: TransferParams) -> ModuleResult<()> {
 		let sender = sender.ok_or("should be signed")?;
 		let recipient = &params.recipient;
 		let value = params.value;
@@ -114,7 +118,7 @@ impl<C: Context, U: Util> Module<C, U> {
 		Ok(())
 	}
 
-	fn validate_transfer(util: &U, params: TransferParams) -> ModuleResult<()> {
+	pub fn validate_transfer(util: &U, params: TransferParams) -> ModuleResult<()> {
 		util.validate_address(&params.recipient)?;
 		Ok(())
 	}

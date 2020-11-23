@@ -42,6 +42,12 @@ mod env {
 		pub fn util_validate_address_ea(data_len: u64, data_ptr: u64, error_share_id: u64) -> u64;
 		pub fn balance_read(address_len: u64, address_ptr: u64) -> u64;
 		pub fn balance_transfer(recipient_address_len: u64, recipient_address_ptr: u64, value: u64);
+		pub fn balance_transfer_ea(
+			recipient_address_len: u64,
+			recipient_address_ptr: u64,
+			value: u64,
+			error_share_id: u64,
+		) -> u64;
 		pub fn pay();
 	}
 }
@@ -132,6 +138,22 @@ pub fn balance_read(address_len: u64, address_ptr: u64) -> u64 {
 
 pub fn balance_transfer(recipient_address_len: u64, recipient_address_ptr: u64, value: u64) {
 	unsafe { env::balance_transfer(recipient_address_len, recipient_address_ptr, value) }
+}
+
+pub fn balance_transfer_ea(
+	recipient_address_len: u64,
+	recipient_address_ptr: u64,
+	value: u64,
+	error_share_id: u64,
+) -> u64 {
+	unsafe {
+		env::balance_transfer_ea(
+			recipient_address_len,
+			recipient_address_ptr,
+			value,
+			error_share_id,
+		)
+	}
 }
 
 pub fn pay() {

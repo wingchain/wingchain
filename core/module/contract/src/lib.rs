@@ -23,6 +23,8 @@ use executor_primitives::{
 use primitives::codec::{Decode, Encode};
 use primitives::{codec, Address, Balance, Call, Hash};
 
+// mod vm;
+
 pub struct Module<C, U>
 where
 	C: Context,

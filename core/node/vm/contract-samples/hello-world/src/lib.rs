@@ -147,6 +147,18 @@ impl Contract {
 		Ok(())
 	}
 
+	#[call(payable = true)]
+	fn balance_transfer_ea(&self, params: BalanceTransferParams) -> ContractResult<String> {
+		let result = self
+			.context
+			.balance_transfer_ea(&params.recipient, params.value);
+		let result = match result {
+			Ok(_) => "true".to_string(),
+			Err(e) => format!("false: {}", e),
+		};
+		Ok(result)
+	}
+
 	#[call]
 	fn hash(&self, params: ComputeHashParams) -> ContractResult<Hash> {
 		let result = self.util.hash(&params.data)?;

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::cell::RefCell;
 use std::rc::Rc;
 
 use serde::Serialize;
@@ -20,7 +19,7 @@ use serde::Serialize;
 use node_vm::errors::{ContractError, VMError, VMResult};
 use node_vm::{Mode, VMContext};
 
-use crate::base::{TestStorage, TestVMContext};
+use crate::base::{storage_mint, TestExecutorContext, TestVMContext};
 
 mod base;
 
@@ -28,9 +27,8 @@ mod base;
 fn test_vm_hw_init() {
 	let (account1, _account2) = base::test_accounts();
 
-	let storage = Rc::new(RefCell::new(TestStorage::new()));
-
-	let context = Rc::new(TestVMContext::new(account1.3, 0, storage));
+	let executor_context = TestExecutorContext::new();
+	let context = Rc::new(TestVMContext::new(account1.3.clone(), 0, executor_context));
 
 	let input = r#"{"value":"abc"}"#;
 	let result = vm_execute(context.clone(), Mode::Init, "init", input).unwrap();
@@ -46,8 +44,8 @@ fn test_vm_hw_init() {
 fn test_vm_hw_hello() {
 	let (account1, _account2) = base::test_accounts();
 
-	let storage = Rc::new(RefCell::new(TestStorage::new()));
-	let context = Rc::new(TestVMContext::new(account1.3, 0, storage));
+	let executor_context = TestExecutorContext::new();
+	let context = Rc::new(TestVMContext::new(account1.3, 0, executor_context));
 
 	let input = r#"{"name": "world"}"#;
 	let result = vm_execute(context, Mode::Call, "hello", input).unwrap();
@@ -59,8 +57,8 @@ fn test_vm_hw_hello() {
 fn test_vm_hw_error() {
 	let (account1, _account2) = base::test_accounts();
 
-	let storage = Rc::new(RefCell::new(TestStorage::new()));
-	let context = Rc::new(TestVMContext::new(account1.3, 0, storage));
+	let executor_context = TestExecutorContext::new();
+	let context = Rc::new(TestVMContext::new(account1.3, 0, executor_context));
 
 	let input = r#""#;
 	let error = vm_execute(context, Mode::Call, "error", input).unwrap_err();
@@ -77,8 +75,8 @@ fn test_vm_hw_error() {
 fn test_vm_hw_get_env() {
 	let (account1, _account2) = base::test_accounts();
 
-	let storage = Rc::new(RefCell::new(TestStorage::new()));
-	let context = Rc::new(TestVMContext::new(account1.3, 0, storage));
+	let executor_context = TestExecutorContext::new();
+	let context = Rc::new(TestVMContext::new(account1.3, 0, executor_context));
 
 	let input = r#""#;
 	let result = vm_execute(context, Mode::Call, "get_env", input).unwrap();
@@ -90,8 +88,8 @@ fn test_vm_hw_get_env() {
 fn test_vm_hw_get_call_env() {
 	let (account1, _account2) = base::test_accounts();
 
-	let storage = Rc::new(RefCell::new(TestStorage::new()));
-	let context = Rc::new(TestVMContext::new(account1.3, 0, storage));
+	let executor_context = TestExecutorContext::new();
+	let context = Rc::new(TestVMContext::new(account1.3, 0, executor_context));
 
 	let input = r#""#;
 	let result = vm_execute(context, Mode::Call, "get_call_env", input).unwrap();
@@ -107,13 +105,10 @@ fn test_vm_hw_get_call_env() {
 fn test_vm_hw_get_contract_env() {
 	let (account1, _account2) = base::test_accounts();
 
-	let storage = Rc::new(RefCell::new(TestStorage::new()));
-	storage
-		.borrow_mut()
-		.mint(vec![(account1.3.clone(), 1000)])
-		.unwrap();
+	let executor_context = TestExecutorContext::new();
+	storage_mint(executor_context.clone(), vec![(account1.3.clone(), 1000)]).unwrap();
 
-	let context = Rc::new(TestVMContext::new(account1.3, 10, storage));
+	let context = Rc::new(TestVMContext::new(account1.3, 10, executor_context));
 
 	let input = r#""#;
 	let result = vm_execute(context, Mode::Call, "get_contract_env", input).unwrap();
@@ -125,8 +120,8 @@ fn test_vm_hw_get_contract_env() {
 fn test_vm_hw_value() {
 	let (account1, _account2) = base::test_accounts();
 
-	let storage = Rc::new(RefCell::new(TestStorage::new()));
-	let context = Rc::new(TestVMContext::new(account1.3, 0, storage));
+	let executor_context = TestExecutorContext::new();
+	let context = Rc::new(TestVMContext::new(account1.3, 0, executor_context));
 
 	let input = r#""#;
 	let result = vm_execute(context.clone(), Mode::Call, "get_value", input).unwrap();
@@ -145,8 +140,8 @@ fn test_vm_hw_value() {
 fn test_vm_hw_map() {
 	let (account1, _account2) = base::test_accounts();
 
-	let storage = Rc::new(RefCell::new(TestStorage::new()));
-	let context = Rc::new(TestVMContext::new(account1.3, 0, storage));
+	let executor_context = TestExecutorContext::new();
+	let context = Rc::new(TestVMContext::new(account1.3, 0, executor_context));
 
 	let input = r#"{"key":[1,2,3]}"#;
 	let result = vm_execute(context.clone(), Mode::Call, "get_map", input).unwrap();
@@ -165,8 +160,8 @@ fn test_vm_hw_map() {
 fn test_vm_hw_event() {
 	let (account1, _account2) = base::test_accounts();
 
-	let storage = Rc::new(RefCell::new(TestStorage::new()));
-	let context = Rc::new(TestVMContext::new(account1.3, 0, storage));
+	let executor_context = TestExecutorContext::new();
+	let context = Rc::new(TestVMContext::new(account1.3, 0, executor_context));
 
 	let input = r#""#;
 	let _result = vm_execute(context.clone(), Mode::Call, "event", input).unwrap();
@@ -182,8 +177,8 @@ fn test_vm_hw_event() {
 fn test_vm_hw_hash() {
 	let (account1, _account2) = base::test_accounts();
 
-	let storage = Rc::new(RefCell::new(TestStorage::new()));
-	let context = Rc::new(TestVMContext::new(account1.3, 0, storage));
+	let executor_context = TestExecutorContext::new();
+	let context = Rc::new(TestVMContext::new(account1.3, 0, executor_context));
 
 	let input = r#"{"data":[1]}"#;
 	let result = vm_execute(context, Mode::Call, "hash", input).unwrap();
@@ -198,8 +193,8 @@ fn test_vm_hw_hash() {
 fn test_vm_hw_address() {
 	let (account1, _account2) = base::test_accounts();
 
-	let storage = Rc::new(RefCell::new(TestStorage::new()));
-	let context = Rc::new(TestVMContext::new(account1.3, 0, storage));
+	let executor_context = TestExecutorContext::new();
+	let context = Rc::new(TestVMContext::new(account1.3, 0, executor_context));
 
 	let input = r#"{"data":[1]}"#;
 	let result = vm_execute(context, Mode::Call, "address", input).unwrap();
@@ -214,8 +209,8 @@ fn test_vm_hw_address() {
 fn test_vm_hw_validate_address() {
 	let (account1, _account2) = base::test_accounts();
 
-	let storage = Rc::new(RefCell::new(TestStorage::new()));
-	let context = Rc::new(TestVMContext::new(account1.3, 0, storage));
+	let executor_context = TestExecutorContext::new();
+	let context = Rc::new(TestVMContext::new(account1.3, 0, executor_context));
 
 	let input = r#"{"address":"aa"}"#;
 	let error = vm_execute(context.clone(), Mode::Call, "validate_address", input).unwrap_err();
@@ -237,13 +232,10 @@ fn test_vm_hw_validate_address() {
 fn test_vm_hw_balance() {
 	let (account1, _account2) = base::test_accounts();
 
-	let storage = Rc::new(RefCell::new(TestStorage::new()));
-	storage
-		.borrow_mut()
-		.mint(vec![(account1.3.clone(), 1000)])
-		.unwrap();
+	let executor_context = TestExecutorContext::new();
+	storage_mint(executor_context.clone(), vec![(account1.3.clone(), 1000)]).unwrap();
 
-	let context = Rc::new(TestVMContext::new(account1.3, 0, storage));
+	let context = Rc::new(TestVMContext::new(account1.3, 0, executor_context));
 
 	let input = r#"{"address":"b4decd5a5f8f2ba708f8ced72eec89f44f3be96a"}"#;
 	let result = vm_execute(context, Mode::Call, "get_balance", input).unwrap();
@@ -261,29 +253,149 @@ fn test_vm_hw_balance_transfer() {
 
 	let (account1, account2) = base::test_accounts();
 
-	let storage = Rc::new(RefCell::new(TestStorage::new()));
-	storage
-		.borrow_mut()
-		.mint(vec![(account1.3.clone(), 1000)])
-		.unwrap();
+	let executor_context = TestExecutorContext::new();
+	storage_mint(executor_context.clone(), vec![(account1.3.clone(), 1000)]).unwrap();
 
-	let context = Rc::new(TestVMContext::new(account1.3.clone(), 100, storage));
+	let context = Rc::new(TestVMContext::new(
+		account1.3.clone(),
+		100,
+		executor_context.clone(),
+	));
 
 	let input = format!(
 		r#"{{"recipient":"{}", "value": 10}}"#,
 		hex::encode((account2.3).0.clone())
 	);
-	let _result = vm_execute(context.clone(), Mode::Call, "balance_transfer", &input).unwrap();
+	let result = vm_execute(context.clone(), Mode::Call, "balance_transfer", &input);
 
-	let account1_balance = context.balance_get(&account1.3).unwrap();
+	// apply
+	match result {
+		Ok(_) => {
+			context
+				.payload_apply(context.payload_drain_buffer().unwrap())
+				.unwrap();
+		}
+		Err(_) => {
+			context.payload_drain_buffer().unwrap();
+		}
+	}
+
+	// shift to new context
+	let context = Rc::new(TestVMContext::new(account1.3.clone(), 0, executor_context));
+
+	let account1_balance = context.module_balance_get(&account1.3).unwrap();
 	let contract_balance = context
-		.balance_get(&context.contract_env().contract_address)
+		.module_balance_get(&context.contract_env().contract_address)
 		.unwrap();
-	let account2_balance = context.balance_get(&account2.3).unwrap();
+	let account2_balance = context.module_balance_get(&account2.3).unwrap();
 
 	assert_eq!(account1_balance, 900);
 	assert_eq!(contract_balance, 90);
 	assert_eq!(account2_balance, 10);
+}
+
+#[test]
+fn test_vm_hw_balance_transfer_failed() {
+	#[derive(Serialize)]
+	struct Input {
+		recipient: Vec<u8>,
+		value: u64,
+	}
+
+	let (account1, account2) = base::test_accounts();
+
+	let executor_context = TestExecutorContext::new();
+	storage_mint(executor_context.clone(), vec![(account1.3.clone(), 1000)]).unwrap();
+
+	let context = Rc::new(TestVMContext::new(
+		account1.3.clone(),
+		100,
+		executor_context.clone(),
+	));
+
+	let input = format!(
+		r#"{{"recipient":"{}", "value": 200}}"#,
+		hex::encode((account2.3).0.clone())
+	);
+	let result = vm_execute(context.clone(), Mode::Call, "balance_transfer", &input);
+
+	// apply
+	match result {
+		Ok(_) => {
+			context
+				.payload_apply(context.payload_drain_buffer().unwrap())
+				.unwrap();
+		}
+		Err(_) => {
+			context.payload_drain_buffer().unwrap();
+		}
+	}
+
+	// shift to new context
+	let context = Rc::new(TestVMContext::new(account1.3.clone(), 0, executor_context));
+
+	let account1_balance = context.module_balance_get(&account1.3).unwrap();
+	let contract_balance = context
+		.module_balance_get(&context.contract_env().contract_address)
+		.unwrap();
+	let account2_balance = context.module_balance_get(&account2.3).unwrap();
+
+	assert_eq!(account1_balance, 1000);
+	assert_eq!(contract_balance, 0);
+	assert_eq!(account2_balance, 0);
+}
+
+#[test]
+fn test_vm_hw_balance_transfer_partial_failed() {
+	#[derive(Serialize)]
+	struct Input {
+		recipient: Vec<u8>,
+		value: u64,
+	}
+
+	let (account1, account2) = base::test_accounts();
+
+	let executor_context = TestExecutorContext::new();
+	storage_mint(executor_context.clone(), vec![(account1.3.clone(), 1000)]).unwrap();
+
+	let context = Rc::new(TestVMContext::new(
+		account1.3.clone(),
+		100,
+		executor_context.clone(),
+	));
+
+	let input = format!(
+		r#"{{"recipient":"{}", "value": 200}}"#,
+		hex::encode((account2.3).0.clone())
+	);
+	let result = vm_execute(context.clone(), Mode::Call, "balance_transfer_ea", &input);
+
+	println!("result: {:?}", result);
+
+	// apply
+	match result {
+		Ok(_) => {
+			context
+				.payload_apply(context.payload_drain_buffer().unwrap())
+				.unwrap();
+		}
+		Err(_) => {
+			context.payload_drain_buffer().unwrap();
+		}
+	}
+
+	// shift to new context
+	let context = Rc::new(TestVMContext::new(account1.3.clone(), 0, executor_context));
+
+	let account1_balance = context.module_balance_get(&account1.3).unwrap();
+	let contract_balance = context
+		.module_balance_get(&context.contract_env().contract_address)
+		.unwrap();
+	let account2_balance = context.module_balance_get(&account2.3).unwrap();
+
+	assert_eq!(account1_balance, 900);
+	assert_eq!(contract_balance, 100);
+	assert_eq!(account2_balance, 0);
 }
 
 fn vm_execute(

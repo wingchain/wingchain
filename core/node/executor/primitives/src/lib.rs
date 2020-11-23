@@ -24,7 +24,7 @@ pub use crate::errors::{ModuleError, ModuleResult, OpaqueModuleResult};
 pub mod errors;
 
 /// Separator to build kv db key
-const SEPARATOR: &[u8] = b"_";
+pub const SEPARATOR: &[u8] = b"_";
 
 pub trait Module {
 	type C: Context;

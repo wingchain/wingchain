@@ -12,3 +12,5 @@ scale-codec = { package = "parity-scale-codec", version = "1.3.0", features = ["
 primitives = { path = "../../primitives" }
 executor-primitives = { package = "node-executor-primitives", path = "../../node/executor/primitives" }
 executor-macro = { package = "node-executor-macro", path = "../../node/executor/executor-macro" }
+node-vm = { package = "node-vm", path = "../../node/vm" }
+module-balance = { path = "../balance" }
