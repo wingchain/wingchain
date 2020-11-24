@@ -22,7 +22,7 @@ use wasmer_runtime::Memory;
 use wasmer_runtime_core::units::Pages;
 
 use primitives::errors::CommonResult;
-use primitives::{Address, Balance, BlockNumber, DBKey, DBValue, Hash};
+use primitives::{Address, Balance, BlockNumber, DBKey, DBValue, Event, Hash};
 
 use crate::errors::{ErrorKind, VMError, VMResult};
 use crate::import::State;
@@ -120,8 +120,9 @@ pub trait VMContext {
 	fn payload_set(&self, key: &[u8], value: Option<DBValue>) -> VMResult<()>;
 	fn payload_drain_buffer(&self) -> VMResult<Vec<(DBKey, Option<DBValue>)>>;
 	fn payload_apply(&self, items: Vec<(DBKey, Option<DBValue>)>) -> VMResult<()>;
-	fn emit_event(&self, event: Vec<u8>) -> VMResult<()>;
-	fn drain_events(&self) -> VMResult<Vec<Vec<u8>>>;
+	fn emit_event(&self, event: Event) -> VMResult<()>;
+	fn drain_events(&self) -> VMResult<Vec<Event>>;
+	fn apply_events(&self, items: Vec<Event>) -> VMResult<()>;
 	fn hash(&self, data: &[u8]) -> VMResult<Hash>;
 	fn address(&self, data: &[u8]) -> VMResult<Address>;
 	fn validate_address(&self, address: &Address) -> VMResult<()>;
@@ -134,6 +135,8 @@ pub trait VMContext {
 	) -> VMResult<()>;
 	fn module_payload_drain_buffer(&self) -> VMResult<Vec<(DBKey, Option<DBValue>)>>;
 	fn module_payload_apply(&self, items: Vec<(DBKey, Option<DBValue>)>) -> VMResult<()>;
+	fn module_drain_events(&self) -> VMResult<Vec<Event>>;
+	fn module_apply_events(&self, items: Vec<Event>) -> VMResult<()>;
 }
 
 pub struct VMContextEnv {

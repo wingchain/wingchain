@@ -21,7 +21,7 @@ use wasmer_runtime::{func, imports};
 use wasmer_runtime_core::import::ImportObject;
 use wasmer_runtime_core::vm::Ctx;
 
-use primitives::Address;
+use primitives::{Address, Event};
 
 use crate::errors::{ApplicationError, ContractError, VMError, VMResult};
 use crate::{VMConfig, VMContext};
@@ -283,7 +283,7 @@ fn event_write(ctx: &mut Ctx, len: u64, ptr: u64) -> VMResult<()> {
 	let state = State::from_ctx(ctx);
 
 	let event = state.memory_to_vec(len, ptr);
-	state.context.emit_event(event)?;
+	state.context.emit_event(Event(event))?;
 	Ok(())
 }
 

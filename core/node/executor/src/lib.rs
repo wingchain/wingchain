@@ -153,7 +153,7 @@ impl<'a> ContextT for Context<'a> {
 		tx_buffer.insert(DBKey::from_slice(key), value);
 		Ok(())
 	}
-	fn meter_drain_tx_buffer(&self) -> ModuleResult<Vec<(DBKey, Option<DBValue>)>> {
+	fn meta_drain_tx_buffer(&self) -> ModuleResult<Vec<(DBKey, Option<DBValue>)>> {
 		let tx_buffer = self
 			.inner
 			.meta_state
@@ -163,7 +163,7 @@ impl<'a> ContextT for Context<'a> {
 			.collect();
 		Ok(tx_buffer)
 	}
-	fn meter_apply(&self, items: Vec<(DBKey, Option<DBValue>)>) -> ModuleResult<()> {
+	fn meta_apply(&self, items: Vec<(DBKey, Option<DBValue>)>) -> ModuleResult<()> {
 		let mut buffer = self.inner.meta_state.buffer.borrow_mut();
 		buffer.extend(items);
 		Ok(())
@@ -200,15 +200,18 @@ impl<'a> ContextT for Context<'a> {
 		buffer.extend(items);
 		Ok(())
 	}
-	fn emit_event<E: Encode>(&self, event: E) -> ModuleResult<()> {
+	fn emit_event(&self, event: Event) -> ModuleResult<()> {
 		let mut events = self.inner.events.borrow_mut();
-		events.push(Event::from(&event)?);
+		events.push(event);
 		Ok(())
 	}
-	fn drain_events(&self) -> ModuleResult<Vec<Event>> {
+	fn drain_tx_events(&self) -> ModuleResult<Vec<Event>> {
 		let mut events = self.inner.events.borrow_mut();
 		let events = events.drain(..).collect();
 		Ok(events)
+	}
+	fn apply_events(&self, _items: Vec<Event>) -> ModuleResult<()> {
+		unreachable!("no need to apply events")
 	}
 }
 
@@ -538,15 +541,18 @@ impl Executor {
 
 			let (result, events) = match result {
 				Ok(result) => {
-					context.meter_apply(context.meter_drain_tx_buffer()?)?;
+					context.meta_apply(context.meta_drain_tx_buffer()?)?;
 					context.payload_apply(context.payload_drain_tx_buffer()?)?;
-					let events = context.drain_events()?;
+
+					// apply_events is designed for StackedExecutorContext
+					// no need to apply_events here
+					let events = context.drain_tx_events()?;
 					(Ok(result), events)
 				}
 				Err(e) => {
-					context.meter_drain_tx_buffer()?;
+					context.meta_drain_tx_buffer()?;
 					context.payload_drain_tx_buffer()?;
-					context.drain_events()?;
+					context.drain_tx_events()?;
 					let events = vec![];
 					(Err(e), events)
 				}

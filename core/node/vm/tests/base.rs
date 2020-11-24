@@ -23,7 +23,7 @@ use crypto::hash::{Hash as HashT, HashImpl};
 use node_vm::errors::{ContractError, VMResult};
 use node_vm::{Mode, VMCallEnv, VMConfig, VMContext, VMContextEnv, VMContractEnv, VM};
 use primitives::codec::{Decode, Encode};
-use primitives::{codec, Address, Balance, DBKey, DBValue, Hash, PublicKey, SecretKey};
+use primitives::{codec, Address, Balance, DBKey, DBValue, Event, Hash, PublicKey, SecretKey};
 
 pub fn test_accounts() -> (
 	(SecretKey, PublicKey, KeyPairImpl, Address),
@@ -65,17 +65,22 @@ pub trait ExecutorContext: Clone {
 	fn payload_set(&self, key: &[u8], value: Option<DBValue>) -> VMResult<()>;
 	fn payload_drain_tx_buffer(&self) -> VMResult<Vec<(DBKey, Option<DBValue>)>>;
 	fn payload_apply(&self, items: Vec<(DBKey, Option<DBValue>)>) -> VMResult<()>;
+	fn emit_event(&self, event: Event) -> VMResult<()>;
+	fn drain_tx_events(&self) -> VMResult<Vec<Event>>;
+	fn apply_events(&self, items: Vec<Event>) -> VMResult<()>;
 }
 
 #[derive(Clone)]
 pub struct TestExecutorContext {
 	payload: Rc<RefCell<HashMap<DBKey, DBValue>>>,
+	events: Rc<RefCell<Vec<Event>>>,
 }
 
 impl TestExecutorContext {
 	pub fn new() -> Self {
 		TestExecutorContext {
 			payload: Rc::new(RefCell::new(HashMap::new())),
+			events: Rc::new(RefCell::new(Vec::new())),
 		}
 	}
 }
@@ -105,40 +110,63 @@ impl ExecutorContext for TestExecutorContext {
 	fn payload_apply(&self, _items: Vec<(DBKey, Option<DBValue>)>) -> VMResult<()> {
 		unreachable!()
 	}
+	fn emit_event(&self, event: Event) -> VMResult<()> {
+		self.events.borrow_mut().push(event);
+		Ok(())
+	}
+	fn drain_tx_events(&self) -> VMResult<Vec<Event>> {
+		Ok(self.events.borrow_mut().drain(..).collect())
+	}
+	fn apply_events(&self, _items: Vec<Event>) -> VMResult<()> {
+		unreachable!()
+	}
 }
 
 #[derive(Clone)]
 struct StackedExecutorContext<EC: ExecutorContext> {
 	executor_context: EC,
-	buffers: Rc<VecDeque<Rc<RefCell<HashMap<DBKey, Option<DBValue>>>>>>,
+	payload_buffer_stack: Rc<VecDeque<Rc<RefCell<HashMap<DBKey, Option<DBValue>>>>>>,
+	events_stack: Rc<VecDeque<Rc<RefCell<Vec<Event>>>>>,
 }
 
 impl<EC: ExecutorContext> StackedExecutorContext<EC> {
 	fn new(executor_context: EC) -> Self {
 		StackedExecutorContext {
 			executor_context,
-			buffers: {
-				let mut buffers = VecDeque::new();
-				buffers.push_back(Rc::new(RefCell::new(HashMap::new())));
-				Rc::new(buffers)
+			payload_buffer_stack: {
+				let mut stack = VecDeque::new();
+				stack.push_back(Rc::new(RefCell::new(HashMap::new())));
+				Rc::new(stack)
+			},
+			events_stack: {
+				let mut stack = VecDeque::new();
+				stack.push_back(Rc::new(RefCell::new(Vec::new())));
+				Rc::new(stack)
 			},
 		}
 	}
 	fn derive(&self) -> Self {
 		let executor_context = self.executor_context.clone();
-		let mut buffers = (*self.buffers).clone();
-		buffers.push_back(Rc::new(RefCell::new(HashMap::new())));
-		let buffers = Rc::new(buffers);
+
+		let mut payload_buffer_stack = (*self.payload_buffer_stack).clone();
+		payload_buffer_stack.push_back(Rc::new(RefCell::new(HashMap::new())));
+		let payload_buffer_stack = Rc::new(payload_buffer_stack);
+
+		let mut events_stack = (*self.events_stack).clone();
+		events_stack.push_back(Rc::new(RefCell::new(Vec::new())));
+		let events_stack = Rc::new(events_stack);
+
 		StackedExecutorContext {
 			executor_context,
-			buffers,
+			payload_buffer_stack,
+			events_stack,
 		}
 	}
 }
 
 impl<EC: ExecutorContext> ExecutorContext for StackedExecutorContext<EC> {
 	fn payload_get(&self, key: &[u8]) -> VMResult<Option<DBValue>> {
-		for buffer in self.buffers.iter().rev() {
+		for buffer in self.payload_buffer_stack.iter().rev() {
 			if let Some(value) = buffer.borrow().get(&DBKey::from_slice(key)) {
 				return Ok(value.clone());
 			}
@@ -147,33 +175,66 @@ impl<EC: ExecutorContext> ExecutorContext for StackedExecutorContext<EC> {
 	}
 	fn payload_set(&self, key: &[u8], value: Option<DBValue>) -> VMResult<()> {
 		let buffer = self
-			.buffers
+			.payload_buffer_stack
 			.back()
-			.expect("StackedExecutorContext should have at least 1 buffer");
+			.expect("payload_buffer_stack should not be empty");
 		buffer.borrow_mut().insert(DBKey::from_slice(key), value);
 		Ok(())
 	}
 	fn payload_drain_tx_buffer(&self) -> VMResult<Vec<(DBKey, Option<DBValue>)>> {
 		let buffer = self
-			.buffers
+			.payload_buffer_stack
 			.back()
-			.expect("StackedExecutorContext should have at least 1 buffer");
+			.expect("payload_buffer_stack should not be empty");
 		let buffer = buffer.borrow_mut().drain().collect();
 		Ok(buffer)
 	}
 	fn payload_apply(&self, items: Vec<(DBKey, Option<DBValue>)>) -> VMResult<()> {
-		let second_last = if self.buffers.len() >= 2 {
-			self.buffers.get(self.buffers.len() - 2)
+		let second_last = if self.payload_buffer_stack.len() >= 2 {
+			self.payload_buffer_stack
+				.get(self.payload_buffer_stack.len() - 2)
 		} else {
 			None
 		};
-
 		match second_last {
 			Some(second_last) => second_last.borrow_mut().extend(items),
 			None => {
 				let executor_context = &self.executor_context;
 				for (k, v) in items {
 					executor_context.payload_set(k.as_slice(), v)?;
+				}
+			}
+		}
+		Ok(())
+	}
+	fn emit_event(&self, event: Event) -> VMResult<()> {
+		let events = self
+			.events_stack
+			.back()
+			.expect("events_stack should not be empty");
+		events.borrow_mut().push(event);
+		Ok(())
+	}
+	fn drain_tx_events(&self) -> VMResult<Vec<Event>> {
+		let events = self
+			.events_stack
+			.back()
+			.expect("events_stack should not be empty");
+		let events = events.borrow_mut().drain(..).collect();
+		Ok(events)
+	}
+	fn apply_events(&self, items: Vec<Event>) -> VMResult<()> {
+		let second_last = if self.events_stack.len() >= 2 {
+			self.events_stack.get(self.events_stack.len() - 2)
+		} else {
+			None
+		};
+		match second_last {
+			Some(second_last) => second_last.borrow_mut().extend(items),
+			None => {
+				let executor_context = &self.executor_context;
+				for item in items {
+					executor_context.emit_event(item)?;
 				}
 			}
 		}
@@ -186,7 +247,6 @@ pub struct TestVMContext<EC: ExecutorContext> {
 	call_env: Rc<VMCallEnv>,
 	contract_env: Rc<VMContractEnv>,
 	base_context: StackedExecutorContext<EC>,
-	events: RefCell<Vec<Vec<u8>>>,
 	hash: Arc<HashImpl>,
 	address: Arc<AddressImpl>,
 	module_context: StackedExecutorContext<EC>,
@@ -221,7 +281,6 @@ impl<EC: ExecutorContext> TestVMContext<EC> {
 				pay_value,
 			}),
 			base_context,
-			events: RefCell::new(Vec::new()),
 			hash: hash.clone(),
 			address: address.clone(),
 			module_context,
@@ -253,13 +312,14 @@ impl<EC: ExecutorContext> VMContext for TestVMContext<EC> {
 	fn payload_apply(&self, items: Vec<(DBKey, Option<DBValue>)>) -> VMResult<()> {
 		self.base_context.payload_apply(items)
 	}
-	fn emit_event(&self, event: Vec<u8>) -> VMResult<()> {
-		self.events.borrow_mut().push(event);
-		Ok(())
+	fn emit_event(&self, event: Event) -> VMResult<()> {
+		self.base_context.emit_event(event)
 	}
-	fn drain_events(&self) -> VMResult<Vec<Vec<u8>>> {
-		let events = self.events.borrow_mut().drain(..).collect();
-		Ok(events)
+	fn drain_events(&self) -> VMResult<Vec<Event>> {
+		self.base_context.drain_tx_events()
+	}
+	fn apply_events(&self, items: Vec<Event>) -> VMResult<()> {
+		self.base_context.apply_events(items)
 	}
 	fn hash(&self, data: &[u8]) -> VMResult<Hash> {
 		let mut out = vec![0u8; self.hash.length().into()];
@@ -322,6 +382,12 @@ impl<EC: ExecutorContext> VMContext for TestVMContext<EC> {
 	}
 	fn module_payload_apply(&self, items: Vec<(DBKey, Option<DBValue>)>) -> VMResult<()> {
 		self.module_context.payload_apply(items)
+	}
+	fn module_drain_events(&self) -> VMResult<Vec<Event>> {
+		self.module_context.drain_tx_events()
+	}
+	fn module_apply_events(&self, items: Vec<Event>) -> VMResult<()> {
+		self.module_context.apply_events(items)
 	}
 }
 

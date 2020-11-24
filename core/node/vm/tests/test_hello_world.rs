@@ -168,7 +168,7 @@ fn test_vm_hw_event() {
 
 	let events = context.drain_events().unwrap();
 	let event = events.get(0).unwrap().clone();
-	let event = String::from_utf8(event).unwrap();
+	let event = String::from_utf8(event.0).unwrap();
 
 	assert_eq!(event, "{\"name\":\"MyEvent\",\"data\":{\"foo\":\"bar\"}}");
 }

@@ -21,7 +21,7 @@ use executor_primitives::{
 	Util,
 };
 use primitives::codec::{Decode, Encode};
-use primitives::{codec, Address, Balance, Call, Hash};
+use primitives::{codec, Address, Balance, Call, Event, Hash};
 
 // mod vm;
 
@@ -199,7 +199,7 @@ impl<C: Context, U: Util> Module<C, U> {
 		let event = UpdateAdminEvent::ProposalCreated(UpdateAdminProposalCreated {
 			proposal: proposal.clone(),
 		});
-		self.context.emit_event(event)?;
+		self.context.emit_event(Event::from(&event)?)?;
 
 		self.update_admin_vote_and_pass(
 			sender,
@@ -261,7 +261,7 @@ impl<C: Context, U: Util> Module<C, U> {
 		let event = UpdateCodeEvent::ProposalCreated(UpdateCodeProposalCreated {
 			proposal: UpdateCodeProposalForEvent::from(&proposal, &code_hash),
 		});
-		self.context.emit_event(event)?;
+		self.context.emit_event(Event::from(&event)?)?;
 
 		self.update_code_vote_and_pass(
 			sender,
@@ -340,7 +340,7 @@ impl<C: Context, U: Util> Module<C, U> {
 		let event = UpdateAdminEvent::ProposalVoted(UpdateAdminProposalVoted {
 			proposal: proposal.clone(),
 		});
-		self.context.emit_event(event)?;
+		self.context.emit_event(Event::from(&event)?)?;
 
 		// pass a proposal
 		let sum = proposal
@@ -355,7 +355,7 @@ impl<C: Context, U: Util> Module<C, U> {
 			let event = UpdateAdminEvent::ProposalPassed(UpdateAdminProposalPassed {
 				proposal: proposal.clone(),
 			});
-			self.context.emit_event(event)?;
+			self.context.emit_event(Event::from(&event)?)?;
 		}
 
 		if pass {
@@ -386,7 +386,7 @@ impl<C: Context, U: Util> Module<C, U> {
 		let event = UpdateCodeEvent::ProposalVoted(UpdateCodeProposalVoted {
 			proposal: UpdateCodeProposalForEvent::from(proposal, code_hash),
 		});
-		self.context.emit_event(event)?;
+		self.context.emit_event(Event::from(&event)?)?;
 
 		// pass a proposal
 		let sum = proposal
@@ -409,7 +409,7 @@ impl<C: Context, U: Util> Module<C, U> {
 			let event = UpdateCodeEvent::ProposalPassed(UpdateCodeProposalPassed {
 				proposal: UpdateCodeProposalForEvent::from(proposal, code_hash),
 			});
-			self.context.emit_event(event)?;
+			self.context.emit_event(Event::from(&event)?)?;
 		}
 
 		if pass {

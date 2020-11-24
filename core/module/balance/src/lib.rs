@@ -20,7 +20,7 @@ use executor_primitives::{
 	StorageMap, Util,
 };
 use primitives::codec::{Decode, Encode};
-use primitives::{codec, Address, Balance, Call};
+use primitives::{codec, Address, Balance, Call, Event};
 
 pub struct Module<C, U>
 where
@@ -39,7 +39,7 @@ impl<C: Context, U: Util> Module<C, U> {
 	const META_MODULE: bool = false;
 	const STORAGE_KEY: &'static [u8] = b"balance";
 
-	fn new(context: C, util: U) -> Self {
+	pub fn new(context: C, util: U) -> Self {
 		Self {
 			env: context.env(),
 			context: context.clone(),
@@ -113,7 +113,7 @@ impl<C: Context, U: Util> Module<C, U> {
 			value,
 		});
 
-		self.context.emit_event(event)?;
+		self.context.emit_event(Event::from(&event)?)?;
 
 		Ok(())
 	}
