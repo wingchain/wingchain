@@ -287,6 +287,7 @@ impl<M: Module> VMContext for DefaultVMContext<M> {
 		Ok(result)
 	}
 	fn payload_set(&self, key: &[u8], value: Option<DBValue>) -> VMResult<()> {
+		let key = &self.vm_to_module_key(key)?;
 		let result = self
 			.base_context
 			.payload_set(key, value)
@@ -294,6 +295,7 @@ impl<M: Module> VMContext for DefaultVMContext<M> {
 		Ok(result)
 	}
 	fn payload_drain_buffer(&self) -> VMResult<Vec<(DBKey, Option<DBValue>)>> {
+		let key = &self.vm_to_module_key(key)?;
 		let result = self
 			.base_context
 			.payload_drain_tx_buffer()
