@@ -14,7 +14,6 @@
 
 use std::collections::HashMap;
 use std::ffi::c_void;
-use std::rc::Rc;
 
 use wasmer_runtime::Memory;
 use wasmer_runtime::{func, imports};
@@ -30,7 +29,7 @@ pub struct State<'a> {
 	pub config: &'a VMConfig,
 	pub memory: Memory,
 	pub shares: HashMap<u64, Vec<u8>>,
-	pub context: Rc<dyn VMContext>,
+	pub context: &'a dyn VMContext,
 	pub method: Vec<u8>,
 	pub input: Vec<u8>,
 	pub output: Option<Vec<u8>>,

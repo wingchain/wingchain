@@ -38,7 +38,7 @@ pub fn test_accounts() -> (
 
 pub fn vm_execute(
 	code: &[u8],
-	context: Rc<dyn VMContext>,
+	context: &dyn VMContext,
 	mode: Mode,
 	method: &str,
 	input: &str,
@@ -46,7 +46,7 @@ pub fn vm_execute(
 	let hash = Arc::new(HashImpl::Blake2b256);
 	let config = VMConfig::default();
 
-	let vm = VM::new(config, context).unwrap();
+	let vm = VM::new(config);
 
 	let code_hash = {
 		let mut out = vec![0; hash.length().into()];
@@ -55,7 +55,7 @@ pub fn vm_execute(
 	};
 	let method = method.as_bytes().to_vec();
 	let input = input.as_bytes().to_vec();
-	let result = vm.execute(mode, &code_hash, &code, method, input)?;
+	let result = vm.execute(context, mode, &code_hash, &code, method, input)?;
 	let result: String = String::from_utf8(result).map_err(|_| ContractError::Deserialize)?;
 	Ok(result)
 }

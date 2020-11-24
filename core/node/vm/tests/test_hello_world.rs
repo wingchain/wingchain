@@ -28,15 +28,15 @@ fn test_vm_hw_init() {
 	let (account1, _account2) = base::test_accounts();
 
 	let executor_context = TestExecutorContext::new();
-	let context = Rc::new(TestVMContext::new(account1.3.clone(), 0, executor_context));
+	let context = TestVMContext::new(account1.3.clone(), 0, executor_context);
 
 	let input = r#"{"value":"abc"}"#;
-	let result = vm_execute(context.clone(), Mode::Init, "init", input).unwrap();
+	let result = vm_execute(&context, Mode::Init, "init", input).unwrap();
 
 	assert_eq!(result, r#"null"#.to_string());
 
 	let input = r#""#;
-	let result = vm_execute(context.clone(), Mode::Call, "get_value", input).unwrap();
+	let result = vm_execute(&context, Mode::Call, "get_value", input).unwrap();
 	assert_eq!(result, r#"{"value":"abc"}"#.to_string());
 }
 
@@ -45,10 +45,10 @@ fn test_vm_hw_hello() {
 	let (account1, _account2) = base::test_accounts();
 
 	let executor_context = TestExecutorContext::new();
-	let context = Rc::new(TestVMContext::new(account1.3, 0, executor_context));
+	let context = TestVMContext::new(account1.3, 0, executor_context);
 
 	let input = r#"{"name": "world"}"#;
-	let result = vm_execute(context, Mode::Call, "hello", input).unwrap();
+	let result = vm_execute(&context, Mode::Call, "hello", input).unwrap();
 
 	assert_eq!(result, r#""hello world""#.to_string());
 }
@@ -58,10 +58,10 @@ fn test_vm_hw_error() {
 	let (account1, _account2) = base::test_accounts();
 
 	let executor_context = TestExecutorContext::new();
-	let context = Rc::new(TestVMContext::new(account1.3, 0, executor_context));
+	let context = TestVMContext::new(account1.3, 0, executor_context);
 
 	let input = r#""#;
-	let error = vm_execute(context, Mode::Call, "error", input).unwrap_err();
+	let error = vm_execute(&context, Mode::Call, "error", input).unwrap_err();
 
 	let expected_error: VMError = ContractError::User {
 		msg: "custom error".to_string(),
@@ -76,10 +76,10 @@ fn test_vm_hw_get_env() {
 	let (account1, _account2) = base::test_accounts();
 
 	let executor_context = TestExecutorContext::new();
-	let context = Rc::new(TestVMContext::new(account1.3, 0, executor_context));
+	let context = TestVMContext::new(account1.3, 0, executor_context);
 
 	let input = r#""#;
-	let result = vm_execute(context, Mode::Call, "get_env", input).unwrap();
+	let result = vm_execute(&context, Mode::Call, "get_env", input).unwrap();
 
 	assert_eq!(result, r#"{"number":10,"timestamp":12345}"#.to_string());
 }
@@ -89,10 +89,10 @@ fn test_vm_hw_get_call_env() {
 	let (account1, _account2) = base::test_accounts();
 
 	let executor_context = TestExecutorContext::new();
-	let context = Rc::new(TestVMContext::new(account1.3, 0, executor_context));
+	let context = TestVMContext::new(account1.3, 0, executor_context);
 
 	let input = r#""#;
-	let result = vm_execute(context, Mode::Call, "get_call_env", input).unwrap();
+	let result = vm_execute(&context, Mode::Call, "get_call_env", input).unwrap();
 
 	assert_eq!(
 		result,
@@ -108,10 +108,10 @@ fn test_vm_hw_get_contract_env() {
 	let executor_context = TestExecutorContext::new();
 	storage_mint(executor_context.clone(), vec![(account1.3.clone(), 1000)]).unwrap();
 
-	let context = Rc::new(TestVMContext::new(account1.3, 10, executor_context));
+	let context = TestVMContext::new(account1.3, 10, executor_context);
 
 	let input = r#""#;
-	let result = vm_execute(context, Mode::Call, "get_contract_env", input).unwrap();
+	let result = vm_execute(&context, Mode::Call, "get_contract_env", input).unwrap();
 
 	assert_eq!(result, r#"{"contract_address":"ca5d3fa0a6887285ef6aa85cb12960a2b6706e00","sender_address":"b4decd5a5f8f2ba708f8ced72eec89f44f3be96a","pay_value":10}"#.to_string());
 }
@@ -121,18 +121,18 @@ fn test_vm_hw_value() {
 	let (account1, _account2) = base::test_accounts();
 
 	let executor_context = TestExecutorContext::new();
-	let context = Rc::new(TestVMContext::new(account1.3, 0, executor_context));
+	let context = TestVMContext::new(account1.3, 0, executor_context);
 
 	let input = r#""#;
-	let result = vm_execute(context.clone(), Mode::Call, "get_value", input).unwrap();
+	let result = vm_execute(&context, Mode::Call, "get_value", input).unwrap();
 	assert_eq!(result, r#"{"value":null}"#.to_string());
 
 	let input = r#"{"value":"abc"}"#;
-	let result = vm_execute(context.clone(), Mode::Call, "set_value", input).unwrap();
+	let result = vm_execute(&context, Mode::Call, "set_value", input).unwrap();
 	assert_eq!(result, r#"null"#.to_string());
 
 	let input = r#""#;
-	let result = vm_execute(context.clone(), Mode::Call, "get_value", input).unwrap();
+	let result = vm_execute(&context, Mode::Call, "get_value", input).unwrap();
 	assert_eq!(result, r#"{"value":"abc"}"#.to_string());
 }
 
@@ -141,18 +141,18 @@ fn test_vm_hw_map() {
 	let (account1, _account2) = base::test_accounts();
 
 	let executor_context = TestExecutorContext::new();
-	let context = Rc::new(TestVMContext::new(account1.3, 0, executor_context));
+	let context = TestVMContext::new(account1.3, 0, executor_context);
 
 	let input = r#"{"key":[1,2,3]}"#;
-	let result = vm_execute(context.clone(), Mode::Call, "get_map", input).unwrap();
+	let result = vm_execute(&context, Mode::Call, "get_map", input).unwrap();
 	assert_eq!(result, r#"{"value":null}"#.to_string());
 
 	let input = r#"{"key":[1,2,3],"value":"abc"}"#;
-	let result = vm_execute(context.clone(), Mode::Call, "set_map", input).unwrap();
+	let result = vm_execute(&context, Mode::Call, "set_map", input).unwrap();
 	assert_eq!(result, r#"null"#.to_string());
 
 	let input = r#"{"key":[1,2,3]}"#;
-	let result = vm_execute(context.clone(), Mode::Call, "get_map", input).unwrap();
+	let result = vm_execute(&context, Mode::Call, "get_map", input).unwrap();
 	assert_eq!(result, r#"{"value":"abc"}"#.to_string());
 }
 
@@ -161,10 +161,10 @@ fn test_vm_hw_event() {
 	let (account1, _account2) = base::test_accounts();
 
 	let executor_context = TestExecutorContext::new();
-	let context = Rc::new(TestVMContext::new(account1.3, 0, executor_context));
+	let context = TestVMContext::new(account1.3, 0, executor_context);
 
 	let input = r#""#;
-	let _result = vm_execute(context.clone(), Mode::Call, "event", input).unwrap();
+	let _result = vm_execute(&context, Mode::Call, "event", input).unwrap();
 
 	let events = context.drain_events().unwrap();
 	let event = events.get(0).unwrap().clone();
@@ -178,10 +178,10 @@ fn test_vm_hw_hash() {
 	let (account1, _account2) = base::test_accounts();
 
 	let executor_context = TestExecutorContext::new();
-	let context = Rc::new(TestVMContext::new(account1.3, 0, executor_context));
+	let context = TestVMContext::new(account1.3, 0, executor_context);
 
 	let input = r#"{"data":[1]}"#;
-	let result = vm_execute(context, Mode::Call, "hash", input).unwrap();
+	let result = vm_execute(&context, Mode::Call, "hash", input).unwrap();
 
 	assert_eq!(
 		result,
@@ -194,10 +194,10 @@ fn test_vm_hw_address() {
 	let (account1, _account2) = base::test_accounts();
 
 	let executor_context = TestExecutorContext::new();
-	let context = Rc::new(TestVMContext::new(account1.3, 0, executor_context));
+	let context = TestVMContext::new(account1.3, 0, executor_context);
 
 	let input = r#"{"data":[1]}"#;
-	let result = vm_execute(context, Mode::Call, "address", input).unwrap();
+	let result = vm_execute(&context, Mode::Call, "address", input).unwrap();
 
 	assert_eq!(
 		result,
@@ -210,17 +210,17 @@ fn test_vm_hw_validate_address() {
 	let (account1, _account2) = base::test_accounts();
 
 	let executor_context = TestExecutorContext::new();
-	let context = Rc::new(TestVMContext::new(account1.3, 0, executor_context));
+	let context = TestVMContext::new(account1.3, 0, executor_context);
 
 	let input = r#"{"address":"aa"}"#;
-	let error = vm_execute(context.clone(), Mode::Call, "validate_address", input).unwrap_err();
+	let error = vm_execute(&context, Mode::Call, "validate_address", input).unwrap_err();
 
 	let expected_error: VMError = ContractError::InvalidAddress.into();
 
 	assert_eq!(format!("{:?}", error), format!("{:?}", expected_error));
 
 	let input = r#"{"address":"aa"}"#;
-	let result = vm_execute(context, Mode::Call, "validate_address_ea", input).unwrap();
+	let result = vm_execute(&context, Mode::Call, "validate_address_ea", input).unwrap();
 
 	assert_eq!(
 		result,
@@ -235,10 +235,10 @@ fn test_vm_hw_balance() {
 	let executor_context = TestExecutorContext::new();
 	storage_mint(executor_context.clone(), vec![(account1.3.clone(), 1000)]).unwrap();
 
-	let context = Rc::new(TestVMContext::new(account1.3, 0, executor_context));
+	let context = TestVMContext::new(account1.3, 0, executor_context);
 
 	let input = r#"{"address":"b4decd5a5f8f2ba708f8ced72eec89f44f3be96a"}"#;
-	let result = vm_execute(context, Mode::Call, "get_balance", input).unwrap();
+	let result = vm_execute(&context, Mode::Call, "get_balance", input).unwrap();
 
 	assert_eq!(result, r#"1000"#.to_string());
 }
@@ -258,17 +258,13 @@ fn test_vm_hw_balance_transfer_success() {
 	let executor_context = TestExecutorContext::new();
 	storage_mint(executor_context.clone(), vec![(account1.3.clone(), 1000)]).unwrap();
 
-	let context = Rc::new(TestVMContext::new(
-		account1.3.clone(),
-		100,
-		executor_context.clone(),
-	));
+	let context = TestVMContext::new(account1.3.clone(), 100, executor_context.clone());
 
 	let input = format!(
 		r#"{{"recipient":"{}", "value": 10}}"#,
 		hex::encode((account2.3).0.clone())
 	);
-	let result = vm_execute(context.clone(), Mode::Call, "balance_transfer", &input);
+	let result = vm_execute(&context, Mode::Call, "balance_transfer", &input);
 
 	// apply
 	match result {
@@ -323,17 +319,13 @@ fn test_vm_hw_balance_transfer_failed() {
 	let executor_context = TestExecutorContext::new();
 	storage_mint(executor_context.clone(), vec![(account1.3.clone(), 1000)]).unwrap();
 
-	let context = Rc::new(TestVMContext::new(
-		account1.3.clone(),
-		100,
-		executor_context.clone(),
-	));
+	let context = TestVMContext::new(account1.3.clone(), 100, executor_context.clone());
 
 	let input = format!(
 		r#"{{"recipient":"{}", "value": 200}}"#,
 		hex::encode((account2.3).0.clone())
 	);
-	let result = vm_execute(context.clone(), Mode::Call, "balance_transfer", &input);
+	let result = vm_execute(&context, Mode::Call, "balance_transfer", &input);
 
 	// apply
 	match result {
@@ -388,17 +380,13 @@ fn test_vm_hw_balance_transfer_partial_failed() {
 	let executor_context = TestExecutorContext::new();
 	storage_mint(executor_context.clone(), vec![(account1.3.clone(), 1000)]).unwrap();
 
-	let context = Rc::new(TestVMContext::new(
-		account1.3.clone(),
-		100,
-		executor_context.clone(),
-	));
+	let context = TestVMContext::new(account1.3.clone(), 100, executor_context.clone());
 
 	let input = format!(
 		r#"{{"recipient":"{}", "value": 200}}"#,
 		hex::encode((account2.3).0.clone())
 	);
-	let result = vm_execute(context.clone(), Mode::Call, "balance_transfer_ea", &input);
+	let result = vm_execute(&context, Mode::Call, "balance_transfer_ea", &input);
 
 	log::info!("result: {:?}", result);
 
@@ -440,12 +428,7 @@ fn test_vm_hw_balance_transfer_partial_failed() {
 	assert_eq!(account2_balance, 0);
 }
 
-fn vm_execute(
-	context: Rc<dyn VMContext>,
-	mode: Mode,
-	method: &str,
-	input: &str,
-) -> VMResult<String> {
+fn vm_execute(context: &dyn VMContext, mode: Mode, method: &str, input: &str) -> VMResult<String> {
 	let code =
 		include_bytes!("../contract-samples/hello-world/pkg/contract_samples_hello_world_bg.wasm");
 	let code = &code[..];

@@ -67,7 +67,8 @@ async fn test_solo_contract_create() {
 			"create".to_string(),
 			module::contract::CreateParams {
 				code: ori_code.clone(),
-				value: 0,
+				pay_value: 0,
+				init_method: "init".to_string(),
 				init_params: vec![2],
 			},
 		)
@@ -174,7 +175,8 @@ async fn test_solo_contract_update_admin() {
 			"create".to_string(),
 			module::contract::CreateParams {
 				code: ori_code.clone(),
-				value: 0,
+				pay_value: 0,
+				init_method: "init".to_string(),
 				init_params: vec![2],
 			},
 		)
@@ -385,7 +387,8 @@ async fn test_solo_contract_update_code() {
 			"create".to_string(),
 			module::contract::CreateParams {
 				code: ori_code.clone(),
-				value: 0,
+				pay_value: 0,
+				init_method: "init".to_string(),
 				init_params: vec![2],
 			},
 		)

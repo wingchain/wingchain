@@ -32,7 +32,7 @@ impl Contract {
 	}
 
 	#[init]
-	fn init(&self, params: DeployParams) -> ContractResult<()> {
+	fn init(&self, params: InitParams) -> ContractResult<()> {
 		self.value.set(&params.value)?;
 		Ok(())
 	}
@@ -187,7 +187,7 @@ impl Contract {
 }
 
 #[derive(Deserialize)]
-struct DeployParams {
+struct InitParams {
 	pub value: String,
 }
 

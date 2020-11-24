@@ -21,7 +21,6 @@ use wasmer_runtime::wasm::MemoryDescriptor;
 use wasmer_runtime::Memory;
 use wasmer_runtime_core::units::Pages;
 
-use primitives::errors::CommonResult;
 use primitives::{Address, Balance, BlockNumber, DBKey, DBValue, Event, Hash};
 
 use crate::errors::{ErrorKind, VMError, VMResult};
@@ -53,7 +52,6 @@ impl Default for VMConfig {
 
 pub struct VM {
 	config: VMConfig,
-	context: Rc<dyn VMContext>,
 }
 
 pub enum Mode {
@@ -62,13 +60,14 @@ pub enum Mode {
 }
 
 impl VM {
-	pub fn new(config: VMConfig, context: Rc<dyn VMContext>) -> CommonResult<Self> {
-		let vm = VM { config, context };
-		Ok(vm)
+	pub fn new(config: VMConfig) -> Self {
+		let vm = VM { config };
+		vm
 	}
 
 	pub fn execute(
 		&self,
+		context: &dyn VMContext,
 		mode: Mode,
 		code_hash: &Hash,
 		code: &[u8],
@@ -91,7 +90,7 @@ impl VM {
 			config: &self.config,
 			memory,
 			shares: HashMap::new(),
-			context: self.context.clone(),
+			context,
 			method,
 			input,
 			output: None,
