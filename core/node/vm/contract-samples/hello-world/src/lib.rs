@@ -3,8 +3,7 @@ use wasm_bindgen::prelude::*;
 
 use sdk::{
 	call, contract, import, init, serde_json, Address, Balance, BlockNumber, Context,
-	ContractError, ContractEvent, ContractResult, EmptyParams, Hash, StorageMap, StorageValue,
-	Util,
+	ContractError, ContractResult, EmptyParams, Hash, StorageMap, StorageValue, Util,
 };
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
@@ -123,13 +122,12 @@ impl Contract {
 
 	#[call]
 	fn event(&self, _params: EmptyParams) -> ContractResult<()> {
-		let event = ContractEvent {
-			name: "MyEvent".to_string(),
-			data: MyEvent {
+		self.context.emit_event(
+			"MyEvent".to_string(),
+			MyEvent {
 				foo: "bar".to_string(),
 			},
-		};
-		self.context.emit_event(event)?;
+		)?;
 		Ok(())
 	}
 

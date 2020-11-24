@@ -15,6 +15,8 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
+use serde::{Deserialize, Serialize};
+
 use executor_macro::{call, module};
 use executor_primitives::{
 	errors, Context, ContextEnv, Module as ModuleT, ModuleResult, OpaqueModuleResult, StorageMap,
@@ -196,10 +198,12 @@ impl<C: Context, U: Util> Module<C, U> {
 			admin: new_admin.clone(),
 			vote: vec![],
 		};
-		let event = UpdateAdminEvent::ProposalCreated(UpdateAdminProposalCreated {
-			proposal: proposal.clone(),
-		});
-		self.context.emit_event(Event::from(&event)?)?;
+		self.context.emit_event(Event::from_data(
+			"UpdateAdminProposalCreated".to_string(),
+			UpdateAdminProposalCreated {
+				proposal: proposal.clone(),
+			},
+		)?)?;
 
 		self.update_admin_vote_and_pass(
 			sender,
@@ -258,10 +262,12 @@ impl<C: Context, U: Util> Module<C, U> {
 			vote: vec![],
 		};
 
-		let event = UpdateCodeEvent::ProposalCreated(UpdateCodeProposalCreated {
-			proposal: UpdateCodeProposalForEvent::from(&proposal, &code_hash),
-		});
-		self.context.emit_event(Event::from(&event)?)?;
+		self.context.emit_event(Event::from_data(
+			"UpdateCodeProposalCreated".to_string(),
+			UpdateCodeProposalCreated {
+				proposal: UpdateCodeProposalForEvent::from(&proposal, &code_hash),
+			},
+		)?)?;
 
 		self.update_code_vote_and_pass(
 			sender,
@@ -337,10 +343,12 @@ impl<C: Context, U: Util> Module<C, U> {
 		if !proposal.vote.contains(sender) {
 			proposal.vote.push(sender.clone());
 		}
-		let event = UpdateAdminEvent::ProposalVoted(UpdateAdminProposalVoted {
-			proposal: proposal.clone(),
-		});
-		self.context.emit_event(Event::from(&event)?)?;
+		self.context.emit_event(Event::from_data(
+			"UpdateAdminProposalVoted".to_string(),
+			UpdateAdminProposalVoted {
+				proposal: proposal.clone(),
+			},
+		)?)?;
 
 		// pass a proposal
 		let sum = proposal
@@ -352,10 +360,12 @@ impl<C: Context, U: Util> Module<C, U> {
 			self.admin.set(&contract_address, &proposal.admin)?;
 			pass = true;
 
-			let event = UpdateAdminEvent::ProposalPassed(UpdateAdminProposalPassed {
-				proposal: proposal.clone(),
-			});
-			self.context.emit_event(Event::from(&event)?)?;
+			self.context.emit_event(Event::from_data(
+				"UpdateAdminProposalPassed".to_string(),
+				UpdateAdminProposalPassed {
+					proposal: proposal.clone(),
+				},
+			)?)?;
 		}
 
 		if pass {
@@ -383,10 +393,12 @@ impl<C: Context, U: Util> Module<C, U> {
 		if !proposal.vote.contains(sender) {
 			proposal.vote.push(sender.clone());
 		}
-		let event = UpdateCodeEvent::ProposalVoted(UpdateCodeProposalVoted {
-			proposal: UpdateCodeProposalForEvent::from(proposal, code_hash),
-		});
-		self.context.emit_event(Event::from(&event)?)?;
+		self.context.emit_event(Event::from_data(
+			"UpdateCodeProposalVoted".to_string(),
+			UpdateCodeProposalVoted {
+				proposal: UpdateCodeProposalForEvent::from(proposal, code_hash),
+			},
+		)?)?;
 
 		// pass a proposal
 		let sum = proposal
@@ -406,10 +418,12 @@ impl<C: Context, U: Util> Module<C, U> {
 				.set(&(contract_address.clone(), new_version), &code_hash)?;
 			pass = true;
 
-			let event = UpdateCodeEvent::ProposalPassed(UpdateCodeProposalPassed {
-				proposal: UpdateCodeProposalForEvent::from(proposal, code_hash),
-			});
-			self.context.emit_event(Event::from(&event)?)?;
+			self.context.emit_event(Event::from_data(
+				"UpdateCodeProposalPassed".to_string(),
+				UpdateCodeProposalPassed {
+					proposal: UpdateCodeProposalForEvent::from(proposal, code_hash),
+				},
+			)?)?;
 		}
 
 		if pass {
@@ -496,13 +510,13 @@ pub struct GetCodeHashParams {
 	pub version: Option<u32>,
 }
 
-#[derive(Encode, Decode, Debug, PartialEq, Clone)]
+#[derive(Encode, Decode, Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Admin {
 	pub threshold: u32,
 	pub members: Vec<(Address, u32)>,
 }
 
-#[derive(Encode, Decode, Debug, PartialEq, Clone)]
+#[derive(Encode, Decode, Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct UpdateAdminProposal {
 	pub proposal_id: u32,
 	pub admin: Admin,
@@ -548,7 +562,7 @@ pub struct UpdateCodeProposal {
 	pub vote: Vec<Address>,
 }
 
-#[derive(Encode, Decode, Debug, PartialEq, Clone)]
+#[derive(Encode, Decode, Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct UpdateCodeProposalForEvent {
 	pub proposal_id: u32,
 	pub code_hash: Hash,
@@ -565,46 +579,32 @@ impl UpdateCodeProposalForEvent {
 	}
 }
 
-#[derive(Encode, Decode, Debug)]
-pub enum UpdateAdminEvent {
-	ProposalCreated(UpdateAdminProposalCreated),
-	ProposalVoted(UpdateAdminProposalVoted),
-	ProposalPassed(UpdateAdminProposalPassed),
-}
-
-#[derive(Encode, Decode, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct UpdateAdminProposalCreated {
 	pub proposal: UpdateAdminProposal,
 }
 
-#[derive(Encode, Decode, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct UpdateAdminProposalVoted {
 	pub proposal: UpdateAdminProposal,
 }
 
-#[derive(Encode, Decode, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct UpdateAdminProposalPassed {
 	pub proposal: UpdateAdminProposal,
 }
 
-#[derive(Encode, Decode, Debug)]
-pub enum UpdateCodeEvent {
-	ProposalCreated(UpdateCodeProposalCreated),
-	ProposalVoted(UpdateCodeProposalVoted),
-	ProposalPassed(UpdateCodeProposalPassed),
-}
-
-#[derive(Encode, Decode, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct UpdateCodeProposalCreated {
 	pub proposal: UpdateCodeProposalForEvent,
 }
 
-#[derive(Encode, Decode, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct UpdateCodeProposalVoted {
 	pub proposal: UpdateCodeProposalForEvent,
 }
 
-#[derive(Encode, Decode, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct UpdateCodeProposalPassed {
 	pub proposal: UpdateCodeProposalForEvent,
 }

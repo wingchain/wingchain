@@ -181,7 +181,7 @@ impl<'a> ContextT for Context<'a> {
 		Ok(value)
 	}
 	fn payload_set(&self, key: &[u8], value: Option<DBValue>) -> ModuleResult<()> {
-		let mut buffer = self.inner.payload_state.buffer.borrow_mut();
+		let mut buffer = self.inner.payload_state.tx_buffer.borrow_mut();
 		buffer.insert(DBKey::from_slice(key), value);
 		Ok(())
 	}

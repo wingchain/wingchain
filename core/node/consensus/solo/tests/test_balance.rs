@@ -166,13 +166,14 @@ async fn test_solo_balance() {
 		tx3_receipt,
 		Receipt {
 			block_number: 3,
-			events: vec![Event::from(&module::balance::TransferEvent::Transferred(
+			events: vec![Event::from_data(
+				"Transferred".to_string(),
 				module::balance::Transferred {
 					sender: account1.3,
 					recipient: account2.3,
 					value: 3,
 				}
-			))
+			)
 			.unwrap()],
 			result: Ok(codec::encode(&()).unwrap()),
 		}

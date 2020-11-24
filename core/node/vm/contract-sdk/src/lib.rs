@@ -82,7 +82,8 @@ impl Context {
 	pub fn contract_env(&self) -> ContractResult<Rc<ContractEnv>> {
 		Ok(self.contract_env.clone())
 	}
-	pub fn emit_event<T: Serialize>(&self, event: ContractEvent<T>) -> ContractResult<()> {
+	pub fn emit_event<T: Serialize>(&self, name: String, data: T) -> ContractResult<()> {
+		let event = ContractEvent { name, data };
 		let event = serde_json::to_vec(&event).map_err(|_| ContractError::Serialize)?;
 		import::event_write(event.len() as _, event.as_ptr() as _);
 		Ok(())

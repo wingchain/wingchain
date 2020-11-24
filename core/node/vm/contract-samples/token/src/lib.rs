@@ -3,7 +3,7 @@ use wasm_bindgen::prelude::*;
 
 use sdk::{
 	call, contract, import, init, serde_json, Address, Balance, Context, ContractError,
-	ContractEvent, ContractResult, EmptyParams, StorageMap, StorageValue, Util,
+	ContractResult, EmptyParams, StorageMap, StorageValue, Util,
 };
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
@@ -162,14 +162,14 @@ impl Contract {
 		self.balance.set(&sender_address.0, &sender_balance)?;
 		self.balance.set(&recipient_address.0, &recipient_balance)?;
 
-		self.context.emit_event(ContractEvent {
-			name: "Transfer".to_string(),
-			data: TransferEvent {
+		self.context.emit_event(
+			"Transfer".to_string(),
+			TransferEvent {
 				sender: sender_address.clone(),
 				recipient: recipient_address.clone(),
 				value,
 			},
-		})?;
+		)?;
 		Ok(())
 	}
 
@@ -185,14 +185,14 @@ impl Contract {
 		let key = &[&owner_address.0[..], b"_", &spender_address.0[..]].concat();
 		self.allowance.set(key, &value)?;
 
-		self.context.emit_event(ContractEvent {
-			name: "Approval".to_string(),
-			data: ApprovalEvent {
+		self.context.emit_event(
+			"Approval".to_string(),
+			ApprovalEvent {
 				owner: owner_address.clone(),
 				spender: spender_address.clone(),
 				value,
 			},
-		})?;
+		)?;
 
 		Ok(())
 	}

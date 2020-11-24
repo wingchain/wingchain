@@ -14,7 +14,9 @@
 
 use std::fmt;
 
-use crate::codec::{self, Encode};
+use serde::de::{Error, Unexpected, Visitor};
+use serde::{de, ser, Deserialize, Serialize};
+
 use crate::errors::{CommonError, CommonErrorKind, CommonResult};
 use crate::types::{Address, Event, Hash, Transaction, TransactionForHash};
 
@@ -69,9 +71,140 @@ impl<'a> TransactionForHash<'a> {
 	}
 }
 
+impl ser::Serialize for Address {
+	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+	where
+		S: ser::Serializer,
+	{
+		serializer.serialize_str(hex::encode(&self.0).as_str())
+	}
+}
+
+struct AddressVisitor;
+
+impl<'de> Visitor<'de> for AddressVisitor {
+	type Value = Address;
+
+	fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+		formatter.write_str("Address")
+	}
+
+	fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+	where
+		E: Error,
+	{
+		let result =
+			hex::decode(&v).map_err(|_| Error::invalid_value(Unexpected::Str(&v), &self))?;
+		Ok(Address(result))
+	}
+
+	fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+	where
+		E: Error,
+	{
+		self.visit_str(&v)
+	}
+
+	fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+	where
+		E: Error,
+	{
+		let v = std::str::from_utf8(v)
+			.map_err(|_| Error::invalid_value(Unexpected::Bytes(&v), &self))?;
+		self.visit_str(v)
+	}
+
+	fn visit_byte_buf<E>(self, v: Vec<u8>) -> Result<Self::Value, E>
+	where
+		E: Error,
+	{
+		self.visit_bytes(&v)
+	}
+}
+
+impl<'de> Deserialize<'de> for Address {
+	fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+	where
+		D: de::Deserializer<'de>,
+	{
+		deserializer.deserialize_string(AddressVisitor)
+	}
+}
+
+impl ser::Serialize for Hash {
+	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+	where
+		S: ser::Serializer,
+	{
+		serializer.serialize_str(hex::encode(&self.0).as_str())
+	}
+}
+
+struct HashVisitor;
+
+impl<'de> Visitor<'de> for HashVisitor {
+	type Value = Hash;
+
+	fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+		formatter.write_str("Hash")
+	}
+
+	fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+	where
+		E: Error,
+	{
+		let result =
+			hex::decode(&v).map_err(|_| Error::invalid_value(Unexpected::Str(&v), &self))?;
+		Ok(Hash(result))
+	}
+
+	fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+	where
+		E: Error,
+	{
+		self.visit_str(&v)
+	}
+
+	fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+	where
+		E: Error,
+	{
+		let v = std::str::from_utf8(v)
+			.map_err(|_| Error::invalid_value(Unexpected::Bytes(&v), &self))?;
+		self.visit_str(v)
+	}
+
+	fn visit_byte_buf<E>(self, v: Vec<u8>) -> Result<Self::Value, E>
+	where
+		E: Error,
+	{
+		self.visit_bytes(&v)
+	}
+}
+
+impl<'de> Deserialize<'de> for Hash {
+	fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+	where
+		D: de::Deserializer<'de>,
+	{
+		deserializer.deserialize_string(HashVisitor)
+	}
+}
+
+#[derive(Serialize)]
+struct EventType<S: Serialize> {
+	name: String,
+	data: S,
+}
+
 impl Event {
-	pub fn from<E: Encode>(data: &E) -> CommonResult<Self> {
-		let vec = codec::encode(data)?;
+	pub fn from_raw(raw: Vec<u8>) -> Self {
+		Self(raw)
+	}
+	pub fn from_data<S: Serialize>(name: String, data: S) -> CommonResult<Self> {
+		let event = EventType { name, data };
+		let vec = serde_json::to_vec(&event)
+			.map_err(|e| CommonError::new(CommonErrorKind::Codec, Box::new(e)))?;
 		Ok(Self(vec))
 	}
 }

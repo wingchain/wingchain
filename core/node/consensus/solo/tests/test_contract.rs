@@ -240,7 +240,7 @@ async fn test_solo_contract_update_admin() {
 		.events
 		.into_iter()
 		.map(|x| {
-			let event: module::contract::UpdateAdminEvent = Decode::decode(&mut &x.0[..]).unwrap();
+			let event = String::from_utf8(x.0).unwrap();
 			event
 		})
 		.collect::<Vec<_>>();
@@ -308,7 +308,7 @@ async fn test_solo_contract_update_admin() {
 		.events
 		.into_iter()
 		.map(|x| {
-			let event: module::contract::UpdateAdminEvent = Decode::decode(&mut &x.0[..]).unwrap();
+			let event = String::from_utf8(x.0).unwrap();
 			event
 		})
 		.collect::<Vec<_>>();
@@ -320,7 +320,7 @@ async fn test_solo_contract_update_admin() {
 		.events
 		.into_iter()
 		.map(|x| {
-			let event: module::contract::UpdateAdminEvent = Decode::decode(&mut &x.0[..]).unwrap();
+			let event = String::from_utf8(x.0).unwrap();
 			event
 		})
 		.collect::<Vec<_>>();
@@ -467,7 +467,7 @@ async fn test_solo_contract_update_code() {
 		.events
 		.into_iter()
 		.map(|x| {
-			let event: module::contract::UpdateAdminEvent = Decode::decode(&mut &x.0[..]).unwrap();
+			let event = String::from_utf8(x.0).unwrap();
 			event
 		})
 		.collect::<Vec<_>>();
@@ -533,7 +533,7 @@ async fn test_solo_contract_update_code() {
 		.events
 		.into_iter()
 		.map(|x| {
-			let event: module::contract::UpdateCodeEvent = Decode::decode(&mut &x.0[..]).unwrap();
+			let event = String::from_utf8(x.0).unwrap();
 			event
 		})
 		.collect::<Vec<_>>();
@@ -545,7 +545,7 @@ async fn test_solo_contract_update_code() {
 		.events
 		.into_iter()
 		.map(|x| {
-			let event: module::contract::UpdateCodeEvent = Decode::decode(&mut &x.0[..]).unwrap();
+			let event = String::from_utf8(x.0).unwrap();
 			event
 		})
 		.collect::<Vec<_>>();

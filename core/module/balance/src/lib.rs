@@ -14,6 +14,8 @@
 
 use std::rc::Rc;
 
+use serde::{Deserialize, Serialize};
+
 use executor_macro::{call, module};
 use executor_primitives::{
 	errors, Context, ContextEnv, EmptyParams, Module as ModuleT, ModuleResult, OpaqueModuleResult,
@@ -107,13 +109,14 @@ impl<C: Context, U: Util> Module<C, U> {
 		self.balance.set(sender, &sender_balance)?;
 		self.balance.set(recipient, &recipient_balance)?;
 
-		let event = TransferEvent::Transferred(Transferred {
-			sender: sender.clone(),
-			recipient: recipient.clone(),
-			value,
-		});
-
-		self.context.emit_event(Event::from(&event)?)?;
+		self.context.emit_event(Event::from_data(
+			"Transferred".to_string(),
+			Transferred {
+				sender: sender.clone(),
+				recipient: recipient.clone(),
+				value,
+			},
+		)?)?;
 
 		Ok(())
 	}
@@ -135,12 +138,7 @@ pub struct TransferParams {
 	pub value: Balance,
 }
 
-#[derive(Encode, Decode)]
-pub enum TransferEvent {
-	Transferred(Transferred),
-}
-
-#[derive(Encode, Decode)]
+#[derive(Serialize, Deserialize)]
 pub struct Transferred {
 	pub sender: Address,
 	pub recipient: Address,
