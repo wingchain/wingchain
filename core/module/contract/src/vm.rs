@@ -280,6 +280,7 @@ impl<M: Module> VMContext for DefaultVMContext<M> {
 		self.contract_env.clone()
 	}
 	fn payload_get(&self, key: &[u8]) -> VMResult<Option<DBValue>> {
+		let key = &self.vm_to_module_key(key)?;
 		let result = self
 			.base_context
 			.payload_get(key)
@@ -295,7 +296,6 @@ impl<M: Module> VMContext for DefaultVMContext<M> {
 		Ok(result)
 	}
 	fn payload_drain_buffer(&self) -> VMResult<Vec<(DBKey, Option<DBValue>)>> {
-		let key = &self.vm_to_module_key(key)?;
 		let result = self
 			.base_context
 			.payload_drain_tx_buffer()
