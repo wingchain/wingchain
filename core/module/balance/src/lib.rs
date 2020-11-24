@@ -129,7 +129,7 @@ pub struct InitParams {
 	pub endow: Vec<(Address, Balance)>,
 }
 
-#[derive(Encode, Decode)]
+#[derive(Encode, Decode, Clone)]
 pub struct TransferParams {
 	pub recipient: Address,
 	pub value: Balance,

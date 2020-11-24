@@ -19,9 +19,9 @@ use std::rc::Rc;
 use executor_primitives::{self, CallEnv, Context, ContextEnv, EmptyParams, Module, ModuleError,
                           ModuleResult, SEPARATOR, Util};
 use node_vm::{VMCallEnv, VMContext, VMContextEnv, VMContractEnv};
-use node_vm::errors::{ApplicationError, ContractError, VMError, VMResult};
+use node_vm::errors::{ContractError, VMError, VMResult};
 use primitives::{Address, Balance, DBKey, DBValue, Event, Hash};
-use primitives::codec::Encode;
+use module_balance::TransferParams;
 
 const CONTRACT_DATA_STORAGE_KEY: &[u8] = b"contract_data";
 
@@ -208,7 +208,6 @@ pub struct DefaultVMContext<M: Module> {
     contract_env: Rc<VMContractEnv>,
     executor_util: M::U,
     base_context: StackedExecutorContext<M::C>,
-    events: RefCell<Vec<Vec<u8>>>,
     module_context: StackedExecutorContext<M::C>,
 }
 
@@ -228,7 +227,6 @@ impl<M: Module> DefaultVMContext<M> {
             contract_env,
             executor_util,
             base_context,
-            events: RefCell::new(Vec::new()),
             module_context,
         }
     }
@@ -276,17 +274,20 @@ impl<M: Module> VMContext for DefaultVMContext<M> {
         Ok(result)
     }
     fn payload_apply(&self, items: Vec<(DBKey, Option<DBValue>)>) -> VMResult<()> {
-        let result = self.base_context.payload_apply(items).map_err(Self::module_to_vm_error)?;
-        Ok(result)
-    }
-    fn emit_event(&self, event: Vec<u8>) -> VMResult<()> {
-        self.events.borrow_mut().push(event);
+        self.base_context.payload_apply(items).map_err(Self::module_to_vm_error)?;
         Ok(())
     }
-    fn drain_events(&self) -> VMResult<Vec<Vec<u8>>> {
-        let mut events = self.events.borrow_mut();
-        let events = events.drain(..).collect();
-        Ok(events)
+    fn emit_event(&self, event: Event) -> VMResult<()> {
+        self.base_context.emit_event(event).map_err(Self::module_to_vm_error)?;
+        Ok(())
+    }
+    fn drain_events(&self) -> VMResult<Vec<Event>> {
+        let result = self.base_context.drain_tx_events().map_err(Self::module_to_vm_error)?;
+        Ok(result)
+    }
+    fn apply_events(&self, items: Vec<Event>) -> VMResult<()>{
+        self.base_context.apply_events(items).map_err(Self::module_to_vm_error)?;
+        Ok(())
     }
     fn hash(&self, data: &[u8]) -> VMResult<Hash> {
         self.executor_util.hash(data).map_err(Self::module_to_vm_error)
@@ -299,7 +300,7 @@ impl<M: Module> VMContext for DefaultVMContext<M> {
     }
     fn module_balance_get(&self, address: &Address) -> VMResult<Balance> {
         let balance_module = module_balance::Module::new(self.module_context.clone(), self.executor_util.clone());
-        let sender = Some(&self.contract_env.sender_address);
+        let sender = Some(address);
         balance_module.get_balance(sender, EmptyParams).map_err(Self::module_to_vm_error)
     }
     fn module_balance_transfer(
@@ -308,12 +309,30 @@ impl<M: Module> VMContext for DefaultVMContext<M> {
         recipient: &Address,
         value: Balance,
     ) -> VMResult<()> {
-        unimplemented!()
+        let params = TransferParams {
+            recipient: recipient.clone(),
+            value,
+        };
+        module_balance::Module::<M::C, _>::validate_transfer(&self.executor_util, params.clone()).map_err(Self::module_to_vm_error)?;
+        let balance_module = module_balance::Module::new(self.module_context.clone(), self.executor_util.clone());
+        let sender = Some(sender);
+        balance_module.transfer(sender, params).map_err(Self::module_to_vm_error)?;
+        Ok(())
     }
     fn module_payload_drain_buffer(&self) -> VMResult<Vec<(DBKey, Option<DBValue>)>> {
-        unimplemented!()
+        let result = self.module_context.payload_drain_tx_buffer().map_err(Self::module_to_vm_error)?;
+        Ok(result)
     }
     fn module_payload_apply(&self, items: Vec<(DBKey, Option<DBValue>)>) -> VMResult<()> {
-        unimplemented!()
+        self.base_context.payload_apply(items).map_err(Self::module_to_vm_error)?;
+        Ok(())
+    }
+    fn module_drain_events(&self) -> VMResult<Vec<Event>> {
+        let result = self.module_context.drain_tx_events().map_err(Self::module_to_vm_error)?;
+        Ok(result)
+    }
+    fn module_apply_events(&self, items: Vec<Event>) -> VMResult<()>{
+        self.module_context.apply_events(items).map_err(Self::module_to_vm_error)?;
+        Ok(())
     }
 }
