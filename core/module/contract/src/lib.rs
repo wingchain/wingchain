@@ -201,6 +201,7 @@ impl<C: Context, U: Util> Module<C, U> {
 		self.context.emit_event(Event::from_data(
 			"UpdateAdminProposalCreated".to_string(),
 			UpdateAdminProposalCreated {
+				contract_address: contract_address.clone(),
 				proposal: proposal.clone(),
 			},
 		)?)?;
@@ -265,6 +266,7 @@ impl<C: Context, U: Util> Module<C, U> {
 		self.context.emit_event(Event::from_data(
 			"UpdateCodeProposalCreated".to_string(),
 			UpdateCodeProposalCreated {
+				contract_address: contract_address.clone(),
 				proposal: UpdateCodeProposalForEvent::from(&proposal, &code_hash),
 			},
 		)?)?;
@@ -346,6 +348,7 @@ impl<C: Context, U: Util> Module<C, U> {
 		self.context.emit_event(Event::from_data(
 			"UpdateAdminProposalVoted".to_string(),
 			UpdateAdminProposalVoted {
+				contract_address: contract_address.clone(),
 				proposal: proposal.clone(),
 			},
 		)?)?;
@@ -363,6 +366,7 @@ impl<C: Context, U: Util> Module<C, U> {
 			self.context.emit_event(Event::from_data(
 				"UpdateAdminProposalPassed".to_string(),
 				UpdateAdminProposalPassed {
+					contract_address: contract_address.clone(),
 					proposal: proposal.clone(),
 				},
 			)?)?;
@@ -396,6 +400,7 @@ impl<C: Context, U: Util> Module<C, U> {
 		self.context.emit_event(Event::from_data(
 			"UpdateCodeProposalVoted".to_string(),
 			UpdateCodeProposalVoted {
+				contract_address: contract_address.clone(),
 				proposal: UpdateCodeProposalForEvent::from(proposal, code_hash),
 			},
 		)?)?;
@@ -421,6 +426,7 @@ impl<C: Context, U: Util> Module<C, U> {
 			self.context.emit_event(Event::from_data(
 				"UpdateCodeProposalPassed".to_string(),
 				UpdateCodeProposalPassed {
+					contract_address: contract_address.clone(),
 					proposal: UpdateCodeProposalForEvent::from(proposal, code_hash),
 				},
 			)?)?;
@@ -581,31 +587,37 @@ impl UpdateCodeProposalForEvent {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct UpdateAdminProposalCreated {
+	pub contract_address: Address,
 	pub proposal: UpdateAdminProposal,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct UpdateAdminProposalVoted {
+	pub contract_address: Address,
 	pub proposal: UpdateAdminProposal,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct UpdateAdminProposalPassed {
+	pub contract_address: Address,
 	pub proposal: UpdateAdminProposal,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct UpdateCodeProposalCreated {
+	pub contract_address: Address,
 	pub proposal: UpdateCodeProposalForEvent,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct UpdateCodeProposalVoted {
+	pub contract_address: Address,
 	pub proposal: UpdateCodeProposalForEvent,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct UpdateCodeProposalPassed {
+	pub contract_address: Address,
 	pub proposal: UpdateCodeProposalForEvent,
 }
 

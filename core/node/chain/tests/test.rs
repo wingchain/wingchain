@@ -35,7 +35,7 @@ use utils_test::test_accounts;
 
 #[tokio::test]
 async fn test_chain() {
-	env_logger::init();
+	let _ = env_logger::try_init();
 
 	use tempfile::tempdir;
 

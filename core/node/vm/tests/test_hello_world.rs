@@ -245,6 +245,8 @@ fn test_vm_hw_balance() {
 
 #[test]
 fn test_vm_hw_balance_transfer_success() {
+	let _ = env_logger::try_init();
+
 	#[derive(Serialize)]
 	struct Input {
 		recipient: Vec<u8>,
@@ -290,7 +292,7 @@ fn test_vm_hw_balance_transfer_success() {
 		.into_iter()
 		.map(|x| String::from_utf8(x.0).unwrap())
 		.collect::<Vec<_>>();
-	println!("events: {:?}", events);
+	log::info!("events: {:?}", events);
 
 	// shift to new context
 	let context = Rc::new(TestVMContext::new(account1.3.clone(), 0, executor_context));
@@ -308,6 +310,8 @@ fn test_vm_hw_balance_transfer_success() {
 
 #[test]
 fn test_vm_hw_balance_transfer_failed() {
+	let _ = env_logger::try_init();
+
 	#[derive(Serialize)]
 	struct Input {
 		recipient: Vec<u8>,
@@ -353,7 +357,7 @@ fn test_vm_hw_balance_transfer_failed() {
 		.into_iter()
 		.map(|x| String::from_utf8(x.0).unwrap())
 		.collect::<Vec<_>>();
-	println!("events: {:?}", events);
+	log::info!("events: {:?}", events);
 
 	// shift to new context
 	let context = Rc::new(TestVMContext::new(account1.3.clone(), 0, executor_context));
@@ -371,6 +375,8 @@ fn test_vm_hw_balance_transfer_failed() {
 
 #[test]
 fn test_vm_hw_balance_transfer_partial_failed() {
+	let _ = env_logger::try_init();
+
 	#[derive(Serialize)]
 	struct Input {
 		recipient: Vec<u8>,
@@ -394,7 +400,7 @@ fn test_vm_hw_balance_transfer_partial_failed() {
 	);
 	let result = vm_execute(context.clone(), Mode::Call, "balance_transfer_ea", &input);
 
-	println!("result: {:?}", result);
+	log::info!("result: {:?}", result);
 
 	// apply
 	match result {
@@ -418,7 +424,7 @@ fn test_vm_hw_balance_transfer_partial_failed() {
 		.into_iter()
 		.map(|x| String::from_utf8(x.0).unwrap())
 		.collect::<Vec<_>>();
-	println!("events: {:?}", events);
+	log::info!("events: {:?}", events);
 
 	// shift to new context
 	let context = Rc::new(TestVMContext::new(account1.3.clone(), 0, executor_context));

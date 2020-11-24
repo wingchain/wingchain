@@ -21,6 +21,9 @@ primitives = { path = "../../primitives" }
 contract-sdk-primitives = { package = "node-vm-contract-sdk-primitives", path = "contract-sdk-primitives" }
 
 [dev-dependencies]
+hex = "0.4.2"
+log = "0.4.8"
+env_logger = "0.7.1"
+
 utils-test = { path = "../../../utils/test" }
 crypto = { path = "../../crypto" }
-hex = "0.4.2"

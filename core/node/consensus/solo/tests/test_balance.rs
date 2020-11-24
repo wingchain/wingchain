@@ -32,7 +32,7 @@ use utils_test::test_accounts;
 
 #[tokio::test]
 async fn test_solo_balance() {
-	env_logger::init();
+	let _ = env_logger::try_init();
 
 	let dsa = Arc::new(DsaImpl::Ed25519);
 	let address = Arc::new(AddressImpl::Blake2b160);
