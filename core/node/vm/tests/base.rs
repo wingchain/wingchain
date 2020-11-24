@@ -290,6 +290,13 @@ impl<EC: ExecutorContext> TestVMContext<EC> {
 
 		context
 	}
+
+	fn vm_to_module_key(&self, key: &[u8]) -> VMResult<Vec<u8>> {
+		let key = &[&self.contract_env.contract_address.0, SEPARATOR, key].concat();
+		let key = self.hash(key)?;
+		let key = [b"contract", SEPARATOR, b"contract_data", SEPARATOR, &key.0].concat();
+		Ok(key)
+	}
 }
 
 impl<EC: ExecutorContext> VMContext for TestVMContext<EC> {
@@ -303,9 +310,11 @@ impl<EC: ExecutorContext> VMContext for TestVMContext<EC> {
 		self.contract_env.clone()
 	}
 	fn payload_get(&self, key: &[u8]) -> VMResult<Option<DBValue>> {
+		let key = &self.vm_to_module_key(key)?;
 		self.base_context.payload_get(key)
 	}
 	fn payload_set(&self, key: &[u8], value: Option<DBValue>) -> VMResult<()> {
+		let key = &self.vm_to_module_key(key)?;
 		self.base_context.payload_set(key, value)
 	}
 	fn payload_drain_buffer(&self) -> VMResult<Vec<(DBKey, Option<DBValue>)>> {
