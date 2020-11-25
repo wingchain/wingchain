@@ -14,8 +14,6 @@
 
 use std::sync::Arc;
 
-use tokio::time::{delay_for, Duration};
-
 use crypto::address::AddressImpl;
 use crypto::dsa::DsaImpl;
 use crypto::hash::{Hash as HashT, HashImpl};
@@ -35,14 +33,9 @@ async fn test_solo_contract_create() {
 
 	let (account1, _account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, _solo) = base::get_service(&account1.3);
+	let (chain, txpool, solo) = base::get_service(&account1.3);
 
 	let ori_code = get_code().to_vec();
-
-	let delay_to_insert_tx = base::time_until_next(base::duration_now(), 1000) / 2;
-
-	// after block 0
-	delay_for(delay_to_insert_tx).await;
 
 	let tx1_hash = base::insert_tx(
 		&chain,
@@ -62,9 +55,11 @@ async fn test_solo_contract_create() {
 			.unwrap(),
 	)
 	.await;
+	base::wait_txpool(&txpool).await;
 
-	// after block 1
-	delay_for(Duration::from_millis(1000)).await;
+	// generate block 1
+	solo.generate_block().await.unwrap();
+	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
 	let tx1_result = tx1_receipt.result.unwrap();
@@ -138,11 +133,6 @@ async fn test_solo_contract_create_fail() {
 
 	let ori_code = get_code().to_vec();
 
-	let delay_to_insert_tx = base::time_until_next(base::duration_now(), 1000) / 2;
-
-	// after block 0
-	delay_for(delay_to_insert_tx).await;
-
 	let tx1_error = chain
 		.build_transaction(
 			Some((account1.0.clone(), 0, 10)),
@@ -186,12 +176,7 @@ async fn test_solo_contract_update_admin() {
 
 	let (account1, account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, _solo) = base::get_service(&account1.3);
-
-	let delay_to_insert_tx = base::time_until_next(base::duration_now(), 1000) / 2;
-
-	// after block 0
-	delay_for(delay_to_insert_tx).await;
+	let (chain, txpool, solo) = base::get_service(&account1.3);
 
 	let ori_code = get_code().to_vec();
 
@@ -213,9 +198,11 @@ async fn test_solo_contract_update_admin() {
 			.unwrap(),
 	)
 	.await;
+	base::wait_txpool(&txpool).await;
 
-	// after block 1
-	delay_for(Duration::from_millis(1000)).await;
+	// generate block 1
+	solo.generate_block().await.unwrap();
+	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
 	let tx1_result = tx1_receipt.result.unwrap();
@@ -266,9 +253,11 @@ async fn test_solo_contract_update_admin() {
 			.unwrap(),
 	)
 	.await;
+	base::wait_txpool(&txpool).await;
 
-	// after block 2
-	delay_for(Duration::from_millis(1000)).await;
+	// generate block 2
+	solo.generate_block().await.unwrap();
+	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
 	let tx1_events = tx1_receipt
@@ -340,9 +329,11 @@ async fn test_solo_contract_update_admin() {
 			.unwrap(),
 	)
 	.await;
+	base::wait_txpool(&txpool).await;
 
-	// after block 3
-	delay_for(Duration::from_millis(1000)).await;
+	// generate block 3
+	solo.generate_block().await.unwrap();
+	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
 	let tx1_events = tx1_receipt
@@ -400,14 +391,9 @@ async fn test_solo_contract_update_code() {
 
 	let (account1, account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, _solo) = base::get_service(&account1.3);
+	let (chain, txpool, solo) = base::get_service(&account1.3);
 
 	let ori_code = get_code().to_vec();
-
-	let delay_to_insert_tx = base::time_until_next(base::duration_now(), 1000) / 2;
-
-	// after block 0
-	delay_for(delay_to_insert_tx).await;
 
 	let tx1_hash = base::insert_tx(
 		&chain,
@@ -427,9 +413,11 @@ async fn test_solo_contract_update_code() {
 			.unwrap(),
 	)
 	.await;
+	base::wait_txpool(&txpool).await;
 
-	// after block 1
-	delay_for(Duration::from_millis(1000)).await;
+	// generate block 1
+	solo.generate_block().await.unwrap();
+	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
 	let tx1_result = tx1_receipt.result.unwrap();
@@ -495,9 +483,11 @@ async fn test_solo_contract_update_code() {
 			.unwrap(),
 	)
 	.await;
+	base::wait_txpool(&txpool).await;
 
-	// after block 2
-	delay_for(Duration::from_millis(1000)).await;
+	// generate block 2
+	solo.generate_block().await.unwrap();
+	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
 	let tx1_events = tx1_receipt
@@ -567,9 +557,11 @@ async fn test_solo_contract_update_code() {
 			.unwrap(),
 	)
 	.await;
+	base::wait_txpool(&txpool).await;
 
-	// after block 3
-	delay_for(Duration::from_millis(1000)).await;
+	// generate block 3
+	solo.generate_block().await.unwrap();
+	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
 	let tx1_events = tx1_receipt
@@ -641,14 +633,9 @@ async fn test_solo_contract_execute_read() {
 
 	let (account1, _account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, _solo) = base::get_service(&account1.3);
+	let (chain, txpool, solo) = base::get_service(&account1.3);
 
 	let ori_code = get_code().to_vec();
-
-	let delay_to_insert_tx = base::time_until_next(base::duration_now(), 1000) / 2;
-
-	// after block 0
-	delay_for(delay_to_insert_tx).await;
 
 	let tx1_hash = base::insert_tx(
 		&chain,
@@ -668,9 +655,11 @@ async fn test_solo_contract_execute_read() {
 			.unwrap(),
 	)
 	.await;
+	base::wait_txpool(&txpool).await;
 
-	// after block 1
-	delay_for(Duration::from_millis(1000)).await;
+	// generate block 1
+	solo.generate_block().await.unwrap();
+	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
 	let tx1_result = tx1_receipt.result.unwrap();

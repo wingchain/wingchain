@@ -25,6 +25,9 @@ pub enum ErrorKind {
 
 	#[display(fmt = "Exceed until: tx_hash: {:?}", _0)]
 	ExceedUntil(Hash),
+
+	#[display(fmt = "Time error")]
+	TimeError,
 }
 
 impl Error for ErrorKind {}

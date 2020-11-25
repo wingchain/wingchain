@@ -30,7 +30,7 @@ where
 	env: Rc<ContextEnv>,
 	#[allow(dead_code)]
 	util: U,
-	block_interval: StorageValue<u64, Self>,
+	block_interval: StorageValue<Option<u64>, Self>,
 }
 
 #[module]
@@ -69,5 +69,5 @@ pub type InitParams = Meta;
 
 #[derive(Encode, Decode, Debug, PartialEq)]
 pub struct Meta {
-	pub block_interval: u64,
+	pub block_interval: Option<u64>,
 }

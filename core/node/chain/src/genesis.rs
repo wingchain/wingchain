@@ -144,7 +144,7 @@ impl<'a> TryInto<module::solo::InitParams> for JsonParams<'a> {
 	fn try_into(self) -> Result<module::solo::InitParams, Self::Error> {
 		#[derive(Deserialize)]
 		pub struct InitParams {
-			pub block_interval: u64,
+			pub block_interval: Option<u64>,
 		}
 		let params = serde_json::from_str::<InitParams>(self.0)
 			.map_err(|e| errors::ErrorKind::Spec(format!("invalid json: {:?}", e)))?;

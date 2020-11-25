@@ -27,6 +27,7 @@ use futures::{Future, Stream, TryStreamExt};
 use log::{debug, info, warn};
 use tokio::time::{delay_for, Delay};
 
+use node_consensus::errors::ErrorKind;
 use node_consensus::{errors, support::ConsensusSupport};
 use node_executor::module;
 use node_executor_primitives::EmptyParams;
@@ -52,11 +53,24 @@ where
 
 		let meta = get_solo_meta(support.clone())?;
 
-		tokio::spawn(start(meta, support.clone()));
+		if meta.block_interval.is_some() {
+			tokio::spawn(start(meta, support.clone()));
+		}
 
 		info!("Initializing consensus solo");
 
 		Ok(solo)
+	}
+
+	pub async fn generate_block(&self) -> CommonResult<()> {
+		let timestamp = SystemTime::now();
+		let timestamp = timestamp
+			.duration_since(SystemTime::UNIX_EPOCH)
+			.map_err(|_| ErrorKind::TimeError)?;
+		let timestamp = timestamp.as_millis() as u64;
+		let schedule_info = ScheduleInfo { timestamp };
+		work(schedule_info, self.support.clone()).await?;
+		Ok(())
 	}
 }
 
@@ -64,7 +78,8 @@ async fn start<S>(meta: module::solo::Meta, support: Arc<S>) -> CommonResult<()>
 where
 	S: ConsensusSupport,
 {
-	let task = Scheduler::new(meta.block_interval)
+	let block_interval = meta.block_interval.expect("qed");
+	let task = Scheduler::new(block_interval)
 		.try_for_each(move |schedule_info| {
 			work(schedule_info, support.clone())
 				.map_err(|e| {

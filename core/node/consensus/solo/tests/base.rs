@@ -15,7 +15,6 @@
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::SystemTime;
 
 use tempfile::tempdir;
 use tokio::time::Duration;
@@ -53,6 +52,32 @@ pub async fn insert_tx(chain: &Arc<Chain>, txpool: &Arc<TxPool<Chain>>, tx: Tran
 	let tx_hash = chain.hash_transaction(&tx).unwrap();
 	txpool.insert(tx).await.unwrap();
 	tx_hash
+}
+
+pub async fn wait_txpool(txpool: &Arc<TxPool<Chain>>) {
+	loop {
+		{
+			let queue = txpool.get_queue().read();
+			if queue.len() > 0 {
+				break;
+			}
+		}
+		tokio::time::delay_for(Duration::from_millis(10)).await;
+	}
+}
+
+pub async fn wait_block_execution(chain: &Arc<Chain>) {
+	loop {
+		{
+			let number = chain.get_confirmed_number().unwrap().unwrap();
+			let block_hash = chain.get_block_hash(&number).unwrap().unwrap();
+			let execution = chain.get_execution(&block_hash).unwrap();
+			if execution.is_some() {
+				break;
+			}
+		}
+		tokio::time::delay_for(Duration::from_millis(10)).await;
+	}
 }
 
 fn get_chain(address: &Address) -> Arc<Chain> {
@@ -109,7 +134,7 @@ module = "solo"
 method = "init"
 params = '''
 {{
-    "block_interval": 1000
+    "block_interval": null
 }}
 '''
 	"#,
@@ -117,20 +142,4 @@ params = '''
 	);
 
 	fs::write(config_path.join("spec.toml"), &spec).unwrap();
-}
-
-pub fn time_until_next(now: Duration, duration: u64) -> Duration {
-	let remaining_full_millis = duration - (now.as_millis() as u64 % duration) - 1;
-	Duration::from_millis(remaining_full_millis)
-}
-
-pub fn duration_now() -> Duration {
-	let now = SystemTime::now();
-	now.duration_since(SystemTime::UNIX_EPOCH)
-		.unwrap_or_else(|e| {
-			panic!(
-				"Current time {:?} is before unix epoch. Something is wrong: {:?}",
-				now, e,
-			)
-		})
 }
