@@ -45,6 +45,7 @@ pub fn contract(_attr: TokenStream, item: TokenStream) -> TokenStream {
 			.iter()
 			.map(|x| {
 				let method_ident = &x.method_ident;
+				let params_ident = x.params_ident.clone();
 				let is_payable = x.payable;
 				quote! {
 					stringify!(#method_ident) => {
@@ -54,7 +55,7 @@ pub fn contract(_attr: TokenStream, item: TokenStream) -> TokenStream {
 							}
 						}
 
-						let _params = serde_json::from_slice(&params).map_err(|_|ContractError::Deserialize)?;
+						let _params : #params_ident = serde_json::from_slice(&params).map_err(|_|ContractError::InvalidParams)?;
 						Ok(())
 					},
 				}
@@ -81,7 +82,7 @@ pub fn contract(_attr: TokenStream, item: TokenStream) -> TokenStream {
 							}
 						}
 
-						let params = serde_json::from_slice(&params).map_err(|_|ContractError::Deserialize)?;
+						let params = serde_json::from_slice(&params).map_err(|_|ContractError::InvalidParams)?;
 						let result = self.#method_ident(params)?;
 						let result = serde_json::to_vec(&result).map_err(|_|ContractError::Serialize)?;
 						Ok(result)
@@ -100,36 +101,28 @@ pub fn contract(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
 		impl #type_name {
 
-			fn validate_init(method: Vec<u8>, params: Vec<u8>, pay_value: Balance) -> ContractResult<()> {
-				let method = String::from_utf8(method).map_err(|_|ContractError::Deserialize)?;
-				let method = method.as_str();
+			fn validate_init(method: &str, params: Vec<u8>, pay_value: Balance) -> ContractResult<()> {
 				match method {
 					#(#validate_init_ts_vec)*
 					other => Err(ContractError::InvalidMethod),
 				}
 			}
 
-			fn validate_call(method: Vec<u8>, params: Vec<u8>, pay_value: Balance) -> ContractResult<()> {
-				let method = String::from_utf8(method).map_err(|_|ContractError::Deserialize)?;
-				let method = method.as_str();
+			fn validate_call(method: &str, params: Vec<u8>, pay_value: Balance) -> ContractResult<()> {
 				match method {
 					#(#validate_call_ts_vec)*
 					other => Err(ContractError::InvalidMethod),
 				}
 			}
 
-			fn execute_init(&self, method: Vec<u8>, params: Vec<u8>, pay_value: Balance) -> ContractResult<Vec<u8>> {
-				let method = String::from_utf8(method).map_err(|_|ContractError::Deserialize)?;
-				let method = method.as_str();
+			fn execute_init(&self, method: &str, params: Vec<u8>, pay_value: Balance) -> ContractResult<Vec<u8>> {
 				match method {
 					#(#execute_init_ts_vec)*
 					other => Err(ContractError::InvalidMethod),
 				}
 			}
 
-			fn execute_call(&self, method: Vec<u8>, params: Vec<u8>, pay_value: Balance) -> ContractResult<Vec<u8>> {
-				let method = String::from_utf8(method).map_err(|_|ContractError::Deserialize)?;
-				let method = method.as_str();
+			fn execute_call(&self, method: &str, params: Vec<u8>, pay_value: Balance) -> ContractResult<Vec<u8>> {
 				match method {
 					#(#execute_call_ts_vec)*
 					other => Err(ContractError::InvalidMethod),
@@ -137,25 +130,25 @@ pub fn contract(_attr: TokenStream, item: TokenStream) -> TokenStream {
 			}
 		}
 
-		fn get_method() -> ContractResult<Vec<u8>> {
+		fn get_method() -> ContractResult<String> {
 			let share_id = 0u8 as *const u8 as u64;
 			import::method_read(share_id);
 			let len = import::share_len(share_id);
 			let method = vec![0u8; len as usize];
 			import::share_read(share_id, method.as_ptr() as _);
-
+			let method = String::from_utf8(method).map_err(|_|ContractError::InvalidMethod)?;
 			Ok(method)
 		}
 
-		fn get_input() -> ContractResult<Vec<u8>> {
+		fn get_params() -> ContractResult<Vec<u8>> {
 			let share_id = 0u8 as *const u8 as u64;
-			import::input_read(share_id);
+			import::params_read(share_id);
 			let len = import::share_len(share_id);
-			let input = vec![0u8; len as usize];
-			import::share_read(share_id, input.as_ptr() as _);
-			let input = if input.len() == 0 { "null".as_bytes().to_vec() } else { input };
+			let params = vec![0u8; len as usize];
+			import::share_read(share_id, params.as_ptr() as _);
+			let params = if params.len() == 0 { "null".as_bytes().to_vec() } else { params };
 
-			Ok(input)
+			Ok(params)
 		}
 
 		fn get_pay_value() -> ContractResult<Balance> {
@@ -163,7 +156,7 @@ pub fn contract(_attr: TokenStream, item: TokenStream) -> TokenStream {
 			Ok(pay_value)
 		}
 
-		fn output_result(result: ContractResult<()>) {
+		fn set_result(result: ContractResult<()>) {
 			match result {
 				Ok(_) => (),
 				Err(e) => {
@@ -175,44 +168,44 @@ pub fn contract(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
 		fn inner_validate_init() -> ContractResult<()> {
 			let method = get_method()?;
-			let input = get_input()?;
+			let params = get_params()?;
 			let pay_value = get_pay_value()?;
 
-			let output = #type_name::validate_init(method, input, pay_value)?;
+			#type_name::validate_init(&method, params, pay_value)?;
 
 			Ok(())
 		}
 
 		fn inner_validate_call() -> ContractResult<()> {
 			let method = get_method()?;
-			let input = get_input()?;
+			let params = get_params()?;
 			let pay_value = get_pay_value()?;
 
-			let output = #type_name::validate_call(method, input, pay_value)?;
+			#type_name::validate_call(&method, params, pay_value)?;
 
 			Ok(())
 		}
 
 		fn inner_execute_init() -> ContractResult<()> {
 			let method = get_method()?;
-			let input = get_input()?;
+			let params = get_params()?;
 			let pay_value = get_pay_value()?;
 
 			let contract = #type_name::new()?;
-			let output = contract.execute_init(method, input, pay_value)?;
-			import::output_write(output.len() as _, output.as_ptr() as _);
+			let result = contract.execute_init(&method, params, pay_value)?;
+			import::result_write(result.len() as _, result.as_ptr() as _);
 
 			Ok(())
 		}
 
 		fn inner_execute_call() -> ContractResult<()> {
 			let method = get_method()?;
-			let input = get_input()?;
+			let params = get_params()?;
 			let pay_value = get_pay_value()?;
 
 			let contract = #type_name::new()?;
-			let output = contract.execute_call(method, input, pay_value)?;
-			import::output_write(output.len() as _, output.as_ptr() as _);
+			let result = contract.execute_call(&method, params, pay_value)?;
+			import::result_write(result.len() as _, result.as_ptr() as _);
 
 			Ok(())
 		}
@@ -220,25 +213,25 @@ pub fn contract(_attr: TokenStream, item: TokenStream) -> TokenStream {
 		#[wasm_bindgen]
 		pub fn validate_init() {
 			let result = inner_validate_init();
-			output_result(result);
+			set_result(result);
 		}
 
 		#[wasm_bindgen]
 		pub fn validate_call() {
 			let result = inner_validate_call();
-			output_result(result);
+			set_result(result);
 		}
 
 		#[wasm_bindgen]
 		pub fn execute_init() {
 			let result = inner_execute_init();
-			output_result(result);
+			set_result(result);
 		}
 
 		#[wasm_bindgen]
 		pub fn execute_call() {
 			let result = inner_execute_call();
-			output_result(result);
+			set_result(result);
 		}
 	};
 	gen.into()
@@ -334,7 +327,7 @@ fn get_method_params_ident(method: &ImplItemMethod) -> Ident {
 		};
 		params_ident
 	} else {
-		panic!("call method input should be (&self, params: Type)");
+		panic!("call method args should be (&self, params: Type)");
 	}
 }
 
@@ -342,7 +335,6 @@ struct ModuleMethod {
 	#[allow(dead_code)]
 	method: ImplItemMethod,
 	method_ident: Ident,
-	#[allow(dead_code)]
 	params_ident: Ident,
 	payable: bool,
 }

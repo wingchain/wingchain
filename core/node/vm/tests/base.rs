@@ -41,7 +41,7 @@ pub fn vm_validate(
 	code: &[u8],
 	mode: Mode,
 	method: &str,
-	input: &str,
+	params: &str,
 	pay_value: Balance,
 ) -> VMResult<()> {
 	let hash = Arc::new(HashImpl::Blake2b256);
@@ -54,9 +54,8 @@ pub fn vm_validate(
 		hash.hash(&mut out, &code);
 		Hash(out)
 	};
-	let method = method.as_bytes().to_vec();
-	let input = input.as_bytes().to_vec();
-	let result = vm.validate(&code_hash, &code, mode, method, input, pay_value)?;
+	let params = params.as_bytes();
+	let result = vm.validate(&code_hash, &code, mode, method, params, pay_value)?;
 	Ok(result)
 }
 
@@ -65,7 +64,7 @@ pub fn vm_execute(
 	context: &dyn VMContext,
 	mode: Mode,
 	method: &str,
-	input: &str,
+	params: &str,
 	pay_value: Balance,
 ) -> VMResult<String> {
 	let hash = Arc::new(HashImpl::Blake2b256);
@@ -78,9 +77,8 @@ pub fn vm_execute(
 		hash.hash(&mut out, &code);
 		Hash(out)
 	};
-	let method = method.as_bytes().to_vec();
-	let input = input.as_bytes().to_vec();
-	let result = vm.execute(&code_hash, &code, context, mode, method, input, pay_value)?;
+	let params = params.as_bytes();
+	let result = vm.execute(&code_hash, &code, context, mode, method, params, pay_value)?;
 	let result: String = String::from_utf8(result).map_err(|_| ContractError::Deserialize)?;
 	Ok(result)
 }

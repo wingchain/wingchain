@@ -70,8 +70,8 @@ impl VM {
 		code_hash: &Hash,
 		code: &[u8],
 		mode: Mode,
-		method: Vec<u8>,
-		input: Vec<u8>,
+		method: &str,
+		params: &[u8],
 		pay_value: Balance,
 	) -> VMResult<()> {
 		let func = match mode {
@@ -79,7 +79,7 @@ impl VM {
 			Mode::Call => "validate_call",
 		};
 		let context = &DummyVMContext;
-		self.run(code_hash, code, context, func, method, input, pay_value)?;
+		self.run(code_hash, code, context, func, method, params, pay_value)?;
 		Ok(())
 	}
 
@@ -89,15 +89,15 @@ impl VM {
 		code: &[u8],
 		context: &dyn VMContext,
 		mode: Mode,
-		method: Vec<u8>,
-		input: Vec<u8>,
+		method: &str,
+		params: &[u8],
 		pay_value: Balance,
 	) -> VMResult<Vec<u8>> {
 		let func = match mode {
 			Mode::Init => "execute_init",
 			Mode::Call => "execute_call",
 		};
-		self.run(code_hash, code, context, func, method, input, pay_value)
+		self.run(code_hash, code, context, func, method, params, pay_value)
 	}
 
 	fn run(
@@ -106,8 +106,8 @@ impl VM {
 		code: &[u8],
 		context: &dyn VMContext,
 		func: &str,
-		method: Vec<u8>,
-		input: Vec<u8>,
+		method: &str,
+		params: &[u8],
 		pay_value: Balance,
 	) -> VMResult<Vec<u8>> {
 		let module = compile::compile(code_hash, code, &self.config)?;
@@ -128,9 +128,9 @@ impl VM {
 			shares: HashMap::new(),
 			context,
 			method,
-			input,
+			params,
 			pay_value,
-			output: None,
+			result: None,
 		};
 
 		let import_object = import::import(&mut state, memory_copy)?;
@@ -138,7 +138,7 @@ impl VM {
 		let instance = module.instantiate(&import_object)?;
 		let _result = instance.call(func, &[])?;
 
-		let output = state.output;
+		let output = state.result;
 		let output = output.unwrap_or(serde_json::to_vec(&()).unwrap());
 		Ok(output)
 	}

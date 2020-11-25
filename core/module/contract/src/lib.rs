@@ -19,13 +19,15 @@ use serde::{Deserialize, Serialize};
 
 use executor_macro::{call, module};
 use executor_primitives::{
-	errors, Context, ContextEnv, Module as ModuleT, ModuleResult, OpaqueModuleResult, StorageMap,
-	Util,
+	errors, errors::ApplicationError, Context, ContextEnv, Module as ModuleT, ModuleError,
+	ModuleResult, OpaqueModuleResult, StorageMap, Util,
 };
+use node_vm::errors::VMError;
+use node_vm::{Mode, VMConfig, VM};
 use primitives::codec::{Decode, Encode};
 use primitives::{codec, Address, Balance, Call, Event, Hash};
 
-// mod vm;
+mod vm;
 
 pub struct Module<C, U>
 where
@@ -147,20 +149,25 @@ impl<C: Context, U: Util> Module<C, U> {
 		Ok(code_hash)
 	}
 
-	// fn validate_create(util: &U, params: CreateParams) -> ModuleResult<()> {
-	//
-	// 	let executor_context = DummyExecutorContext::new(util.clone());
-	// 	let contract_env = Rc::new(VMContractEnv {
-	// 		contract_address: Address(vec![]),
-	// 		sender_address: Address(vec![]),
-	// 		pay_value: 0,
-	// 	});
-	// 	let vm_context = Rc::new(DefaultVMContext::<Module<DummyExecutorContext<U>, U>>::new(contract_env, executor_context, util.clone()));
-	// 	let vm_config = VMConfig::default();
-	// 	let vm = VM::new(vm_config, vm_context);
-	//
-	// 	unimplemented!()
-	// }
+	fn validate_create(util: &U, params: CreateParams) -> ModuleResult<()> {
+		let vm = VM::new(VMConfig::default());
+		let code = params.code;
+		let code_hash = util.hash(&code)?;
+		let init_method = params.init_method;
+		let init_params = params.init_params;
+		let init_pay_value = params.init_pay_value;
+		vm.validate(
+			&code_hash,
+			&code,
+			Mode::Init,
+			&init_method,
+			&init_params,
+			init_pay_value,
+		)
+		.map_err(vm_to_module_error)?;
+
+		Ok(())
+	}
 
 	#[call(write = true)]
 	fn create(&self, sender: Option<&Address>, params: CreateParams) -> ModuleResult<Address> {
@@ -481,28 +488,37 @@ fn aggregate_admin(admin: Admin) -> Admin {
 	}
 }
 
+fn vm_to_module_error(e: VMError) -> ModuleError {
+	match e {
+		VMError::System(e) => ModuleError::System(e),
+		VMError::Application(e) => {
+			ModuleError::Application(ApplicationError::User { msg: e.to_string() })
+		}
+	}
+}
+
 #[derive(Encode, Decode, Debug, PartialEq)]
 pub struct CreateParams {
 	/// wasm code
 	pub code: Vec<u8>,
-	/// amount sent to contract when creating
-	pub pay_value: Balance,
 	/// init method
 	pub init_method: String,
 	/// init params in json format
 	pub init_params: Vec<u8>,
+	/// amount sent to contract when init
+	pub init_pay_value: Balance,
 }
 
 #[derive(Encode, Decode, Debug, PartialEq)]
 pub struct ExecuteParams {
 	/// contract address
 	pub contract_address: Address,
-	/// amount sent to contract when execute a payable method
-	pub pay_value: Balance,
 	/// contract method
 	pub method: String,
 	/// params in json format
 	pub params: Vec<u8>,
+	/// amount sent to contract when execute a payable method
+	pub pay_value: Balance,
 }
 
 #[derive(Encode, Decode, Debug, PartialEq)]

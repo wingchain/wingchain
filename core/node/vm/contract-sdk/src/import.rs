@@ -18,9 +18,9 @@ mod env {
 		pub fn share_len(share_id: u64) -> u64;
 		pub fn share_write(data_len: u64, data_ptr: u64, share_id: u64);
 		pub fn method_read(ptr: u64);
-		pub fn input_read(ptr: u64);
+		pub fn params_read(ptr: u64);
 		pub fn pay_value_read() -> u64;
-		pub fn output_write(len: u64, ptr: u64);
+		pub fn result_write(len: u64, ptr: u64);
 		pub fn error_return(len: u64, ptr: u64);
 		pub fn env_block_number() -> u64;
 		pub fn env_block_timestamp() -> u64;
@@ -68,16 +68,16 @@ pub fn method_read(ptr: u64) {
 	unsafe { env::method_read(ptr) }
 }
 
-pub fn input_read(ptr: u64) {
-	unsafe { env::input_read(ptr) }
+pub fn params_read(ptr: u64) {
+	unsafe { env::params_read(ptr) }
 }
 
 pub fn pay_value_read() -> u64 {
 	unsafe { env::pay_value_read() }
 }
 
-pub fn output_write(len: u64, ptr: u64) {
-	unsafe { env::output_write(len, ptr) }
+pub fn result_write(len: u64, ptr: u64) {
+	unsafe { env::result_write(len, ptr) }
 }
 
 pub fn error_return(len: u64, ptr: u64) {

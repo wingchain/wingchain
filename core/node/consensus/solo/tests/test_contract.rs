@@ -22,6 +22,7 @@ use tokio::time::{delay_for, Duration};
 
 use crypto::address::AddressImpl;
 use crypto::dsa::DsaImpl;
+use crypto::hash::{Hash as HashT, HashImpl};
 use node_chain::{Chain, ChainConfig};
 use node_consensus::support::DefaultConsensusSupport;
 use node_consensus_solo::Solo;
@@ -58,7 +59,7 @@ async fn test_solo_contract_create() {
 	// block 0
 	delay_for(delay_to_insert_tx).await;
 
-	let ori_code = vec![1u8];
+	let ori_code = get_code().to_vec();
 
 	let tx1 = chain
 		.build_transaction(
@@ -67,9 +68,9 @@ async fn test_solo_contract_create() {
 			"create".to_string(),
 			module::contract::CreateParams {
 				code: ori_code.clone(),
-				pay_value: 0,
+				init_pay_value: 0,
 				init_method: "init".to_string(),
-				init_params: vec![2],
+				init_params: r#"{"value":"abc"}"#.as_bytes().to_vec(),
 			},
 		)
 		.unwrap();
@@ -166,7 +167,7 @@ async fn test_solo_contract_update_admin() {
 	// block 0
 	delay_for(delay_to_insert_tx).await;
 
-	let ori_code = vec![1u8];
+	let ori_code = get_code().to_vec();
 
 	let tx1 = chain
 		.build_transaction(
@@ -175,9 +176,9 @@ async fn test_solo_contract_update_admin() {
 			"create".to_string(),
 			module::contract::CreateParams {
 				code: ori_code.clone(),
-				pay_value: 0,
+				init_pay_value: 0,
 				init_method: "init".to_string(),
-				init_params: vec![2],
+				init_params: r#"{"value":"abc"}"#.as_bytes().to_vec(),
 			},
 		)
 		.unwrap();
@@ -357,6 +358,7 @@ async fn test_solo_contract_update_code() {
 
 	let dsa = Arc::new(DsaImpl::Ed25519);
 	let address = Arc::new(AddressImpl::Blake2b160);
+	let hasher = Arc::new(HashImpl::Blake2b256);
 
 	let (account1, account2) = test_accounts(dsa, address);
 
@@ -378,7 +380,7 @@ async fn test_solo_contract_update_code() {
 	// block 0
 	delay_for(delay_to_insert_tx).await;
 
-	let ori_code = vec![1u8];
+	let ori_code = get_code().to_vec();
 
 	let tx1 = chain
 		.build_transaction(
@@ -387,9 +389,9 @@ async fn test_solo_contract_update_code() {
 			"create".to_string(),
 			module::contract::CreateParams {
 				code: ori_code.clone(),
-				pay_value: 0,
+				init_pay_value: 0,
 				init_method: "init".to_string(),
-				init_params: vec![2],
+				init_params: r#"{"value":"abc"}"#.as_bytes().to_vec(),
 			},
 		)
 		.unwrap();
@@ -499,7 +501,7 @@ async fn test_solo_contract_update_code() {
 	);
 
 	// update code
-	let new_code = vec![2];
+	let new_code = get_code().to_vec();
 	let tx1 = chain
 		.build_transaction(
 			Some((account2.0.clone(), 0, 10)),
@@ -569,7 +571,7 @@ async fn test_solo_contract_update_code() {
 		.unwrap()
 		.unwrap();
 	log::info!("code: {:?}", code);
-	assert_eq!(code, Some(new_code),);
+	assert_eq!(code, Some(new_code.clone()),);
 
 	let code_hash: Option<Hash> = chain
 		.execute_call_with_block_number(
@@ -584,11 +586,20 @@ async fn test_solo_contract_update_code() {
 		)
 		.unwrap()
 		.unwrap();
-	let expect_code_hash = Hash(
-		hex::decode("bb30a42c1e62f0afda5f0a4e8a562f7a13a24cea00ee81917b86b89e801314aa").unwrap(),
-	);
+	let expect_code_hash = {
+		let mut out = vec![0; hasher.length().into()];
+		hasher.hash(&mut out, &new_code);
+		Hash(out)
+	};
 	log::info!("code_hash: {:?}", code_hash);
 	assert_eq!(code_hash, Some(expect_code_hash),);
+}
+
+fn get_code() -> &'static [u8] {
+	let code = include_bytes!(
+		"../../../vm/contract-samples/hello-world/pkg/contract_samples_hello_world_bg.wasm"
+	);
+	code
 }
 
 fn get_chain(address: &Address) -> Arc<Chain> {

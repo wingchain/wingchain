@@ -30,10 +30,10 @@ pub struct State<'a> {
 	pub memory: Memory,
 	pub shares: HashMap<u64, Vec<u8>>,
 	pub context: &'a dyn VMContext,
-	pub method: Vec<u8>,
-	pub input: Vec<u8>,
+	pub method: &'a str,
+	pub params: &'a [u8],
 	pub pay_value: Balance,
-	pub output: Option<Vec<u8>>,
+	pub result: Option<Vec<u8>>,
 }
 
 impl<'a> State<'a> {
@@ -119,9 +119,9 @@ pub fn import(state: &mut State, memory: Memory) -> VMResult<ImportObject> {
 			"share_len" => func!(share_len),
 			"share_write" => func!(share_write),
 			"method_read" => func!(method_read),
-			"input_read" => func!(input_read),
+			"params_read" => func!(params_read),
 			"pay_value_read" => func!(pay_value_read),
-			"output_write" => func!(output_write),
+			"result_write" => func!(result_write),
 			"error_return" => func!(error_return),
 			"abort" => func!(abort),
 			"env_block_number" => func!(env_block_number),
@@ -167,14 +167,14 @@ fn share_write(ctx: &mut Ctx, data_len: u64, data_ptr: u64, share_id: u64) -> VM
 
 fn method_read(ctx: &mut Ctx, share_id: u64) -> VMResult<()> {
 	let state = State::from_ctx(ctx);
-	let data = state.method.clone();
+	let data = state.method.as_bytes().to_vec();
 	state.vec_to_share(share_id, data)?;
 	Ok(())
 }
 
-fn input_read(ctx: &mut Ctx, share_id: u64) -> VMResult<()> {
+fn params_read(ctx: &mut Ctx, share_id: u64) -> VMResult<()> {
 	let state = State::from_ctx(ctx);
-	let data = state.input.clone();
+	let data = state.params.to_vec();
 	state.vec_to_share(share_id, data)?;
 	Ok(())
 }
@@ -184,10 +184,10 @@ fn pay_value_read(ctx: &mut Ctx) -> VMResult<u64> {
 	Ok(state.pay_value)
 }
 
-fn output_write(ctx: &mut Ctx, len: u64, ptr: u64) -> VMResult<()> {
+fn result_write(ctx: &mut Ctx, len: u64, ptr: u64) -> VMResult<()> {
 	let state = State::from_ctx(ctx);
-	let output = state.memory_to_vec(len, ptr);
-	state.output = Some(output);
+	let result = state.memory_to_vec(len, ptr);
+	state.result = Some(result);
 	Ok(())
 }
 
