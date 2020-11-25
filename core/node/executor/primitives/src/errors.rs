@@ -63,6 +63,9 @@ pub enum ApplicationError {
 	#[display(fmt = "Invalid address: {}", _0)]
 	InvalidAddress(String),
 
+	#[display(fmt = "Unsigned")]
+	Unsigned,
+
 	#[display(fmt = "{}", msg)]
 	User { msg: String },
 }

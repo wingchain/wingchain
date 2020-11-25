@@ -37,6 +37,7 @@ pub struct ContractEvent<T: Serialize> {
 
 #[derive(Debug, Clone)]
 pub enum ContractError {
+	Unsigned,
 	Serialize,
 	Deserialize,
 	InvalidMethod,
@@ -46,8 +47,8 @@ pub enum ContractError {
 	ShareIllegalAccess,
 	ShareValueLenExceeded,
 	ShareSizeExceeded,
-	Transfer,
 	NotPayable,
+	Transfer { msg: String },
 	Panic { msg: String },
 	User { msg: String },
 }
@@ -178,6 +179,7 @@ impl<'de> de::Deserialize<'de> for Address {
 impl fmt::Display for ContractError {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match self {
+			ContractError::Unsigned => write!(f, "Unsigned"),
 			ContractError::Serialize => write!(f, "Serialize"),
 			ContractError::Deserialize => write!(f, "Deserialize"),
 			ContractError::InvalidMethod => write!(f, "InvalidMethod"),
@@ -187,8 +189,8 @@ impl fmt::Display for ContractError {
 			ContractError::ShareIllegalAccess => write!(f, "ShareIllegalAccess"),
 			ContractError::ShareSizeExceeded => write!(f, "ShareSizeExceeded"),
 			ContractError::ShareValueLenExceeded => write!(f, "ShareValueLenExceeded"),
-			ContractError::Transfer => write!(f, "Transfer"),
 			ContractError::NotPayable => write!(f, "NotPayable"),
+			ContractError::Transfer { msg } => write!(f, "Transfer: {}", msg),
 			ContractError::Panic { msg } => write!(f, "Panic: {}", msg),
 			ContractError::User { msg } => write!(f, "{}", msg),
 		}
@@ -198,6 +200,7 @@ impl fmt::Display for ContractError {
 impl From<&str> for ContractError {
 	fn from(v: &str) -> Self {
 		match v {
+			"Unsigned" => ContractError::Unsigned,
 			"Serialize" => ContractError::Serialize,
 			"Deserialize" => ContractError::Deserialize,
 			"InvalidMethod" => ContractError::InvalidMethod,
@@ -207,13 +210,15 @@ impl From<&str> for ContractError {
 			"ShareIllegalAccess" => ContractError::ShareIllegalAccess,
 			"ShareSizeExceeded" => ContractError::ShareSizeExceeded,
 			"ShareValueLenExceeded" => ContractError::ShareValueLenExceeded,
-			"Transfer" => ContractError::Transfer,
 			"NotPayable" => ContractError::NotPayable,
 			_ => {
 				let split = v.find(": ").map(|p| (&v[..p], &v[p + 1..]));
 				match split {
 					Some((prefix, suffix)) => match prefix {
 						"Panic" => ContractError::Panic {
+							msg: suffix.to_string(),
+						},
+						"Transfer" => ContractError::Transfer {
 							msg: suffix.to_string(),
 						},
 						_ => ContractError::User { msg: v.to_string() },

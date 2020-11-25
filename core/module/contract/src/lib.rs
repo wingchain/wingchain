@@ -23,9 +23,11 @@ use executor_primitives::{
 	ModuleResult, OpaqueModuleResult, StorageMap, Util,
 };
 use node_vm::errors::VMError;
-use node_vm::{Mode, VMConfig, VM};
+use node_vm::{Mode, VMConfig, VMContractEnv, VM};
 use primitives::codec::{Decode, Encode};
 use primitives::{codec, Address, Balance, Call, Event, Hash};
+
+use crate::vm::DefaultVMContext;
 
 mod vm;
 
@@ -109,20 +111,7 @@ impl<C: Context, U: Util> Module<C, U> {
 	) -> ModuleResult<Option<Vec<u8>>> {
 		let contract_address = params.contract_address;
 		let version = params.version;
-
-		let version = match version {
-			Some(version) => version,
-			None => {
-				let current_version = self.version.get(&contract_address)?;
-				match current_version {
-					Some(current_version) => current_version,
-					None => return Ok(None),
-				}
-			}
-		};
-
-		let code = self.code.get(&(contract_address, version))?;
-		Ok(code)
+		self.inner_get_code(contract_address, version)
 	}
 
 	#[call]
@@ -171,8 +160,9 @@ impl<C: Context, U: Util> Module<C, U> {
 
 	#[call(write = true)]
 	fn create(&self, sender: Option<&Address>, params: CreateParams) -> ModuleResult<Address> {
-		let sender = sender.ok_or("should be signed")?;
+		let sender = sender.ok_or(ApplicationError::Unsigned)?;
 		let tx_hash = &self.context.call_env().tx_hash;
+		let tx_hash = tx_hash.as_ref().ok_or("Tx hash not found")?;
 		let contract_address = self.util.address(&self.util.hash(&tx_hash.0)?.0)?;
 
 		let code = params.code;
@@ -204,7 +194,7 @@ impl<C: Context, U: Util> Module<C, U> {
 		sender: Option<&Address>,
 		params: UpdateAdminParams,
 	) -> ModuleResult<()> {
-		let sender = sender.ok_or("should be signed")?;
+		let sender = sender.ok_or(ApplicationError::Unsigned)?;
 		let contract_address = params.contract_address;
 
 		let (old_threshold, old_members) = self.verify_sender(sender, &contract_address)?;
@@ -243,14 +233,14 @@ impl<C: Context, U: Util> Module<C, U> {
 		sender: Option<&Address>,
 		params: UpdateAdminVoteParams,
 	) -> ModuleResult<()> {
-		let sender = sender.ok_or("should be signed")?;
+		let sender = sender.ok_or(ApplicationError::Unsigned)?;
 		let contract_address = params.contract_address;
 
 		let proposal = self.update_admin_proposal.get(&contract_address)?;
-		let mut proposal = proposal.ok_or("no proposal")?;
+		let mut proposal = proposal.ok_or("Proposal not found")?;
 
 		if proposal.proposal_id != params.proposal_id {
-			return Err("proposal_id not match".into());
+			return Err("Proposal id not match".into());
 		}
 
 		let (old_threshold, old_members) = self.verify_sender(sender, &contract_address)?;
@@ -266,7 +256,7 @@ impl<C: Context, U: Util> Module<C, U> {
 
 	#[call(write = true)]
 	fn update_code(&self, sender: Option<&Address>, params: UpdateCodeParams) -> ModuleResult<()> {
-		let sender = sender.ok_or("should be signed")?;
+		let sender = sender.ok_or(ApplicationError::Unsigned)?;
 		let contract_address = params.contract_address;
 
 		let (old_threshold, old_members) = self.verify_sender(sender, &contract_address)?;
@@ -309,14 +299,14 @@ impl<C: Context, U: Util> Module<C, U> {
 		sender: Option<&Address>,
 		params: UpdateCodeVoteParams,
 	) -> ModuleResult<()> {
-		let sender = sender.ok_or("should be signed")?;
+		let sender = sender.ok_or(ApplicationError::Unsigned)?;
 		let contract_address = params.contract_address;
 
 		let proposal = self.update_code_proposal.get(&contract_address)?;
-		let mut proposal = proposal.ok_or("no proposal")?;
+		let mut proposal = proposal.ok_or("Proposal not found")?;
 
 		if proposal.proposal_id != params.proposal_id {
-			return Err("proposal_id not match".into());
+			return Err("Proposal id not match".into());
 		}
 
 		let (old_threshold, old_members) = self.verify_sender(sender, &contract_address)?;
@@ -334,8 +324,37 @@ impl<C: Context, U: Util> Module<C, U> {
 	}
 
 	#[call(write = true)]
-	fn execute(&self, _sender: Option<&Address>, _params: ExecuteParams) -> ModuleResult<Address> {
-		unimplemented!()
+	fn execute(&self, sender: Option<&Address>, params: ExecuteParams) -> ModuleResult<Vec<u8>> {
+		let contract_address = params.contract_address;
+		let code = self
+			.inner_get_code(contract_address.clone(), None)?
+			.ok_or("Contract not found")?;
+
+		let contract_env = Rc::new(VMContractEnv {
+			contract_address,
+			sender_address: sender.cloned(),
+		});
+		let vm_context =
+			DefaultVMContext::<Self>::new(contract_env, self.context.clone(), self.util.clone());
+		let vm = VM::new(VMConfig::default());
+		let code_hash = self.util.hash(&code)?;
+
+		let contract_method = params.method;
+		let contract_params = params.params;
+		let contract_pay_value = params.pay_value;
+
+		let result = vm
+			.execute(
+				&code_hash,
+				&code,
+				&vm_context,
+				Mode::Call,
+				&contract_method,
+				&contract_params,
+				contract_pay_value,
+			)
+			.map_err(vm_to_module_error)?;
+		Ok(result)
 	}
 
 	fn verify_sender(
@@ -344,12 +363,12 @@ impl<C: Context, U: Util> Module<C, U> {
 		contract_address: &Address,
 	) -> ModuleResult<(u32, HashMap<Address, u32>)> {
 		let admin = self.admin.get(&contract_address)?;
-		let admin = admin.ok_or("should have admin")?;
+		let admin = admin.ok_or("Contract admin not found")?;
 
 		let threshold = admin.threshold;
 		let members = admin.members.into_iter().collect::<HashMap<_, _>>();
 		if !members.contains_key(sender) {
-			return Err("not admin".into());
+			return Err("Not admin".into());
 		}
 
 		Ok((threshold, members))
@@ -435,7 +454,7 @@ impl<C: Context, U: Util> Module<C, U> {
 		let mut pass = false;
 		if sum >= old_threshold {
 			let version = self.version.get(&contract_address)?;
-			let version = version.ok_or("should have version")?;
+			let version = version.ok_or("Contract version not found")?;
 
 			let new_version = version + 1;
 			self.version.set(&contract_address, &new_version)?;
@@ -464,6 +483,26 @@ impl<C: Context, U: Util> Module<C, U> {
 			.set(&contract_address, &(proposal.proposal_id + 1))?;
 
 		Ok(())
+	}
+
+	fn inner_get_code(
+		&self,
+		contract_address: Address,
+		version: Option<u32>,
+	) -> ModuleResult<Option<Vec<u8>>> {
+		let version = match version {
+			Some(version) => version,
+			None => {
+				let current_version = self.version.get(&contract_address)?;
+				match current_version {
+					Some(current_version) => current_version,
+					None => return Ok(None),
+				}
+			}
+		};
+
+		let code = self.code.get(&(contract_address, version))?;
+		Ok(code)
 	}
 }
 

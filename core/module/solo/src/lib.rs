@@ -49,7 +49,7 @@ impl<C: Context, U: Util> Module<C, U> {
 	#[call(write = true)]
 	fn init(&self, _sender: Option<&Address>, params: InitParams) -> ModuleResult<()> {
 		if self.env.number != 0 {
-			return Err("not genesis".into());
+			return Err("Not genesis".into());
 		}
 		self.block_interval.set(&params.block_interval)?;
 		Ok(())

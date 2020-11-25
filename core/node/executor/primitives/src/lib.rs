@@ -55,7 +55,7 @@ pub struct ContextEnv {
 
 /// Env variables for a call
 pub struct CallEnv {
-	pub tx_hash: Hash,
+	pub tx_hash: Option<Hash>,
 }
 
 pub trait Context: Clone {

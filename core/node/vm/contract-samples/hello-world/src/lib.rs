@@ -54,7 +54,7 @@ impl Contract {
 	#[call]
 	fn error(&self, _params: EmptyParams) -> ContractResult<()> {
 		Err(ContractError::User {
-			msg: "custom error".to_string(),
+			msg: "Custom error".to_string(),
 		})
 	}
 
@@ -210,13 +210,13 @@ struct GetEnvOutput {
 
 #[derive(Serialize)]
 struct GetCallEnvOutput {
-	pub tx_hash: Hash,
+	pub tx_hash: Option<Hash>,
 }
 
 #[derive(Serialize)]
 struct GetContractEnvOutput {
 	pub contract_address: Address,
-	pub sender_address: Address,
+	pub sender_address: Option<Address>,
 }
 
 #[derive(Serialize)]

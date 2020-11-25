@@ -50,19 +50,16 @@ impl Context {
 		let number = import::env_block_number();
 		let timestamp = import::env_block_timestamp();
 
-		let share_id = 0u8 as *const u8 as u64;
+		let tx_hash =
+			get_option_from_func(|share_id| import::env_tx_hash_read(share_id))?.map(Hash);
 
-		import::env_tx_hash_read(share_id);
-		let tx_hash = share_get(share_id).ok_or(ContractError::ShareIllegalAccess)?;
-		let tx_hash = Hash(tx_hash);
+		let contract_address = Address(get_from_func(|share_id| {
+			import::env_contract_address_read(share_id)
+		})?);
 
-		import::env_contract_address_read(share_id);
-		let contract_address = share_get(share_id).ok_or(ContractError::ShareIllegalAccess)?;
-		let contract_address = Address(contract_address);
-
-		import::env_sender_address_read(share_id);
-		let sender_address = share_get(share_id).ok_or(ContractError::ShareIllegalAccess)?;
-		let sender_address = Address(sender_address);
+		let sender_address =
+			get_option_from_func(|share_id| import::env_sender_address_read(share_id))?
+				.map(Address);
 
 		let context = Self {
 			env: Rc::new(ContextEnv { number, timestamp }),
@@ -129,15 +126,15 @@ impl Util {
 		Ok(Util)
 	}
 	pub fn hash(&self, data: &[u8]) -> ContractResult<Hash> {
-		let share_id = 0u8 as *const u8 as u64;
-		import::util_hash(data.len() as _, data.as_ptr() as _, share_id);
-		let result = share_get(share_id).ok_or(ContractError::ShareIllegalAccess)?;
+		let result = get_from_func(|share_id| {
+			import::util_hash(data.len() as _, data.as_ptr() as _, share_id)
+		})?;
 		Ok(Hash(result))
 	}
 	pub fn address(&self, data: &[u8]) -> ContractResult<Address> {
-		let share_id = 0u8 as *const u8 as u64;
-		import::util_address(data.len() as _, data.as_ptr() as _, share_id);
-		let result = share_get(share_id).ok_or(ContractError::ShareIllegalAccess)?;
+		let result = get_from_func(|share_id| {
+			import::util_address(data.len() as _, data.as_ptr() as _, share_id)
+		})?;
 		Ok(Address(result))
 	}
 	pub fn validate_address(&self, address: &Address) -> ContractResult<()> {
@@ -239,25 +236,18 @@ pub struct ContextEnv {
 }
 
 pub struct CallEnv {
-	pub tx_hash: Hash,
+	pub tx_hash: Option<Hash>,
 }
 
 pub struct ContractEnv {
 	pub contract_address: Address,
-	pub sender_address: Address,
+	pub sender_address: Option<Address>,
 }
 
 fn storage_get<V: DeserializeOwned>(key: &[u8]) -> ContractResult<Option<V>> {
-	let share_id = 0u8 as *const u8 as u64;
-	let exist = import::storage_read(key.len() as _, key.as_ptr() as _, share_id);
-
-	let value = match exist {
-		1 => {
-			let value = share_get(share_id).ok_or(ContractError::ShareIllegalAccess)?;
-			Some(value)
-		}
-		_ => None,
-	};
+	let value = get_option_from_func(|share_id| {
+		import::storage_read(key.len() as _, key.as_ptr() as _, share_id)
+	})?;
 
 	let value = match value {
 		Some(value) => serde_json::from_slice(&value).map_err(|_| ContractError::Deserialize)?,
@@ -283,7 +273,25 @@ fn storage_delete(key: &[u8]) -> ContractResult<()> {
 	Ok(())
 }
 
-fn share_get(share_id: u64) -> Option<Vec<u8>> {
+fn get_from_func<F: Fn(u64)>(f: F) -> ContractResult<Vec<u8>> {
+	let share_id = 0u8 as *const u8 as u64;
+	f(share_id);
+	get_from_share(share_id).ok_or(ContractError::ShareIllegalAccess)
+}
+
+fn get_option_from_func<F: Fn(u64) -> u64>(f: F) -> ContractResult<Option<Vec<u8>>> {
+	let share_id = 0u8 as *const u8 as u64;
+	let value = match f(share_id) {
+		1 => {
+			let value = get_from_share(share_id).ok_or(ContractError::ShareIllegalAccess)?;
+			Some(value)
+		}
+		_ => None,
+	};
+	Ok(value)
+}
+
+fn get_from_share(share_id: u64) -> Option<Vec<u8>> {
 	let len = import::share_len(share_id);
 	match len {
 		u64::MAX => None,
@@ -298,7 +306,7 @@ fn share_get(share_id: u64) -> Option<Vec<u8>> {
 fn from_error_aware<T>(error: u64, share_id: u64, data: T) -> ContractResult<T> {
 	match error {
 		1 => {
-			let error = share_get(share_id).ok_or(ContractError::ShareIllegalAccess)?;
+			let error = get_from_share(share_id).ok_or(ContractError::ShareIllegalAccess)?;
 			let error = String::from_utf8(error).map_err(|_| ContractError::BadUTF8)?;
 			Err(error.as_str().into())
 		}

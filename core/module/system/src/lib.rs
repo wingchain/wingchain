@@ -53,7 +53,7 @@ impl<C: Context, U: Util> Module<C, U> {
 	#[call(write = true)]
 	fn init(&self, _sender: Option<&Address>, params: InitParams) -> ModuleResult<()> {
 		if self.env.number != 0 {
-			return Err("not genesis".into());
+			return Err("Not genesis".into());
 		}
 		self.chain_id.set(&params.chain_id)?;
 		self.timestamp.set(&params.timestamp)?;
@@ -63,9 +63,9 @@ impl<C: Context, U: Util> Module<C, U> {
 
 	#[call]
 	fn get_meta(&self, _sender: Option<&Address>, _params: EmptyParams) -> ModuleResult<Meta> {
-		let chain_id = self.chain_id.get()?.ok_or("unexpected none")?;
-		let timestamp = self.timestamp.get()?.ok_or("unexpected none")?;
-		let until_gap = self.until_gap.get()?.ok_or("unexpected none")?;
+		let chain_id = self.chain_id.get()?.ok_or("Unexpected none")?;
+		let timestamp = self.timestamp.get()?.ok_or("Unexpected none")?;
+		let until_gap = self.until_gap.get()?.ok_or("Unexpected none")?;
 		let meta = Meta {
 			chain_id,
 			timestamp,

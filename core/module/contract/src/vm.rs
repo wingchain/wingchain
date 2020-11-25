@@ -272,6 +272,9 @@ impl<M: Module> DefaultVMContext<M> {
 				executor_primitives::errors::ApplicationError::InvalidAddress(_) => {
 					ContractError::InvalidAddress.into()
 				}
+				executor_primitives::errors::ApplicationError::Unsigned => {
+					ContractError::Unsigned.into()
+				}
 				executor_primitives::errors::ApplicationError::User { msg } => {
 					(ContractError::User { msg }).into()
 				}

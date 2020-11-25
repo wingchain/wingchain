@@ -481,6 +481,11 @@ impl Executor {
 		call: &Call,
 	) -> CommonResult<OpaqueCallResult> {
 		let module = &call.module;
+
+		// prepare call env
+		let call_env = CallEnv { tx_hash: None };
+		context.inner.call_env.replace(Some(Rc::new(call_env)));
+
 		Dispatcher::execute_call::<Context, Util>(module, context, &self.util, sender, call)
 	}
 
@@ -527,7 +532,7 @@ impl Executor {
 
 			// prepare call env
 			let call_env = CallEnv {
-				tx_hash: tx_hash.clone(),
+				tx_hash: Some(tx_hash.clone()),
 			};
 			context.inner.call_env.replace(Some(Rc::new(call_env)));
 

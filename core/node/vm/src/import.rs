@@ -218,11 +218,16 @@ fn env_block_timestamp(ctx: &mut Ctx) -> VMResult<u64> {
 	Ok(state.context.env().timestamp)
 }
 
-fn env_tx_hash_read(ctx: &mut Ctx, share_id: u64) -> VMResult<()> {
+fn env_tx_hash_read(ctx: &mut Ctx, share_id: u64) -> VMResult<u64> {
 	let state = State::from_ctx(ctx);
-	let data = state.context.call_env().tx_hash.0.clone();
-	state.vec_to_share(share_id, data)?;
-	Ok(())
+	let data = &state.context.call_env().tx_hash;
+	match data.as_ref() {
+		Some(data) => {
+			state.vec_to_share(share_id, data.0.clone())?;
+			Ok(1)
+		}
+		None => Ok(0),
+	}
 }
 
 fn env_contract_address_read(ctx: &mut Ctx, share_id: u64) -> VMResult<()> {
@@ -232,11 +237,16 @@ fn env_contract_address_read(ctx: &mut Ctx, share_id: u64) -> VMResult<()> {
 	Ok(())
 }
 
-fn env_sender_address_read(ctx: &mut Ctx, share_id: u64) -> VMResult<()> {
+fn env_sender_address_read(ctx: &mut Ctx, share_id: u64) -> VMResult<u64> {
 	let state = State::from_ctx(ctx);
-	let data = state.context.contract_env().sender_address.0.clone();
-	state.vec_to_share(share_id, data)?;
-	Ok(())
+	let data = &state.context.contract_env().sender_address;
+	match data.as_ref() {
+		Some(data) => {
+			state.vec_to_share(share_id, data.0.clone())?;
+			Ok(1)
+		}
+		None => Ok(0),
+	}
 }
 
 fn storage_read(ctx: &mut Ctx, key_len: u64, key_ptr: u64, share_id: u64) -> VMResult<u64> {
@@ -388,6 +398,8 @@ fn pay(ctx: &mut Ctx) -> VMResult<()> {
 	let state = State::from_ctx(ctx);
 
 	let sender_address = &state.context.contract_env().sender_address;
+	let sender_address = sender_address.as_ref().ok_or(ContractError::Unsigned)?;
+
 	let contract_address = &state.context.contract_env().contract_address;
 	let pay_value = state.pay_value;
 

@@ -15,8 +15,6 @@
 use std::borrow::Cow;
 use std::rc::Rc;
 
-use serde::Serialize;
-
 use node_vm::errors::{ContractError, PreCompileError, VMError, VMResult};
 use node_vm::{Mode, VMContext};
 use primitives::Balance;
@@ -111,7 +109,7 @@ fn test_vm_hw_error() {
 	let error = vm_execute(&context, Mode::Call, "error", params, 0).unwrap_err();
 
 	let expected_error: VMError = ContractError::User {
-		msg: "custom error".to_string(),
+		msg: "Custom error".to_string(),
 	}
 	.into();
 
@@ -208,12 +206,12 @@ fn test_vm_hw_event() {
 	let (account1, _account2) = base::test_accounts();
 
 	let executor_context = TestExecutorContext::new();
-	let context = TestVMContext::new(account1.3, executor_context);
+	let context = TestVMContext::new(account1.3, executor_context.clone());
 
 	let params = r#""#;
 	let _result = vm_execute(&context, Mode::Call, "event", params, 0).unwrap();
 
-	let events = context.drain_events().unwrap();
+	let events = executor_context.drain_tx_events().unwrap();
 	let event = events.get(0).unwrap().clone();
 	let event = String::from_utf8(event.0).unwrap();
 
@@ -294,12 +292,6 @@ fn test_vm_hw_balance() {
 fn test_vm_hw_balance_transfer_success() {
 	let _ = env_logger::try_init();
 
-	#[derive(Serialize)]
-	struct Input {
-		recipient: Vec<u8>,
-		value: u64,
-	}
-
 	let (account1, account2) = base::test_accounts();
 
 	let executor_context = TestExecutorContext::new();
@@ -311,23 +303,7 @@ fn test_vm_hw_balance_transfer_success() {
 		r#"{{"recipient":"{}", "value": 10}}"#,
 		hex::encode((account2.3).0.clone())
 	);
-	let result = vm_execute(&context, Mode::Call, "balance_transfer", &params, 100);
-
-	// apply
-	match result {
-		Ok(_) => {
-			context
-				.payload_apply(context.payload_drain_buffer().unwrap())
-				.unwrap();
-			context
-				.apply_events(context.drain_events().unwrap())
-				.unwrap();
-		}
-		Err(_) => {
-			context.payload_drain_buffer().unwrap();
-			context.drain_events().unwrap();
-		}
-	}
+	let _result = vm_execute(&context, Mode::Call, "balance_transfer", &params, 100);
 
 	let events = executor_context
 		.drain_tx_events()
@@ -336,6 +312,7 @@ fn test_vm_hw_balance_transfer_success() {
 		.map(|x| String::from_utf8(x.0).unwrap())
 		.collect::<Vec<_>>();
 	log::info!("events: {:?}", events);
+	assert_eq!(events.len(), 2);
 
 	// shift to new context
 	let context = Rc::new(TestVMContext::new(account1.3.clone(), executor_context));
@@ -366,23 +343,7 @@ fn test_vm_hw_balance_transfer_failed() {
 		r#"{{"recipient":"{}", "value": 200}}"#,
 		hex::encode((account2.3).0.clone())
 	);
-	let result = vm_execute(&context, Mode::Call, "balance_transfer", &params, 100);
-
-	// apply
-	match result {
-		Ok(_) => {
-			context
-				.payload_apply(context.payload_drain_buffer().unwrap())
-				.unwrap();
-			context
-				.apply_events(context.drain_events().unwrap())
-				.unwrap();
-		}
-		Err(_) => {
-			context.payload_drain_buffer().unwrap();
-			context.drain_events().unwrap();
-		}
-	}
+	let _result = vm_execute(&context, Mode::Call, "balance_transfer", &params, 100);
 
 	let events = executor_context
 		.drain_tx_events()
@@ -391,6 +352,7 @@ fn test_vm_hw_balance_transfer_failed() {
 		.map(|x| String::from_utf8(x.0).unwrap())
 		.collect::<Vec<_>>();
 	log::info!("events: {:?}", events);
+	assert_eq!(events.len(), 0);
 
 	// shift to new context
 	let context = Rc::new(TestVMContext::new(account1.3.clone(), executor_context));
@@ -410,12 +372,6 @@ fn test_vm_hw_balance_transfer_failed() {
 fn test_vm_hw_balance_transfer_partial_failed() {
 	let _ = env_logger::try_init();
 
-	#[derive(Serialize)]
-	struct Input {
-		recipient: Vec<u8>,
-		value: u64,
-	}
-
 	let (account1, account2) = base::test_accounts();
 
 	let executor_context = TestExecutorContext::new();
@@ -428,24 +384,7 @@ fn test_vm_hw_balance_transfer_partial_failed() {
 		hex::encode((account2.3).0.clone())
 	);
 	let result = vm_execute(&context, Mode::Call, "balance_transfer_ea", &params, 100);
-
 	log::info!("result: {:?}", result);
-
-	// apply
-	match result {
-		Ok(_) => {
-			context
-				.payload_apply(context.payload_drain_buffer().unwrap())
-				.unwrap();
-			context
-				.apply_events(context.drain_events().unwrap())
-				.unwrap();
-		}
-		Err(_) => {
-			context.payload_drain_buffer().unwrap();
-			context.drain_events().unwrap();
-		}
-	}
 
 	let events = executor_context
 		.drain_tx_events()
@@ -454,6 +393,7 @@ fn test_vm_hw_balance_transfer_partial_failed() {
 		.map(|x| String::from_utf8(x.0).unwrap())
 		.collect::<Vec<_>>();
 	log::info!("events: {:?}", events);
+	assert_eq!(events.len(), 1);
 
 	// shift to new context
 	let context = Rc::new(TestVMContext::new(account1.3.clone(), executor_context));

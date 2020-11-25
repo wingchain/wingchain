@@ -177,12 +177,14 @@ pub struct VMContextEnv {
 }
 
 pub struct VMCallEnv {
-	pub tx_hash: Hash,
+	/// tx hash is none for read call
+	pub tx_hash: Option<Hash>,
 }
 
 pub struct VMContractEnv {
 	pub contract_address: Address,
-	pub sender_address: Address,
+	/// sender address is none for read call
+	pub sender_address: Option<Address>,
 }
 
 struct DummyVMContext;

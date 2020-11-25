@@ -18,8 +18,8 @@ use serde::{Deserialize, Serialize};
 
 use executor_macro::{call, module};
 use executor_primitives::{
-	errors, Context, ContextEnv, EmptyParams, Module as ModuleT, ModuleResult, OpaqueModuleResult,
-	StorageMap, Util,
+	errors, errors::ApplicationError, Context, ContextEnv, EmptyParams, Module as ModuleT,
+	ModuleResult, OpaqueModuleResult, StorageMap, Util,
 };
 use primitives::codec::{Decode, Encode};
 use primitives::{codec, Address, Balance, Call, Event};
@@ -52,7 +52,7 @@ impl<C: Context, U: Util> Module<C, U> {
 	#[call(write = true)]
 	fn init(&self, _sender: Option<&Address>, params: InitParams) -> ModuleResult<()> {
 		if self.env.number != 0 {
-			return Err("not genesis".into());
+			return Err("Not genesis".into());
 		}
 
 		for (address, balance) in &params.endow {
@@ -74,7 +74,7 @@ impl<C: Context, U: Util> Module<C, U> {
 		sender: Option<&Address>,
 		_params: EmptyParams,
 	) -> ModuleResult<Balance> {
-		let sender = sender.ok_or("should be signed")?;
+		let sender = sender.ok_or(ApplicationError::Unsigned)?;
 		let balance = self.balance.get(sender)?;
 		let balance = balance.unwrap_or(0);
 		Ok(balance)
@@ -82,28 +82,28 @@ impl<C: Context, U: Util> Module<C, U> {
 
 	#[call(write = true)]
 	pub fn transfer(&self, sender: Option<&Address>, params: TransferParams) -> ModuleResult<()> {
-		let sender = sender.ok_or("should be signed")?;
+		let sender = sender.ok_or(ApplicationError::Unsigned)?;
 		let recipient = &params.recipient;
 		let value = params.value;
 
 		if sender == recipient {
-			return Err("should not transfer to oneself".into());
+			return Err("Should not transfer to oneself".into());
 		}
 
 		let sender_balance = self.balance.get(sender)?.unwrap_or(0);
 		if sender_balance < value {
-			return Err("insufficient balance".into());
+			return Err("Insufficient balance".into());
 		}
 		let recipient_balance = self.balance.get(recipient)?.unwrap_or(0);
 
 		let (sender_balance, overflow) = sender_balance.overflowing_sub(value);
 		if overflow {
-			return Err("u64 overflow".into());
+			return Err("U64 overflow".into());
 		}
 
 		let (recipient_balance, overflow) = recipient_balance.overflowing_add(value);
 		if overflow {
-			return Err("u64 overflow".into());
+			return Err("U64 overflow".into());
 		}
 
 		self.balance.set(sender, &sender_balance)?;

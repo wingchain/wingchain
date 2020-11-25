@@ -78,9 +78,27 @@ pub fn vm_execute(
 		Hash(out)
 	};
 	let params = params.as_bytes();
-	let result = vm.execute(&code_hash, &code, context, mode, method, params, pay_value)?;
-	let result: String = String::from_utf8(result).map_err(|_| ContractError::Deserialize)?;
-	Ok(result)
+
+	let result = vm
+		.execute(&code_hash, &code, context, mode, method, params, pay_value)
+		.and_then(|result| {
+			let result: String =
+				String::from_utf8(result).map_err(|_| ContractError::Deserialize)?;
+			Ok(result)
+		});
+
+	match result {
+		Ok(result) => {
+			context.payload_apply(context.payload_drain_buffer()?)?;
+			context.apply_events(context.drain_events()?)?;
+			Ok(result)
+		}
+		Err(e) => {
+			context.payload_drain_buffer()?;
+			context.drain_events()?;
+			Err(e)
+		}
+	}
 }
 
 const SEPARATOR: &[u8] = b"_";
@@ -299,10 +317,12 @@ impl<EC: ExecutorContext> TestVMContext<EC> {
 				number: 10,
 				timestamp: 12345,
 			}),
-			call_env: Rc::new(VMCallEnv { tx_hash }),
+			call_env: Rc::new(VMCallEnv {
+				tx_hash: Some(tx_hash),
+			}),
 			contract_env: Rc::new(VMContractEnv {
 				contract_address,
-				sender_address,
+				sender_address: Some(sender_address),
 			}),
 			base_context,
 			hash: hash.clone(),
@@ -387,7 +407,10 @@ impl<EC: ExecutorContext> VMContext for TestVMContext<EC> {
 		let mut recipient_balance = self.module_balance_get(recipient)?;
 
 		if sender_balance < value {
-			return Err(ContractError::Transfer.into());
+			return Err(ContractError::Transfer {
+				msg: "Insufficient balance".to_string(),
+			}
+			.into());
 		}
 
 		sender_balance -= value;

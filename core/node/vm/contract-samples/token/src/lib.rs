@@ -46,6 +46,7 @@ impl Contract {
 		self.decimals.set(&params.decimals)?;
 		self.total_supply.set(&params.total_supply)?;
 		let sender_address = &self.context.contract_env()?.sender_address;
+		let sender_address = sender_address.as_ref().ok_or(ContractError::Unsigned)?;
 		self.balance.set(&sender_address.0, &params.total_supply)?;
 		Ok(())
 	}
@@ -84,14 +85,14 @@ impl Contract {
 	#[call]
 	fn transfer(&self, params: TransferParams) -> ContractResult<()> {
 		let sender_address = &self.context.contract_env()?.sender_address;
-
+		let sender_address = sender_address.as_ref().ok_or(ContractError::Unsigned)?;
 		self.inner_transfer(sender_address, &params.recipient, params.value)
 	}
 
 	#[call]
 	fn approve(&self, params: ApproveParams) -> ContractResult<()> {
 		let owner_address = &self.context.contract_env()?.sender_address;
-
+		let owner_address = owner_address.as_ref().ok_or(ContractError::Unsigned)?;
 		self.inner_approve(owner_address, &params.spender, params.value)
 	}
 
@@ -115,6 +116,7 @@ impl Contract {
 		let recipient_address = params.recipient;
 
 		let spender_address = &self.context.contract_env()?.sender_address;
+		let spender_address = spender_address.as_ref().ok_or(ContractError::Unsigned)?;
 
 		let key = &[&sender_address.0[..], b"_", &spender_address.0[..]].concat();
 		let allowance = self.allowance.get(key)?.unwrap_or(0);
@@ -122,14 +124,14 @@ impl Contract {
 		let value = params.value;
 
 		if allowance < value {
-			return Err("exceed allowance".into());
+			return Err("Exceed allowance".into());
 		}
 
 		self.inner_transfer(&sender_address, &recipient_address, value)?;
 
 		let (allowance, overflow) = allowance.overflowing_sub(value);
 		if overflow {
-			return Err("u64 overflow".into());
+			return Err("U64 overflow".into());
 		}
 
 		self.inner_approve(&sender_address, spender_address, allowance)?;
@@ -151,12 +153,12 @@ impl Contract {
 
 		let (sender_balance, overflow) = sender_balance.overflowing_sub(value);
 		if overflow {
-			return Err("u64 overflow".into());
+			return Err("U64 overflow".into());
 		}
 
 		let (recipient_balance, overflow) = recipient_balance.overflowing_add(value);
 		if overflow {
-			return Err("u64 overflow".into());
+			return Err("U64 overflow".into());
 		}
 
 		self.balance.set(&sender_address.0, &sender_balance)?;

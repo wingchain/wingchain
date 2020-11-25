@@ -132,11 +132,6 @@ fn test_vm_token_transfer_from() {
 
 	assert_eq!(result, r#"100000000000000"#.to_string());
 
-	// apply
-	context
-		.payload_apply(context.payload_drain_buffer().unwrap())
-		.unwrap();
-
 	// shift to account2
 	let context = TestVMContext::new(account2.3.clone(), executor_context);
 
