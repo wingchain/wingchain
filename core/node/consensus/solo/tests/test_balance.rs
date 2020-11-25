@@ -49,7 +49,7 @@ async fn test_solo_balance() {
 			.unwrap(),
 	)
 	.await;
-	base::wait_txpool(&txpool).await;
+	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 1
 	solo.generate_block().await.unwrap();
@@ -71,7 +71,7 @@ async fn test_solo_balance() {
 			.unwrap(),
 	)
 	.await;
-	base::wait_txpool(&txpool).await;
+	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 2
 	solo.generate_block().await.unwrap();
@@ -93,7 +93,7 @@ async fn test_solo_balance() {
 			.unwrap(),
 	)
 	.await;
-	base::wait_txpool(&txpool).await;
+	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 3
 	solo.generate_block().await.unwrap();

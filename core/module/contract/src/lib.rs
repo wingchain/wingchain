@@ -23,7 +23,7 @@ use executor_primitives::{
 	ModuleResult, OpaqueModuleResult, StorageMap, Util,
 };
 use node_vm::errors::VMError;
-use node_vm::{Mode, VMConfig, VMContractEnv, VM};
+use node_vm::{Mode, VMConfig, VMContext, VMContractEnv, VM};
 use primitives::codec::{Decode, Encode};
 use primitives::{codec, Address, Balance, Call, Event, Hash};
 
@@ -353,8 +353,30 @@ impl<C: Context, U: Util> Module<C, U> {
 				&contract_params,
 				contract_pay_value,
 			)
-			.map_err(vm_to_module_error)?;
-		Ok(result)
+			.map_err(vm_to_module_error);
+
+		match result {
+			Ok(result) => {
+				vm_context
+					.payload_apply(
+						vm_context
+							.payload_drain_buffer()
+							.map_err(vm_to_module_error)?,
+					)
+					.map_err(vm_to_module_error)?;
+				vm_context
+					.apply_events(vm_context.drain_events().map_err(vm_to_module_error)?)
+					.map_err(vm_to_module_error)?;
+				Ok(result)
+			}
+			Err(e) => {
+				vm_context
+					.payload_drain_buffer()
+					.map_err(vm_to_module_error)?;
+				vm_context.drain_events().map_err(vm_to_module_error)?;
+				Err(e)
+			}
+		}
 	}
 
 	fn verify_sender(

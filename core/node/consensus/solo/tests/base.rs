@@ -54,11 +54,11 @@ pub async fn insert_tx(chain: &Arc<Chain>, txpool: &Arc<TxPool<Chain>>, tx: Tran
 	tx_hash
 }
 
-pub async fn wait_txpool(txpool: &Arc<TxPool<Chain>>) {
+pub async fn wait_txpool(txpool: &Arc<TxPool<Chain>>, count: usize) {
 	loop {
 		{
 			let queue = txpool.get_queue().read();
-			if queue.len() > 0 {
+			if queue.len() == count {
 				break;
 			}
 		}
