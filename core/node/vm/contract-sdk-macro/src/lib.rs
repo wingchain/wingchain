@@ -40,7 +40,7 @@ pub fn contract(_attr: TokenStream, item: TokenStream) -> TokenStream {
 	let init_methods = get_module_init_methods(&impl_item);
 	let call_methods = get_module_call_methods(&impl_item);
 
-	let get_ts_vec = |methods: Vec<ModuleMethod>| {
+	let get_validate_ts_vec = |methods: &Vec<ModuleMethod>| {
 		methods
 			.iter()
 			.map(|x| {
@@ -48,9 +48,31 @@ pub fn contract(_attr: TokenStream, item: TokenStream) -> TokenStream {
 				let is_payable = x.payable;
 				quote! {
 					stringify!(#method_ident) => {
+						if pay_value > 0 {
+							if !#is_payable {
+								return Err(ContractError::NotPayable);
+							}
+						}
 
-						let contract_env = self.context.contract_env()?;
-						let pay_value = contract_env.pay_value;
+						let _params = serde_json::from_slice(&params).map_err(|_|ContractError::Deserialize)?;
+						Ok(())
+					},
+				}
+			})
+			.collect::<Vec<_>>()
+	};
+
+	let validate_init_ts_vec = get_validate_ts_vec(&init_methods);
+	let validate_call_ts_vec = get_validate_ts_vec(&call_methods);
+
+	let get_execute_ts_vec = |methods: &Vec<ModuleMethod>| {
+		methods
+			.iter()
+			.map(|x| {
+				let method_ident = &x.method_ident;
+				let is_payable = x.payable;
+				quote! {
+					stringify!(#method_ident) => {
 						if pay_value > 0 {
 							if #is_payable {
 								import::pay();
@@ -69,8 +91,8 @@ pub fn contract(_attr: TokenStream, item: TokenStream) -> TokenStream {
 			.collect::<Vec<_>>()
 	};
 
-	let execute_init_ts_vec = get_ts_vec(init_methods);
-	let execute_call_ts_vec = get_ts_vec(call_methods);
+	let execute_init_ts_vec = get_execute_ts_vec(&init_methods);
+	let execute_call_ts_vec = get_execute_ts_vec(&call_methods);
 
 	let gen = quote! {
 
@@ -78,7 +100,25 @@ pub fn contract(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
 		impl #type_name {
 
-			fn execute_init(&self, method: Vec<u8>, params: Vec<u8>) -> ContractResult<Vec<u8>> {
+			fn validate_init(method: Vec<u8>, params: Vec<u8>, pay_value: Balance) -> ContractResult<()> {
+				let method = String::from_utf8(method).map_err(|_|ContractError::Deserialize)?;
+				let method = method.as_str();
+				match method {
+					#(#validate_init_ts_vec)*
+					other => Err(ContractError::InvalidMethod),
+				}
+			}
+
+			fn validate_call(method: Vec<u8>, params: Vec<u8>, pay_value: Balance) -> ContractResult<()> {
+				let method = String::from_utf8(method).map_err(|_|ContractError::Deserialize)?;
+				let method = method.as_str();
+				match method {
+					#(#validate_call_ts_vec)*
+					other => Err(ContractError::InvalidMethod),
+				}
+			}
+
+			fn execute_init(&self, method: Vec<u8>, params: Vec<u8>, pay_value: Balance) -> ContractResult<Vec<u8>> {
 				let method = String::from_utf8(method).map_err(|_|ContractError::Deserialize)?;
 				let method = method.as_str();
 				match method {
@@ -87,7 +127,7 @@ pub fn contract(_attr: TokenStream, item: TokenStream) -> TokenStream {
 				}
 			}
 
-			fn execute_call(&self, method: Vec<u8>, params: Vec<u8>) -> ContractResult<Vec<u8>> {
+			fn execute_call(&self, method: Vec<u8>, params: Vec<u8>, pay_value: Balance) -> ContractResult<Vec<u8>> {
 				let method = String::from_utf8(method).map_err(|_|ContractError::Deserialize)?;
 				let method = method.as_str();
 				match method {
@@ -118,6 +158,11 @@ pub fn contract(_attr: TokenStream, item: TokenStream) -> TokenStream {
 			Ok(input)
 		}
 
+		fn get_pay_value() -> ContractResult<Balance> {
+			let pay_value = import::pay_value_read();
+			Ok(pay_value)
+		}
+
 		fn output_result(result: ContractResult<()>) {
 			match result {
 				Ok(_) => (),
@@ -128,27 +173,60 @@ pub fn contract(_attr: TokenStream, item: TokenStream) -> TokenStream {
 			}
 		}
 
+		fn inner_validate_init() -> ContractResult<()> {
+			let method = get_method()?;
+			let input = get_input()?;
+			let pay_value = get_pay_value()?;
+
+			let output = #type_name::validate_init(method, input, pay_value)?;
+
+			Ok(())
+		}
+
+		fn inner_validate_call() -> ContractResult<()> {
+			let method = get_method()?;
+			let input = get_input()?;
+			let pay_value = get_pay_value()?;
+
+			let output = #type_name::validate_call(method, input, pay_value)?;
+
+			Ok(())
+		}
+
 		fn inner_execute_init() -> ContractResult<()> {
 			let method = get_method()?;
 			let input = get_input()?;
+			let pay_value = get_pay_value()?;
 
 			let contract = #type_name::new()?;
-			let output = contract.execute_init(method, input)?;
+			let output = contract.execute_init(method, input, pay_value)?;
 			import::output_write(output.len() as _, output.as_ptr() as _);
 
 			Ok(())
 		}
 
 		fn inner_execute_call() -> ContractResult<()> {
-
 			let method = get_method()?;
 			let input = get_input()?;
+			let pay_value = get_pay_value()?;
 
 			let contract = #type_name::new()?;
-			let output = contract.execute_call(method, input)?;
+			let output = contract.execute_call(method, input, pay_value)?;
 			import::output_write(output.len() as _, output.as_ptr() as _);
 
 			Ok(())
+		}
+
+		#[wasm_bindgen]
+		pub fn validate_init() {
+			let result = inner_validate_init();
+			output_result(result);
+		}
+
+		#[wasm_bindgen]
+		pub fn validate_call() {
+			let result = inner_validate_call();
+			output_result(result);
 		}
 
 		#[wasm_bindgen]

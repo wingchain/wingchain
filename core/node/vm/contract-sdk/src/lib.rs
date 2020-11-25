@@ -41,6 +41,10 @@ pub struct Context {
 
 pub struct Util;
 
+pub struct Pay {
+	pay_value: Balance,
+}
+
 impl Context {
 	pub fn new() -> ContractResult<Self> {
 		let number = import::env_block_number();
@@ -60,15 +64,12 @@ impl Context {
 		let sender_address = share_get(share_id).ok_or(ContractError::ShareIllegalAccess)?;
 		let sender_address = Address(sender_address);
 
-		let pay_value = import::env_pay_value();
-
 		let context = Self {
 			env: Rc::new(ContextEnv { number, timestamp }),
 			call_env: Rc::new(CallEnv { tx_hash }),
 			contract_env: Rc::new(ContractEnv {
 				contract_address,
 				sender_address,
-				pay_value,
 			}),
 		};
 		Ok(context)
@@ -149,6 +150,17 @@ impl Util {
 		let share_id = 0u8 as *const u8 as u64;
 		let error = import::util_validate_address_ea(data.len() as _, data.as_ptr() as _, share_id);
 		from_error_aware(error, share_id, ())
+	}
+}
+
+impl Pay {
+	pub fn new() -> Self {
+		Self {
+			pay_value: import::pay_value_read(),
+		}
+	}
+	pub fn pay_value(&self) -> Balance {
+		self.pay_value
 	}
 }
 
@@ -233,7 +245,6 @@ pub struct CallEnv {
 pub struct ContractEnv {
 	pub contract_address: Address,
 	pub sender_address: Address,
-	pub pay_value: Balance,
 }
 
 fn storage_get<V: DeserializeOwned>(key: &[u8]) -> ContractResult<Option<V>> {

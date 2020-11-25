@@ -36,12 +36,37 @@ pub fn test_accounts() -> (
 	utils_test::test_accounts(dsa, address)
 }
 
+#[allow(dead_code)]
+pub fn vm_validate(
+	code: &[u8],
+	mode: Mode,
+	method: &str,
+	input: &str,
+	pay_value: Balance,
+) -> VMResult<()> {
+	let hash = Arc::new(HashImpl::Blake2b256);
+	let config = VMConfig::default();
+
+	let vm = VM::new(config);
+
+	let code_hash = {
+		let mut out = vec![0; hash.length().into()];
+		hash.hash(&mut out, &code);
+		Hash(out)
+	};
+	let method = method.as_bytes().to_vec();
+	let input = input.as_bytes().to_vec();
+	let result = vm.validate(&code_hash, &code, mode, method, input, pay_value)?;
+	Ok(result)
+}
+
 pub fn vm_execute(
 	code: &[u8],
 	context: &dyn VMContext,
 	mode: Mode,
 	method: &str,
 	input: &str,
+	pay_value: Balance,
 ) -> VMResult<String> {
 	let hash = Arc::new(HashImpl::Blake2b256);
 	let config = VMConfig::default();
@@ -55,7 +80,7 @@ pub fn vm_execute(
 	};
 	let method = method.as_bytes().to_vec();
 	let input = input.as_bytes().to_vec();
-	let result = vm.execute(context, mode, &code_hash, &code, method, input)?;
+	let result = vm.execute(&code_hash, &code, context, mode, method, input, pay_value)?;
 	let result: String = String::from_utf8(result).map_err(|_| ContractError::Deserialize)?;
 	Ok(result)
 }
@@ -255,7 +280,7 @@ pub struct TestVMContext<EC: ExecutorContext> {
 }
 
 impl<EC: ExecutorContext> TestVMContext<EC> {
-	pub fn new(sender_address: Address, pay_value: Balance, executor_context: EC) -> Self {
+	pub fn new(sender_address: Address, executor_context: EC) -> Self {
 		let hash = Arc::new(HashImpl::Blake2b256);
 		let address = Arc::new(AddressImpl::Blake2b160);
 
@@ -280,7 +305,6 @@ impl<EC: ExecutorContext> TestVMContext<EC> {
 			contract_env: Rc::new(VMContractEnv {
 				contract_address,
 				sender_address,
-				pay_value,
 			}),
 			base_context,
 			hash: hash.clone(),

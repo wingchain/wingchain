@@ -15,6 +15,7 @@
 use base::{TestExecutorContext, TestVMContext};
 use node_vm::errors::VMResult;
 use node_vm::{Mode, VMContext};
+use primitives::Balance;
 
 mod base;
 
@@ -24,42 +25,42 @@ fn test_vm_token_transfer() {
 
 	let executor_context = TestExecutorContext::new();
 
-	let context = TestVMContext::new(account1.3.clone(), 0, executor_context);
+	let context = TestVMContext::new(account1.3.clone(), executor_context);
 
 	// init
 	let input = r#"{"name":"Bitcoin","symbol":"BTC","decimals":8,"total_supply":2100000000000000}"#;
-	let result = vm_execute(&context, Mode::Init, "init", input).unwrap();
+	let result = vm_execute(&context, Mode::Init, "init", input, 0).unwrap();
 
 	assert_eq!(result, r#"null"#.to_string());
 
 	// get name
 	let input = r#""#;
-	let result = vm_execute(&context, Mode::Call, "name", input).unwrap();
+	let result = vm_execute(&context, Mode::Call, "name", input, 0).unwrap();
 
 	assert_eq!(result, r#""Bitcoin""#.to_string());
 
 	// get symbol
 	let input = r#""#;
-	let result = vm_execute(&context, Mode::Call, "symbol", input).unwrap();
+	let result = vm_execute(&context, Mode::Call, "symbol", input, 0).unwrap();
 
 	assert_eq!(result, r#""BTC""#.to_string());
 
 	// get decimals
 	let input = r#""#;
-	let result = vm_execute(&context, Mode::Call, "decimals", input).unwrap();
+	let result = vm_execute(&context, Mode::Call, "decimals", input, 0).unwrap();
 
 	assert_eq!(result, r#"8"#.to_string());
 
 	// get total supply
 	let input = r#""#;
-	let result = vm_execute(&context, Mode::Call, "total_supply", input).unwrap();
+	let result = vm_execute(&context, Mode::Call, "total_supply", input, 0).unwrap();
 
 	assert_eq!(result, r#"2100000000000000"#.to_string());
 
 	// get balance
 	let input = format!(r#"{{"address":"{}"}}"#, hex::encode((account1.3).0.clone()));
 
-	let result = vm_execute(&context, Mode::Call, "balance", &input).unwrap();
+	let result = vm_execute(&context, Mode::Call, "balance", &input, 0).unwrap();
 
 	assert_eq!(result, r#"2100000000000000"#.to_string());
 
@@ -69,20 +70,20 @@ fn test_vm_token_transfer() {
 		hex::encode((account2.3).0.clone())
 	);
 
-	let result = vm_execute(&context, Mode::Call, "transfer", &input).unwrap();
+	let result = vm_execute(&context, Mode::Call, "transfer", &input, 0).unwrap();
 
 	assert_eq!(result, r#"null"#.to_string());
 
 	// check balance after transferring
 	let input = format!(r#"{{"address":"{}"}}"#, hex::encode((account1.3).0.clone()));
 
-	let result = vm_execute(&context, Mode::Call, "balance", &input).unwrap();
+	let result = vm_execute(&context, Mode::Call, "balance", &input, 0).unwrap();
 
 	assert_eq!(result, r#"2000000000000000"#.to_string());
 
 	let input = format!(r#"{{"address":"{}"}}"#, hex::encode((account2.3).0.clone()));
 
-	let result = vm_execute(&context, Mode::Call, "balance", &input).unwrap();
+	let result = vm_execute(&context, Mode::Call, "balance", &input, 0).unwrap();
 
 	assert_eq!(result, r#"100000000000000"#.to_string());
 }
@@ -93,18 +94,18 @@ fn test_vm_token_transfer_from() {
 
 	let executor_context = TestExecutorContext::new();
 
-	let context = TestVMContext::new(account1.3.clone(), 0, executor_context.clone());
+	let context = TestVMContext::new(account1.3.clone(), executor_context.clone());
 
 	// init
 	let input = r#"{"name":"Bitcoin","symbol":"BTC","decimals":8,"total_supply":2100000000000000}"#;
-	let result = vm_execute(&context, Mode::Init, "init", input).unwrap();
+	let result = vm_execute(&context, Mode::Init, "init", input, 0).unwrap();
 
 	assert_eq!(result, r#"null"#.to_string());
 
 	// get balance
 	let input = format!(r#"{{"address":"{}"}}"#, hex::encode((account1.3).0.clone()));
 
-	let result = vm_execute(&context, Mode::Call, "balance", &input).unwrap();
+	let result = vm_execute(&context, Mode::Call, "balance", &input, 0).unwrap();
 
 	assert_eq!(result, r#"2100000000000000"#.to_string());
 
@@ -114,7 +115,7 @@ fn test_vm_token_transfer_from() {
 		hex::encode((account2.3).0.clone())
 	);
 
-	let result = vm_execute(&context, Mode::Call, "approve", &input).unwrap();
+	let result = vm_execute(&context, Mode::Call, "approve", &input, 0).unwrap();
 
 	assert_eq!(result, r#"null"#.to_string());
 
@@ -125,7 +126,7 @@ fn test_vm_token_transfer_from() {
 		hex::encode((account2.3).0.clone())
 	);
 
-	let result = vm_execute(&context, Mode::Call, "allowance", &input).unwrap();
+	let result = vm_execute(&context, Mode::Call, "allowance", &input, 0).unwrap();
 
 	assert_eq!(result, r#"100000000000000"#.to_string());
 
@@ -135,7 +136,7 @@ fn test_vm_token_transfer_from() {
 		.unwrap();
 
 	// shift to account2
-	let context = TestVMContext::new(account2.3.clone(), 0, executor_context);
+	let context = TestVMContext::new(account2.3.clone(), executor_context);
 
 	// transfer from
 	let input = format!(
@@ -144,7 +145,7 @@ fn test_vm_token_transfer_from() {
 		hex::encode((account2.3).0.clone())
 	);
 
-	let result = vm_execute(&context, Mode::Call, "transfer_from", &input).unwrap();
+	let result = vm_execute(&context, Mode::Call, "transfer_from", &input, 0).unwrap();
 
 	assert_eq!(result, r#"null"#.to_string());
 
@@ -155,27 +156,33 @@ fn test_vm_token_transfer_from() {
 		hex::encode((account2.3).0.clone())
 	);
 
-	let result = vm_execute(&context, Mode::Call, "allowance", &input).unwrap();
+	let result = vm_execute(&context, Mode::Call, "allowance", &input, 0).unwrap();
 
 	assert_eq!(result, r#"99999900000000"#.to_string());
 
 	// check sender balance
 	let input = format!(r#"{{"address":"{}"}}"#, hex::encode((account1.3).0.clone()));
 
-	let result = vm_execute(&context, Mode::Call, "balance", &input).unwrap();
+	let result = vm_execute(&context, Mode::Call, "balance", &input, 0).unwrap();
 
 	assert_eq!(result, r#"2099999900000000"#.to_string());
 
 	// check recipient balance
 	let input = format!(r#"{{"address":"{}"}}"#, hex::encode((account2.3).0.clone()));
 
-	let result = vm_execute(&context, Mode::Call, "balance", &input).unwrap();
+	let result = vm_execute(&context, Mode::Call, "balance", &input, 0).unwrap();
 
 	assert_eq!(result, r#"100000000"#.to_string());
 }
 
-fn vm_execute(context: &dyn VMContext, mode: Mode, method: &str, input: &str) -> VMResult<String> {
+fn vm_execute(
+	context: &dyn VMContext,
+	mode: Mode,
+	method: &str,
+	input: &str,
+	pay_value: Balance,
+) -> VMResult<String> {
 	let code = include_bytes!("../contract-samples/token/pkg/contract_samples_token_bg.wasm");
 	let code = &code[..];
-	base::vm_execute(code, context, mode, method, input)
+	base::vm_execute(code, context, mode, method, input, pay_value)
 }

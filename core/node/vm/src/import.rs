@@ -20,7 +20,7 @@ use wasmer_runtime::{func, imports};
 use wasmer_runtime_core::import::ImportObject;
 use wasmer_runtime_core::vm::Ctx;
 
-use primitives::{Address, Event};
+use primitives::{Address, Balance, Event};
 
 use crate::errors::{ApplicationError, ContractError, VMError, VMResult};
 use crate::{VMConfig, VMContext};
@@ -32,6 +32,7 @@ pub struct State<'a> {
 	pub context: &'a dyn VMContext,
 	pub method: Vec<u8>,
 	pub input: Vec<u8>,
+	pub pay_value: Balance,
 	pub output: Option<Vec<u8>>,
 }
 
@@ -119,6 +120,7 @@ pub fn import(state: &mut State, memory: Memory) -> VMResult<ImportObject> {
 			"share_write" => func!(share_write),
 			"method_read" => func!(method_read),
 			"input_read" => func!(input_read),
+			"pay_value_read" => func!(pay_value_read),
 			"output_write" => func!(output_write),
 			"error_return" => func!(error_return),
 			"abort" => func!(abort),
@@ -127,7 +129,6 @@ pub fn import(state: &mut State, memory: Memory) -> VMResult<ImportObject> {
 			"env_tx_hash_read" => func!(env_tx_hash_read),
 			"env_contract_address_read" => func!(env_contract_address_read),
 			"env_sender_address_read" => func!(env_sender_address_read),
-			"env_pay_value" => func!(env_pay_value),
 			"storage_read" => func!(storage_read),
 			"storage_write" => func!(storage_write),
 			"event_write" => func!(event_write),
@@ -178,6 +179,11 @@ fn input_read(ctx: &mut Ctx, share_id: u64) -> VMResult<()> {
 	Ok(())
 }
 
+fn pay_value_read(ctx: &mut Ctx) -> VMResult<u64> {
+	let state = State::from_ctx(ctx);
+	Ok(state.pay_value)
+}
+
 fn output_write(ctx: &mut Ctx, len: u64, ptr: u64) -> VMResult<()> {
 	let state = State::from_ctx(ctx);
 	let output = state.memory_to_vec(len, ptr);
@@ -189,7 +195,7 @@ fn error_return(ctx: &mut Ctx, len: u64, ptr: u64) -> VMResult<()> {
 	let state = State::from_ctx(ctx);
 	let msg = state.memory_to_vec(len, ptr);
 	let msg = String::from_utf8(msg).map_err(|_e| ContractError::BadUTF8)?;
-	let error = ContractError::User { msg };
+	let error = ContractError::from(msg.as_str());
 	Err(error.into())
 }
 
@@ -231,11 +237,6 @@ fn env_sender_address_read(ctx: &mut Ctx, share_id: u64) -> VMResult<()> {
 	let data = state.context.contract_env().sender_address.0.clone();
 	state.vec_to_share(share_id, data)?;
 	Ok(())
-}
-
-fn env_pay_value(ctx: &mut Ctx) -> VMResult<u64> {
-	let state = State::from_ctx(ctx);
-	Ok(state.context.contract_env().pay_value)
 }
 
 fn storage_read(ctx: &mut Ctx, key_len: u64, key_ptr: u64, share_id: u64) -> VMResult<u64> {
@@ -388,7 +389,7 @@ fn pay(ctx: &mut Ctx) -> VMResult<()> {
 
 	let sender_address = &state.context.contract_env().sender_address;
 	let contract_address = &state.context.contract_env().contract_address;
-	let pay_value = state.context.contract_env().pay_value;
+	let pay_value = state.pay_value;
 
 	if pay_value > 0 {
 		state

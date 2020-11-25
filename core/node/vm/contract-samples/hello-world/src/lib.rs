@@ -3,7 +3,7 @@ use wasm_bindgen::prelude::*;
 
 use sdk::{
 	call, contract, import, init, serde_json, Address, Balance, BlockNumber, Context,
-	ContractError, ContractResult, EmptyParams, Hash, StorageMap, StorageValue, Util,
+	ContractError, ContractResult, EmptyParams, Hash, Pay, StorageMap, StorageValue, Util,
 };
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
@@ -15,6 +15,7 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 struct Contract {
 	context: Context,
 	util: Util,
+	pay: Pay,
 	value: StorageValue<String>,
 	map: StorageMap<String>,
 }
@@ -25,6 +26,7 @@ impl Contract {
 		let contract = Contract {
 			context: Context::new()?,
 			util: Util::new()?,
+			pay: Pay::new(),
 			value: StorageValue::new(b"value"),
 			map: StorageMap::new(b"map"),
 		};
@@ -42,6 +44,11 @@ impl Contract {
 		let name = params.name;
 		let output = format!("hello {}", name);
 		Ok(output)
+	}
+
+	#[call(payable = true)]
+	fn pay_value(&self, _params: EmptyParams) -> ContractResult<Balance> {
+		Ok(self.pay.pay_value())
 	}
 
 	#[call]
@@ -76,7 +83,6 @@ impl Contract {
 		let output = GetContractEnvOutput {
 			contract_address: contract_env.contract_address.clone(),
 			sender_address: contract_env.sender_address.clone(),
-			pay_value: contract_env.pay_value,
 		};
 		Ok(output)
 	}
@@ -211,7 +217,6 @@ struct GetCallEnvOutput {
 struct GetContractEnvOutput {
 	pub contract_address: Address,
 	pub sender_address: Address,
-	pub pay_value: Balance,
 }
 
 #[derive(Serialize)]

@@ -65,14 +65,50 @@ impl VM {
 		vm
 	}
 
-	pub fn execute(
+	pub fn validate(
 		&self,
-		context: &dyn VMContext,
-		mode: Mode,
 		code_hash: &Hash,
 		code: &[u8],
+		mode: Mode,
 		method: Vec<u8>,
 		input: Vec<u8>,
+		pay_value: Balance,
+	) -> VMResult<()> {
+		let func = match mode {
+			Mode::Init => "validate_init",
+			Mode::Call => "validate_call",
+		};
+		let context = &DummyVMContext;
+		self.run(code_hash, code, context, func, method, input, pay_value)?;
+		Ok(())
+	}
+
+	pub fn execute(
+		&self,
+		code_hash: &Hash,
+		code: &[u8],
+		context: &dyn VMContext,
+		mode: Mode,
+		method: Vec<u8>,
+		input: Vec<u8>,
+		pay_value: Balance,
+	) -> VMResult<Vec<u8>> {
+		let func = match mode {
+			Mode::Init => "execute_init",
+			Mode::Call => "execute_call",
+		};
+		self.run(code_hash, code, context, func, method, input, pay_value)
+	}
+
+	fn run(
+		&self,
+		code_hash: &Hash,
+		code: &[u8],
+		context: &dyn VMContext,
+		func: &str,
+		method: Vec<u8>,
+		input: Vec<u8>,
+		pay_value: Balance,
 	) -> VMResult<Vec<u8>> {
 		let module = compile::compile(code_hash, code, &self.config)?;
 
@@ -93,17 +129,14 @@ impl VM {
 			context,
 			method,
 			input,
+			pay_value,
 			output: None,
 		};
 
 		let import_object = import::import(&mut state, memory_copy)?;
 
 		let instance = module.instantiate(&import_object)?;
-		let name = match mode {
-			Mode::Init => "execute_init",
-			Mode::Call => "execute_call",
-		};
-		let _result = instance.call(name, &[])?;
+		let _result = instance.call(func, &[])?;
 
 		let output = state.output;
 		let output = output.unwrap_or(serde_json::to_vec(&()).unwrap());
@@ -150,5 +183,71 @@ pub struct VMCallEnv {
 pub struct VMContractEnv {
 	pub contract_address: Address,
 	pub sender_address: Address,
-	pub pay_value: Balance,
+}
+
+struct DummyVMContext;
+
+impl VMContext for DummyVMContext {
+	fn env(&self) -> Rc<VMContextEnv> {
+		unreachable!()
+	}
+	fn call_env(&self) -> Rc<VMCallEnv> {
+		unreachable!()
+	}
+	fn contract_env(&self) -> Rc<VMContractEnv> {
+		unreachable!()
+	}
+	fn payload_get(&self, _key: &[u8]) -> VMResult<Option<DBValue>> {
+		unreachable!()
+	}
+	fn payload_set(&self, _key: &[u8], _value: Option<DBValue>) -> VMResult<()> {
+		unreachable!()
+	}
+	fn payload_drain_buffer(&self) -> VMResult<Vec<(DBKey, Option<DBValue>)>> {
+		unreachable!()
+	}
+	fn payload_apply(&self, _items: Vec<(DBKey, Option<DBValue>)>) -> VMResult<()> {
+		unreachable!()
+	}
+	fn emit_event(&self, _event: Event) -> VMResult<()> {
+		unreachable!()
+	}
+	fn drain_events(&self) -> VMResult<Vec<Event>> {
+		unreachable!()
+	}
+	fn apply_events(&self, _items: Vec<Event>) -> VMResult<()> {
+		unreachable!()
+	}
+	fn hash(&self, _data: &[u8]) -> VMResult<Hash> {
+		unreachable!()
+	}
+	fn address(&self, _data: &[u8]) -> VMResult<Address> {
+		unreachable!()
+	}
+	fn validate_address(&self, _address: &Address) -> VMResult<()> {
+		unreachable!()
+	}
+	fn module_balance_get(&self, _address: &Address) -> VMResult<Balance> {
+		unreachable!()
+	}
+	fn module_balance_transfer(
+		&self,
+		_sender: &Address,
+		_recipient: &Address,
+		_value: Balance,
+	) -> VMResult<()> {
+		unreachable!()
+	}
+	fn module_payload_drain_buffer(&self) -> VMResult<Vec<(DBKey, Option<DBValue>)>> {
+		unreachable!()
+	}
+	fn module_payload_apply(&self, _items: Vec<(DBKey, Option<DBValue>)>) -> VMResult<()> {
+		unreachable!()
+	}
+	fn module_drain_events(&self) -> VMResult<Vec<Event>> {
+		unreachable!()
+	}
+	fn module_apply_events(&self, _items: Vec<Event>) -> VMResult<()> {
+		unreachable!()
+	}
 }

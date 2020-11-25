@@ -19,6 +19,7 @@ mod env {
 		pub fn share_write(data_len: u64, data_ptr: u64, share_id: u64);
 		pub fn method_read(ptr: u64);
 		pub fn input_read(ptr: u64);
+		pub fn pay_value_read() -> u64;
 		pub fn output_write(len: u64, ptr: u64);
 		pub fn error_return(len: u64, ptr: u64);
 		pub fn env_block_number() -> u64;
@@ -26,7 +27,6 @@ mod env {
 		pub fn env_tx_hash_read(share_id: u64);
 		pub fn env_contract_address_read(share_id: u64);
 		pub fn env_sender_address_read(share_id: u64);
-		pub fn env_pay_value() -> u64;
 		pub fn storage_read(key_len: u64, key_ptr: u64, share_id: u64) -> u64;
 		pub fn storage_write(
 			key_len: u64,
@@ -72,6 +72,10 @@ pub fn input_read(ptr: u64) {
 	unsafe { env::input_read(ptr) }
 }
 
+pub fn pay_value_read() -> u64 {
+	unsafe { env::pay_value_read() }
+}
+
 pub fn output_write(len: u64, ptr: u64) {
 	unsafe { env::output_write(len, ptr) }
 }
@@ -98,10 +102,6 @@ pub fn env_contract_address_read(share_id: u64) {
 
 pub fn env_sender_address_read(share_id: u64) {
 	unsafe { env::env_sender_address_read(share_id) }
-}
-
-pub fn env_pay_value() -> u64 {
-	unsafe { env::env_pay_value() }
 }
 
 pub fn storage_read(key_len: u64, key_ptr: u64, share_id: u64) -> u64 {
