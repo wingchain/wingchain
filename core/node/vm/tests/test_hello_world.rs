@@ -435,7 +435,8 @@ fn vm_validate(
 }
 
 fn get_code() -> &'static [u8] {
-	let code =
-		include_bytes!("../contract-samples/hello-world/pkg/contract_samples_hello_world_bg.wasm");
+	let code = include_bytes!(
+		"../contract-samples/hello-world/release/contract_samples_hello_world_bg.wasm"
+	);
 	code
 }

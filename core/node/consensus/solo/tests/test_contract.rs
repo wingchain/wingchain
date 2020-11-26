@@ -626,7 +626,7 @@ async fn test_solo_contract_update_code() {
 
 fn get_code() -> &'static [u8] {
 	let code = include_bytes!(
-		"../../../vm/contract-samples/hello-world/pkg/contract_samples_hello_world_bg.wasm"
+		"../../../vm/contract-samples/hello-world/release/contract_samples_hello_world_bg.wasm"
 	);
 	code
 }

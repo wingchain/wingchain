@@ -184,6 +184,6 @@ fn vm_execute(
 }
 
 fn get_code() -> &'static [u8] {
-	let code = include_bytes!("../contract-samples/token/pkg/contract_samples_token_bg.wasm");
+	let code = include_bytes!("../contract-samples/token/release/contract_samples_token_bg.wasm");
 	code
 }
