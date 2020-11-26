@@ -171,18 +171,30 @@ where
 
 	pub fn get(&self, key: &K) -> ModuleResult<Option<V>> {
 		let key = codec::encode(&key)?;
+		self.raw_get(&key)
+	}
+
+	pub fn raw_get(&self, key: &[u8]) -> ModuleResult<Option<V>> {
 		let key = &[&self.key, SEPARATOR, &key].concat();
 		context_get(&self.context, self.meta_module, key)
 	}
 
 	pub fn set(&self, key: &K, value: &V) -> ModuleResult<()> {
 		let key = codec::encode(&key)?;
+		self.raw_set(&key, value)
+	}
+
+	pub fn raw_set(&self, key: &[u8], value: &V) -> ModuleResult<()> {
 		let key = &[&self.key, SEPARATOR, &key].concat();
 		context_set(&self.context, self.meta_module, key, value)
 	}
 
 	pub fn delete(&self, key: &K) -> ModuleResult<()> {
 		let key = codec::encode(&key)?;
+		self.raw_delete(&key)
+	}
+
+	pub fn raw_delete(&self, key: &[u8]) -> ModuleResult<()> {
 		let key = &[&self.key, SEPARATOR, &key].concat();
 		context_delete(&self.context, self.meta_module, key)
 	}

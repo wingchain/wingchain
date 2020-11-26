@@ -111,7 +111,7 @@ impl<C: Context, U: Util> Module<C, U> {
 	) -> ModuleResult<Option<Vec<u8>>> {
 		let contract_address = params.contract_address;
 		let version = params.version;
-		self.inner_get_code(contract_address, version)
+		self.inner_get_code(&contract_address, version)
 	}
 
 	#[call]
@@ -177,6 +177,15 @@ impl<C: Context, U: Util> Module<C, U> {
 		self.code.set(&(contract_address.clone(), version), &code)?;
 		self.code_hash
 			.set(&(contract_address.clone(), version), &code_hash)?;
+
+		let execute_params = ExecuteParams {
+			contract_address: contract_address.clone(),
+			method: params.init_method,
+			params: params.init_params,
+			pay_value: params.init_pay_value,
+		};
+
+		self.inner_execute(Some(sender.clone()), &code, Mode::Init, execute_params)?;
 
 		Ok(contract_address)
 	}
@@ -325,58 +334,12 @@ impl<C: Context, U: Util> Module<C, U> {
 
 	#[call(write = true)]
 	fn execute(&self, sender: Option<&Address>, params: ExecuteParams) -> ModuleResult<Vec<u8>> {
-		let contract_address = params.contract_address;
+		let contract_address = &params.contract_address;
 		let code = self
-			.inner_get_code(contract_address.clone(), None)?
+			.inner_get_code(&contract_address, None)?
 			.ok_or("Contract not found")?;
 
-		let contract_env = Rc::new(VMContractEnv {
-			contract_address,
-			sender_address: sender.cloned(),
-		});
-		let vm_context =
-			DefaultVMContext::<Self>::new(contract_env, self.context.clone(), self.util.clone());
-		let vm = VM::new(VMConfig::default());
-		let code_hash = self.util.hash(&code)?;
-
-		let contract_method = params.method;
-		let contract_params = params.params;
-		let contract_pay_value = params.pay_value;
-
-		let result = vm
-			.execute(
-				&code_hash,
-				&code,
-				&vm_context,
-				Mode::Call,
-				&contract_method,
-				&contract_params,
-				contract_pay_value,
-			)
-			.map_err(vm_to_module_error);
-
-		match result {
-			Ok(result) => {
-				vm_context
-					.payload_apply(
-						vm_context
-							.payload_drain_buffer()
-							.map_err(vm_to_module_error)?,
-					)
-					.map_err(vm_to_module_error)?;
-				vm_context
-					.apply_events(vm_context.drain_events().map_err(vm_to_module_error)?)
-					.map_err(vm_to_module_error)?;
-				Ok(result)
-			}
-			Err(e) => {
-				vm_context
-					.payload_drain_buffer()
-					.map_err(vm_to_module_error)?;
-				vm_context.drain_events().map_err(vm_to_module_error)?;
-				Err(e)
-			}
-		}
+		self.inner_execute(sender.cloned(), &code, Mode::Call, params)
 	}
 
 	fn verify_sender(
@@ -509,7 +472,7 @@ impl<C: Context, U: Util> Module<C, U> {
 
 	fn inner_get_code(
 		&self,
-		contract_address: Address,
+		contract_address: &Address,
 		version: Option<u32>,
 	) -> ModuleResult<Option<Vec<u8>>> {
 		let version = match version {
@@ -523,8 +486,66 @@ impl<C: Context, U: Util> Module<C, U> {
 			}
 		};
 
-		let code = self.code.get(&(contract_address, version))?;
+		let key = codec::encode(&(&contract_address, version))?;
+		let code = self.code.raw_get(&key)?;
 		Ok(code)
+	}
+
+	fn inner_execute(
+		&self,
+		sender_address: Option<Address>,
+		code: &[u8],
+		mode: Mode,
+		params: ExecuteParams,
+	) -> ModuleResult<Vec<u8>> {
+		let contract_address = params.contract_address;
+		let contract_env = Rc::new(VMContractEnv {
+			contract_address,
+			sender_address,
+		});
+		let vm_context =
+			DefaultVMContext::<Self>::new(contract_env, self.context.clone(), self.util.clone());
+		let vm = VM::new(VMConfig::default());
+		let code_hash = self.util.hash(&code)?;
+
+		let contract_method = params.method;
+		let contract_params = params.params;
+		let contract_pay_value = params.pay_value;
+
+		let result = vm
+			.execute(
+				&code_hash,
+				&code,
+				&vm_context,
+				mode,
+				&contract_method,
+				&contract_params,
+				contract_pay_value,
+			)
+			.map_err(vm_to_module_error);
+
+		match result {
+			Ok(result) => {
+				vm_context
+					.payload_apply(
+						vm_context
+							.payload_drain_buffer()
+							.map_err(vm_to_module_error)?,
+					)
+					.map_err(vm_to_module_error)?;
+				vm_context
+					.apply_events(vm_context.drain_events().map_err(vm_to_module_error)?)
+					.map_err(vm_to_module_error)?;
+				Ok(result)
+			}
+			Err(e) => {
+				vm_context
+					.payload_drain_buffer()
+					.map_err(vm_to_module_error)?;
+				vm_context.drain_events().map_err(vm_to_module_error)?;
+				Err(e)
+			}
+		}
 	}
 }
 
