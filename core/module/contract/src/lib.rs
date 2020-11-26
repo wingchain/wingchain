@@ -15,63 +15,69 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use executor_macro::{call, module};
-use executor_primitives::{errors, Context, ContextEnv, Module as ModuleT, StorageMap, Validator};
-use primitives::codec::{Decode, Encode};
-use primitives::errors::CommonResult;
-use primitives::types::CallResult;
-use primitives::{codec, Address, Balance, Call, Hash, TransactionResult};
+use serde::{Deserialize, Serialize};
 
-pub struct Module<C>
+use executor_macro::{call, module};
+use executor_primitives::{
+	errors, errors::ApplicationError, Context, ContextEnv, Module as ModuleT, ModuleError,
+	ModuleResult, OpaqueModuleResult, StorageMap, Util,
+};
+use node_vm::errors::VMError;
+use node_vm::{Mode, VMConfig, VMContext, VMContractEnv, VM};
+use primitives::codec::{Decode, Encode};
+use primitives::{codec, Address, Balance, Call, Event, Hash};
+
+use crate::vm::DefaultVMContext;
+
+mod vm;
+
+pub struct Module<C, U>
 where
 	C: Context,
+	U: Util,
 {
 	#[allow(dead_code)]
 	env: Rc<ContextEnv>,
 	context: C,
+	util: U,
 	/// contract address -> admin
-	admin: StorageMap<Address, Admin, C>,
+	admin: StorageMap<Address, Admin, Self>,
 	/// contract address -> current version
-	version: StorageMap<Address, u32, C>,
+	version: StorageMap<Address, u32, Self>,
 	/// (contract address, version) -> code
-	code: StorageMap<(Address, u32), Vec<u8>, C>,
+	code: StorageMap<(Address, u32), Vec<u8>, Self>,
+	/// (contract address, version) -> code hash
+	code_hash: StorageMap<(Address, u32), Hash, Self>,
 
 	/// contract address -> update admin proposal id
-	update_admin_proposal_id: StorageMap<Address, u32, C>,
+	update_admin_proposal_id: StorageMap<Address, u32, Self>,
 	/// contract address -> update admin proposal
-	update_admin_proposal: StorageMap<Address, UpdateAdminProposal, C>,
+	update_admin_proposal: StorageMap<Address, UpdateAdminProposal, Self>,
 
 	/// contract address -> update code proposal id
-	update_code_proposal_id: StorageMap<Address, u32, C>,
+	update_code_proposal_id: StorageMap<Address, u32, Self>,
 	/// contract address -> update code proposal
-	update_code_proposal: StorageMap<Address, UpdateCodeProposal, C>,
+	update_code_proposal: StorageMap<Address, UpdateCodeProposal, Self>,
 }
 
 #[module]
-impl<C: Context> Module<C> {
+impl<C: Context, U: Util> Module<C, U> {
 	const META_MODULE: bool = false;
 	const STORAGE_KEY: &'static [u8] = b"contract";
 
-	fn new(context: C) -> Self {
+	fn new(context: C, util: U) -> Self {
 		Self {
 			env: context.env(),
 			context: context.clone(),
-			admin: StorageMap::new::<Self>(context.clone(), b"admin"),
-			version: StorageMap::new::<Self>(context.clone(), b"version"),
-			code: StorageMap::new::<Self>(context.clone(), b"code"),
-			update_admin_proposal_id: StorageMap::new::<Self>(
-				context.clone(),
-				b"update_admin_proposal_id",
-			),
-			update_admin_proposal: StorageMap::new::<Self>(
-				context.clone(),
-				b"update_admin_proposal",
-			),
-			update_code_proposal_id: StorageMap::new::<Self>(
-				context.clone(),
-				b"update_code_proposal_id",
-			),
-			update_code_proposal: StorageMap::new::<Self>(context, b"update_code_proposal"),
+			util,
+			admin: StorageMap::new(context.clone(), b"admin"),
+			version: StorageMap::new(context.clone(), b"version"),
+			code: StorageMap::new(context.clone(), b"code"),
+			code_hash: StorageMap::new(context.clone(), b"code_hash"),
+			update_admin_proposal_id: StorageMap::new(context.clone(), b"update_admin_proposal_id"),
+			update_admin_proposal: StorageMap::new(context.clone(), b"update_admin_proposal"),
+			update_code_proposal_id: StorageMap::new(context.clone(), b"update_code_proposal_id"),
+			update_code_proposal: StorageMap::new(context, b"update_code_proposal"),
 		}
 	}
 
@@ -80,10 +86,10 @@ impl<C: Context> Module<C> {
 		&self,
 		_sender: Option<&Address>,
 		params: GetVersionParams,
-	) -> CommonResult<CallResult<Option<u32>>> {
+	) -> ModuleResult<Option<u32>> {
 		let contract_address = params.contract_address;
 		let version = self.version.get(&contract_address)?;
-		Ok(Ok(version))
+		Ok(version)
 	}
 
 	#[call]
@@ -91,10 +97,10 @@ impl<C: Context> Module<C> {
 		&self,
 		_sender: Option<&Address>,
 		params: GetAdminParams,
-	) -> CommonResult<CallResult<Option<Admin>>> {
+	) -> ModuleResult<Option<Admin>> {
 		let contract_address = params.contract_address;
 		let admin = self.admin.get(&contract_address)?;
-		Ok(Ok(admin))
+		Ok(admin)
 	}
 
 	#[call]
@@ -102,7 +108,18 @@ impl<C: Context> Module<C> {
 		&self,
 		_sender: Option<&Address>,
 		params: GetCodeParams,
-	) -> CommonResult<CallResult<Option<Vec<u8>>>> {
+	) -> ModuleResult<Option<Vec<u8>>> {
+		let contract_address = params.contract_address;
+		let version = params.version;
+		self.inner_get_code(&contract_address, version)
+	}
+
+	#[call]
+	fn get_code_hash(
+		&self,
+		_sender: Option<&Address>,
+		params: GetCodeHashParams,
+	) -> ModuleResult<Option<Hash>> {
 		let contract_address = params.contract_address;
 		let version = params.version;
 
@@ -112,29 +129,44 @@ impl<C: Context> Module<C> {
 				let current_version = self.version.get(&contract_address)?;
 				match current_version {
 					Some(current_version) => current_version,
-					None => return Ok(Ok(None)),
+					None => return Ok(None),
 				}
 			}
 		};
 
-		let code = self.code.get(&(contract_address, version))?;
-		Ok(Ok(code))
+		let code_hash = self.code_hash.get(&(contract_address, version))?;
+		Ok(code_hash)
+	}
+
+	fn validate_create(util: &U, params: CreateParams) -> ModuleResult<()> {
+		let vm = VM::new(VMConfig::default());
+		let code = params.code;
+		let code_hash = util.hash(&code)?;
+		let init_method = params.init_method;
+		let init_params = params.init_params;
+		let init_pay_value = params.init_pay_value;
+		vm.validate(
+			&code_hash,
+			&code,
+			Mode::Init,
+			&init_method,
+			&init_params,
+			init_pay_value,
+		)
+		.map_err(vm_to_module_error)?;
+
+		Ok(())
 	}
 
 	#[call(write = true)]
-	fn create(
-		&self,
-		sender: Option<&Address>,
-		params: CreateParams,
-	) -> CommonResult<CallResult<Address>> {
-		let sender = match sender {
-			Some(v) => v,
-			None => return Ok(Err("should be signed".to_string())),
-		};
+	fn create(&self, sender: Option<&Address>, params: CreateParams) -> ModuleResult<Address> {
+		let sender = sender.ok_or(ApplicationError::Unsigned)?;
 		let tx_hash = &self.context.call_env().tx_hash;
-		let contract_address = self.context.address(&self.context.hash(&tx_hash.0)?.0)?;
+		let tx_hash = tx_hash.as_ref().ok_or("Tx hash not found")?;
+		let contract_address = self.util.address(&self.util.hash(&tx_hash.0)?.0)?;
 
 		let code = params.code;
+		let code_hash = self.util.hash(&code)?;
 		let version = 1u32;
 		let admin = Admin {
 			threshold: 1,
@@ -143,8 +175,26 @@ impl<C: Context> Module<C> {
 		self.version.set(&contract_address, &version)?;
 		self.admin.set(&contract_address, &admin)?;
 		self.code.set(&(contract_address.clone(), version), &code)?;
+		self.code_hash
+			.set(&(contract_address.clone(), version), &code_hash)?;
 
-		Ok(Ok(contract_address))
+		let execute_params = ExecuteParams {
+			contract_address: contract_address.clone(),
+			method: params.init_method,
+			params: params.init_params,
+			pay_value: params.init_pay_value,
+		};
+
+		self.inner_execute(Some(sender.clone()), &code, Mode::Init, execute_params)?;
+
+		Ok(contract_address)
+	}
+
+	fn validate_update_admin(util: &U, params: UpdateAdminParams) -> ModuleResult<()> {
+		for (address, _) in params.admin.members {
+			util.validate_address(&address)?;
+		}
+		Ok(())
 	}
 
 	#[call(write = true)]
@@ -152,17 +202,11 @@ impl<C: Context> Module<C> {
 		&self,
 		sender: Option<&Address>,
 		params: UpdateAdminParams,
-	) -> CommonResult<CallResult<()>> {
-		let sender = match sender {
-			Some(v) => v,
-			None => return Ok(Err("should be signed".to_string())),
-		};
+	) -> ModuleResult<()> {
+		let sender = sender.ok_or(ApplicationError::Unsigned)?;
 		let contract_address = params.contract_address;
 
-		let (old_threshold, old_members) = match self.verify_sender(sender, &contract_address)? {
-			Ok(v) => v,
-			Err(e) => return Ok(Err(e)),
-		};
+		let (old_threshold, old_members) = self.verify_sender(sender, &contract_address)?;
 
 		// create a proposal
 		let new_admin = aggregate_admin(params.admin);
@@ -175,10 +219,13 @@ impl<C: Context> Module<C> {
 			admin: new_admin.clone(),
 			vote: vec![],
 		};
-		let event = UpdateAdminEvent::ProposalCreated(UpdateAdminProposalCreated {
-			proposal: proposal.clone(),
-		});
-		self.context.emit_event(event)?;
+		self.context.emit_event(Event::from_data(
+			"UpdateAdminProposalCreated".to_string(),
+			UpdateAdminProposalCreated {
+				contract_address: contract_address.clone(),
+				proposal: proposal.clone(),
+			},
+		)?)?;
 
 		self.update_admin_vote_and_pass(
 			sender,
@@ -194,27 +241,18 @@ impl<C: Context> Module<C> {
 		&self,
 		sender: Option<&Address>,
 		params: UpdateAdminVoteParams,
-	) -> CommonResult<CallResult<()>> {
-		let sender = match sender {
-			Some(v) => v,
-			None => return Ok(Err("should be signed".to_string())),
-		};
+	) -> ModuleResult<()> {
+		let sender = sender.ok_or(ApplicationError::Unsigned)?;
 		let contract_address = params.contract_address;
 
 		let proposal = self.update_admin_proposal.get(&contract_address)?;
-		let mut proposal = match proposal {
-			Some(proposal) => proposal,
-			None => return Ok(Err("no proposal".to_string())),
-		};
+		let mut proposal = proposal.ok_or("Proposal not found")?;
 
 		if proposal.proposal_id != params.proposal_id {
-			return Ok(Err("proposal_id not match".to_string()));
+			return Err("Proposal id not match".into());
 		}
 
-		let (old_threshold, old_members) = match self.verify_sender(sender, &contract_address)? {
-			Ok(v) => v,
-			Err(e) => return Ok(Err(e)),
-		};
+		let (old_threshold, old_members) = self.verify_sender(sender, &contract_address)?;
 
 		self.update_admin_vote_and_pass(
 			sender,
@@ -226,24 +264,11 @@ impl<C: Context> Module<C> {
 	}
 
 	#[call(write = true)]
-	fn update_code(
-		&self,
-		sender: Option<&Address>,
-		params: UpdateCodeParams,
-	) -> CommonResult<CallResult<()>> {
-		let sender = sender.expect("should be signed");
+	fn update_code(&self, sender: Option<&Address>, params: UpdateCodeParams) -> ModuleResult<()> {
+		let sender = sender.ok_or(ApplicationError::Unsigned)?;
 		let contract_address = params.contract_address;
 
-		// verify sender
-		let old_admin = self
-			.admin
-			.get(&contract_address)?
-			.expect("should have admin");
-		let old_threshold = old_admin.threshold;
-		let old_members = old_admin.members.into_iter().collect::<HashMap<_, _>>();
-		if !old_members.contains_key(sender) {
-			return Ok(Err("not admin".to_string()));
-		}
+		let (old_threshold, old_members) = self.verify_sender(sender, &contract_address)?;
 
 		let code = params.code;
 
@@ -252,17 +277,20 @@ impl<C: Context> Module<C> {
 			.update_code_proposal_id
 			.get(&contract_address)?
 			.unwrap_or(1u32);
-		let code_hash = self.context.hash(&code)?;
+		let code_hash = self.util.hash(&code)?;
 		let mut proposal = UpdateCodeProposal {
 			proposal_id,
 			code,
 			vote: vec![],
 		};
 
-		let event = UpdateCodeEvent::ProposalCreated(UpdateCodeProposalCreated {
-			proposal: UpdateCodeProposalForEvent::from(&proposal, &code_hash),
-		});
-		self.context.emit_event(event)?;
+		self.context.emit_event(Event::from_data(
+			"UpdateCodeProposalCreated".to_string(),
+			UpdateCodeProposalCreated {
+				contract_address: contract_address.clone(),
+				proposal: UpdateCodeProposalForEvent::from(&proposal, &code_hash),
+			},
+		)?)?;
 
 		self.update_code_vote_and_pass(
 			sender,
@@ -279,29 +307,20 @@ impl<C: Context> Module<C> {
 		&self,
 		sender: Option<&Address>,
 		params: UpdateCodeVoteParams,
-	) -> CommonResult<CallResult<()>> {
-		let sender = match sender {
-			Some(v) => v,
-			None => return Ok(Err("should be signed".to_string())),
-		};
+	) -> ModuleResult<()> {
+		let sender = sender.ok_or(ApplicationError::Unsigned)?;
 		let contract_address = params.contract_address;
 
 		let proposal = self.update_code_proposal.get(&contract_address)?;
-		let mut proposal = match proposal {
-			Some(proposal) => proposal,
-			None => return Ok(Err("no proposal".to_string())),
-		};
+		let mut proposal = proposal.ok_or("Proposal not found")?;
 
 		if proposal.proposal_id != params.proposal_id {
-			return Ok(Err("proposal_id not match".to_string()));
+			return Err("Proposal id not match".into());
 		}
 
-		let (old_threshold, old_members) = match self.verify_sender(sender, &contract_address)? {
-			Ok(v) => v,
-			Err(e) => return Ok(Err(e)),
-		};
+		let (old_threshold, old_members) = self.verify_sender(sender, &contract_address)?;
 
-		let code_hash = self.context.hash(&proposal.code)?;
+		let code_hash = self.util.hash(&proposal.code)?;
 
 		self.update_code_vote_and_pass(
 			sender,
@@ -314,30 +333,30 @@ impl<C: Context> Module<C> {
 	}
 
 	#[call(write = true)]
-	fn execute(
-		&self,
-		_sender: Option<&Address>,
-		_params: ExecuteParams,
-	) -> CommonResult<CallResult<Address>> {
-		unimplemented!()
+	fn execute(&self, sender: Option<&Address>, params: ExecuteParams) -> ModuleResult<Vec<u8>> {
+		let contract_address = &params.contract_address;
+		let code = self
+			.inner_get_code(&contract_address, None)?
+			.ok_or("Contract not found")?;
+
+		self.inner_execute(sender.cloned(), &code, Mode::Call, params)
 	}
 
 	fn verify_sender(
 		&self,
 		sender: &Address,
 		contract_address: &Address,
-	) -> CommonResult<CallResult<(u32, HashMap<Address, u32>)>> {
-		let admin = match self.admin.get(&contract_address)? {
-			Some(v) => v,
-			None => return Ok(Err("should have admin".to_string())),
-		};
+	) -> ModuleResult<(u32, HashMap<Address, u32>)> {
+		let admin = self.admin.get(&contract_address)?;
+		let admin = admin.ok_or("Contract admin not found")?;
+
 		let threshold = admin.threshold;
 		let members = admin.members.into_iter().collect::<HashMap<_, _>>();
 		if !members.contains_key(sender) {
-			return Ok(Err("not admin".to_string()));
+			return Err("Not admin".into());
 		}
 
-		Ok(Ok((threshold, members)))
+		Ok((threshold, members))
 	}
 
 	fn update_admin_vote_and_pass(
@@ -347,15 +366,18 @@ impl<C: Context> Module<C> {
 		proposal: &mut UpdateAdminProposal,
 		old_threshold: u32,
 		old_members: &HashMap<Address, u32>,
-	) -> CommonResult<CallResult<()>> {
+	) -> ModuleResult<()> {
 		// vote for the proposal
 		if !proposal.vote.contains(sender) {
 			proposal.vote.push(sender.clone());
 		}
-		let event = UpdateAdminEvent::ProposalVoted(UpdateAdminProposalVoted {
-			proposal: proposal.clone(),
-		});
-		self.context.emit_event(event)?;
+		self.context.emit_event(Event::from_data(
+			"UpdateAdminProposalVoted".to_string(),
+			UpdateAdminProposalVoted {
+				contract_address: contract_address.clone(),
+				proposal: proposal.clone(),
+			},
+		)?)?;
 
 		// pass a proposal
 		let sum = proposal
@@ -367,10 +389,13 @@ impl<C: Context> Module<C> {
 			self.admin.set(&contract_address, &proposal.admin)?;
 			pass = true;
 
-			let event = UpdateAdminEvent::ProposalPassed(UpdateAdminProposalPassed {
-				proposal: proposal.clone(),
-			});
-			self.context.emit_event(event)?;
+			self.context.emit_event(Event::from_data(
+				"UpdateAdminProposalPassed".to_string(),
+				UpdateAdminProposalPassed {
+					contract_address: contract_address.clone(),
+					proposal: proposal.clone(),
+				},
+			)?)?;
 		}
 
 		if pass {
@@ -382,7 +407,7 @@ impl<C: Context> Module<C> {
 		self.update_admin_proposal_id
 			.set(&contract_address, &(proposal.proposal_id + 1))?;
 
-		Ok(Ok(()))
+		Ok(())
 	}
 
 	fn update_code_vote_and_pass(
@@ -393,15 +418,18 @@ impl<C: Context> Module<C> {
 		code_hash: &Hash,
 		old_threshold: u32,
 		old_members: &HashMap<Address, u32>,
-	) -> CommonResult<CallResult<()>> {
+	) -> ModuleResult<()> {
 		// vote for the proposal
 		if !proposal.vote.contains(sender) {
 			proposal.vote.push(sender.clone());
 		}
-		let event = UpdateCodeEvent::ProposalVoted(UpdateCodeProposalVoted {
-			proposal: UpdateCodeProposalForEvent::from(proposal, code_hash),
-		});
-		self.context.emit_event(event)?;
+		self.context.emit_event(Event::from_data(
+			"UpdateCodeProposalVoted".to_string(),
+			UpdateCodeProposalVoted {
+				contract_address: contract_address.clone(),
+				proposal: UpdateCodeProposalForEvent::from(proposal, code_hash),
+			},
+		)?)?;
 
 		// pass a proposal
 		let sum = proposal
@@ -410,20 +438,24 @@ impl<C: Context> Module<C> {
 			.fold(0u32, |x, v| x + *old_members.get(v).unwrap_or(&0u32));
 		let mut pass = false;
 		if sum >= old_threshold {
-			let version = match self.version.get(&contract_address)? {
-				Some(v) => v,
-				None => return Ok(Err("should have version".to_string())),
-			};
+			let version = self.version.get(&contract_address)?;
+			let version = version.ok_or("Contract version not found")?;
+
 			let new_version = version + 1;
 			self.version.set(&contract_address, &new_version)?;
 			self.code
 				.set(&(contract_address.clone(), new_version), &proposal.code)?;
+			self.code_hash
+				.set(&(contract_address.clone(), new_version), &code_hash)?;
 			pass = true;
 
-			let event = UpdateCodeEvent::ProposalPassed(UpdateCodeProposalPassed {
-				proposal: UpdateCodeProposalForEvent::from(proposal, code_hash),
-			});
-			self.context.emit_event(event)?;
+			self.context.emit_event(Event::from_data(
+				"UpdateCodeProposalPassed".to_string(),
+				UpdateCodeProposalPassed {
+					contract_address: contract_address.clone(),
+					proposal: UpdateCodeProposalForEvent::from(proposal, code_hash),
+				},
+			)?)?;
 		}
 
 		if pass {
@@ -435,7 +467,85 @@ impl<C: Context> Module<C> {
 		self.update_code_proposal_id
 			.set(&contract_address, &(proposal.proposal_id + 1))?;
 
-		Ok(Ok(()))
+		Ok(())
+	}
+
+	fn inner_get_code(
+		&self,
+		contract_address: &Address,
+		version: Option<u32>,
+	) -> ModuleResult<Option<Vec<u8>>> {
+		let version = match version {
+			Some(version) => version,
+			None => {
+				let current_version = self.version.get(&contract_address)?;
+				match current_version {
+					Some(current_version) => current_version,
+					None => return Ok(None),
+				}
+			}
+		};
+
+		let key = codec::encode(&(&contract_address, version))?;
+		let code = self.code.raw_get(&key)?;
+		Ok(code)
+	}
+
+	fn inner_execute(
+		&self,
+		sender_address: Option<Address>,
+		code: &[u8],
+		mode: Mode,
+		params: ExecuteParams,
+	) -> ModuleResult<Vec<u8>> {
+		let contract_address = params.contract_address;
+		let contract_env = Rc::new(VMContractEnv {
+			contract_address,
+			sender_address,
+		});
+		let vm_context =
+			DefaultVMContext::<Self>::new(contract_env, self.context.clone(), self.util.clone());
+		let vm = VM::new(VMConfig::default());
+		let code_hash = self.util.hash(&code)?;
+
+		let contract_method = params.method;
+		let contract_params = params.params;
+		let contract_pay_value = params.pay_value;
+
+		let result = vm
+			.execute(
+				&code_hash,
+				&code,
+				&vm_context,
+				mode,
+				&contract_method,
+				&contract_params,
+				contract_pay_value,
+			)
+			.map_err(vm_to_module_error);
+
+		match result {
+			Ok(result) => {
+				vm_context
+					.payload_apply(
+						vm_context
+							.payload_drain_buffer()
+							.map_err(vm_to_module_error)?,
+					)
+					.map_err(vm_to_module_error)?;
+				vm_context
+					.apply_events(vm_context.drain_events().map_err(vm_to_module_error)?)
+					.map_err(vm_to_module_error)?;
+				Ok(result)
+			}
+			Err(e) => {
+				vm_context
+					.payload_drain_buffer()
+					.map_err(vm_to_module_error)?;
+				vm_context.drain_events().map_err(vm_to_module_error)?;
+				Err(e)
+			}
+		}
 	}
 }
 
@@ -460,26 +570,37 @@ fn aggregate_admin(admin: Admin) -> Admin {
 	}
 }
 
+fn vm_to_module_error(e: VMError) -> ModuleError {
+	match e {
+		VMError::System(e) => ModuleError::System(e),
+		VMError::Application(e) => {
+			ModuleError::Application(ApplicationError::User { msg: e.to_string() })
+		}
+	}
+}
+
 #[derive(Encode, Decode, Debug, PartialEq)]
 pub struct CreateParams {
 	/// wasm code
 	pub code: Vec<u8>,
-	/// amount sent to contract when creating
-	pub value: Balance,
+	/// init method
+	pub init_method: String,
 	/// init params in json format
 	pub init_params: Vec<u8>,
+	/// amount sent to contract when init
+	pub init_pay_value: Balance,
 }
 
 #[derive(Encode, Decode, Debug, PartialEq)]
 pub struct ExecuteParams {
 	/// contract address
 	pub contract_address: Address,
-	/// amount sent to contract when execute a payable method
-	pub value: Balance,
 	/// contract method
 	pub method: String,
 	/// params in json format
 	pub params: Vec<u8>,
+	/// amount sent to contract when execute a payable method
+	pub pay_value: Balance,
 }
 
 #[derive(Encode, Decode, Debug, PartialEq)]
@@ -502,13 +623,21 @@ pub struct GetCodeParams {
 	pub version: Option<u32>,
 }
 
-#[derive(Encode, Decode, Debug, PartialEq, Clone)]
+#[derive(Encode, Decode, Debug, PartialEq)]
+pub struct GetCodeHashParams {
+	/// contract address
+	pub contract_address: Address,
+	/// version
+	pub version: Option<u32>,
+}
+
+#[derive(Encode, Decode, Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Admin {
 	pub threshold: u32,
 	pub members: Vec<(Address, u32)>,
 }
 
-#[derive(Encode, Decode, Debug, PartialEq, Clone)]
+#[derive(Encode, Decode, Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct UpdateAdminProposal {
 	pub proposal_id: u32,
 	pub admin: Admin,
@@ -554,7 +683,7 @@ pub struct UpdateCodeProposal {
 	pub vote: Vec<Address>,
 }
 
-#[derive(Encode, Decode, Debug, PartialEq, Clone)]
+#[derive(Encode, Decode, Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct UpdateCodeProposalForEvent {
 	pub proposal_id: u32,
 	pub code_hash: Hash,
@@ -571,47 +700,39 @@ impl UpdateCodeProposalForEvent {
 	}
 }
 
-#[derive(Encode, Decode, Debug)]
-pub enum UpdateAdminEvent {
-	ProposalCreated(UpdateAdminProposalCreated),
-	ProposalVoted(UpdateAdminProposalVoted),
-	ProposalPassed(UpdateAdminProposalPassed),
-}
-
-#[derive(Encode, Decode, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct UpdateAdminProposalCreated {
+	pub contract_address: Address,
 	pub proposal: UpdateAdminProposal,
 }
 
-#[derive(Encode, Decode, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct UpdateAdminProposalVoted {
+	pub contract_address: Address,
 	pub proposal: UpdateAdminProposal,
 }
 
-#[derive(Encode, Decode, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct UpdateAdminProposalPassed {
+	pub contract_address: Address,
 	pub proposal: UpdateAdminProposal,
 }
 
-#[derive(Encode, Decode, Debug)]
-pub enum UpdateCodeEvent {
-	ProposalCreated(UpdateCodeProposalCreated),
-	ProposalVoted(UpdateCodeProposalVoted),
-	ProposalPassed(UpdateCodeProposalPassed),
-}
-
-#[derive(Encode, Decode, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct UpdateCodeProposalCreated {
+	pub contract_address: Address,
 	pub proposal: UpdateCodeProposalForEvent,
 }
 
-#[derive(Encode, Decode, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct UpdateCodeProposalVoted {
+	pub contract_address: Address,
 	pub proposal: UpdateCodeProposalForEvent,
 }
 
-#[derive(Encode, Decode, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct UpdateCodeProposalPassed {
+	pub contract_address: Address,
 	pub proposal: UpdateCodeProposalForEvent,
 }
 

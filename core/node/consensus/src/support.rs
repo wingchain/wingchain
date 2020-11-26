@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -24,7 +25,6 @@ use primitives::types::CallResult;
 use primitives::{
 	Address, BlockNumber, BuildBlockParams, FullTransaction, Hash, Header, Transaction,
 };
-use std::collections::HashSet;
 
 #[async_trait]
 pub trait ConsensusSupport {

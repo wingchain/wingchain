@@ -27,7 +27,8 @@ impl Hash for Blake2b160 {
 		HashLength::HashLength20
 	}
 	fn hash(&self, out: &mut [u8], data: &[u8]) {
-		assert_eq!(out.len(), self.length().into());
+		let len: usize = self.length().into();
+		assert_eq!(out.len(), len);
 		blake2b::Blake2b::blake2b(out, data, &[]);
 	}
 }
@@ -42,7 +43,8 @@ impl Hash for Blake2b256 {
 		HashLength::HashLength32
 	}
 	fn hash(&self, out: &mut [u8], data: &[u8]) {
-		assert_eq!(out.len(), self.length().into());
+		let len: usize = self.length().into();
+		assert_eq!(out.len(), len);
 		blake2b::Blake2b::blake2b(out, data, &[]);
 	}
 }
@@ -57,7 +59,8 @@ impl Hash for Blake2b512 {
 		HashLength::HashLength64
 	}
 	fn hash(&self, out: &mut [u8], data: &[u8]) {
-		assert_eq!(out.len(), self.length().into());
+		let len: usize = self.length().into();
+		assert_eq!(out.len(), len);
 		blake2b::Blake2b::blake2b(out, data, &[]);
 	}
 }

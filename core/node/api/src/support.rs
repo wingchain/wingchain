@@ -20,7 +20,7 @@ use node_txpool::support::TxPoolSupport;
 use node_txpool::TxPool;
 use primitives::errors::CommonResult;
 use primitives::{
-	Address, Block, BlockNumber, Call, Hash, Header, Receipt, Transaction, TransactionResult,
+	Address, Block, BlockNumber, Call, Hash, Header, OpaqueCallResult, Receipt, Transaction,
 };
 
 #[async_trait]
@@ -41,7 +41,7 @@ pub trait ApiSupport {
 		block_hash: &Hash,
 		sender: Option<&Address>,
 		call: &Call,
-	) -> CommonResult<TransactionResult>;
+	) -> CommonResult<OpaqueCallResult>;
 }
 
 pub struct DefaultApiSupport<TS>
@@ -108,7 +108,7 @@ where
 		block_hash: &Hash,
 		sender: Option<&Address>,
 		call: &Call,
-	) -> CommonResult<TransactionResult> {
+	) -> CommonResult<OpaqueCallResult> {
 		self.chain.execute_call(block_hash, sender, call)
 	}
 }

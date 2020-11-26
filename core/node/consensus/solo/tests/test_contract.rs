@@ -12,27 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::fs;
-use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::SystemTime;
-
-use tempfile::tempdir;
-use tokio::time::{delay_for, Duration};
 
 use crypto::address::AddressImpl;
 use crypto::dsa::DsaImpl;
-use node_chain::{Chain, ChainConfig};
-use node_consensus::support::DefaultConsensusSupport;
-use node_consensus_solo::Solo;
+use crypto::hash::{Hash as HashT, HashImpl};
 use node_executor::module;
-use node_txpool::{TxPool, TxPoolConfig};
 use primitives::codec::Decode;
-use primitives::Address;
+use primitives::{Address, Hash};
 use utils_test::test_accounts;
 
+mod base;
+
 #[tokio::test]
-async fn test_contract_create() {
+async fn test_solo_contract_create() {
 	let _ = env_logger::try_init();
 
 	let dsa = Arc::new(DsaImpl::Ed25519);
@@ -40,43 +33,33 @@ async fn test_contract_create() {
 
 	let (account1, _account2) = test_accounts(dsa, address);
 
-	let chain = get_chain(&account1.3);
+	let (chain, txpool, solo) = base::get_service(&account1.3);
 
-	let txpool_config = TxPoolConfig {
-		pool_capacity: 32,
-		buffer_capacity: 32,
-	};
+	let ori_code = get_code().to_vec();
 
-	let txpool = Arc::new(TxPool::new(txpool_config, chain.clone()).unwrap());
+	let tx1_hash = base::insert_tx(
+		&chain,
+		&txpool,
+		chain
+			.build_transaction(
+				Some((account1.0.clone(), 0, 10)),
+				"contract".to_string(),
+				"create".to_string(),
+				module::contract::CreateParams {
+					code: ori_code.clone(),
+					init_pay_value: 0,
+					init_method: "init".to_string(),
+					init_params: r#"{"value":"abc"}"#.as_bytes().to_vec(),
+				},
+			)
+			.unwrap(),
+	)
+	.await;
+	base::wait_txpool(&txpool, 1).await;
 
-	let support = Arc::new(DefaultConsensusSupport::new(chain.clone(), txpool.clone()));
-
-	let _solo = Solo::new(support).unwrap();
-
-	let delay_to_insert_tx = time_until_next(duration_now(), 1000) / 2;
-
-	// block 0
-	delay_for(delay_to_insert_tx).await;
-
-	let ori_code = vec![1u8];
-
-	let tx1 = chain
-		.build_transaction(
-			Some((account1.0.clone(), 0, 10)),
-			"contract".to_string(),
-			"create".to_string(),
-			module::contract::CreateParams {
-				code: ori_code.clone(),
-				value: 0,
-				init_params: vec![2],
-			},
-		)
-		.unwrap();
-	let tx1_hash = chain.hash_transaction(&tx1).unwrap();
-	txpool.insert(tx1).await.unwrap();
-
-	// block 1
-	delay_for(Duration::from_millis(1000)).await;
+	// generate block 1
+	solo.generate_block().await.unwrap();
+	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
 	let tx1_result = tx1_receipt.result.unwrap();
@@ -113,7 +96,6 @@ async fn test_contract_create() {
 		)
 		.unwrap()
 		.unwrap();
-	log::info!("code: {:?}", code);
 	assert_eq!(code, Some(ori_code));
 
 	let admin: Option<module::contract::Admin> = chain
@@ -139,7 +121,54 @@ async fn test_contract_create() {
 }
 
 #[tokio::test]
-async fn test_contract_update_admin() {
+async fn test_solo_contract_create_fail() {
+	let _ = env_logger::try_init();
+
+	let dsa = Arc::new(DsaImpl::Ed25519);
+	let address = Arc::new(AddressImpl::Blake2b160);
+
+	let (account1, _account2) = test_accounts(dsa, address);
+
+	let (chain, _txpool, _solo) = base::get_service(&account1.3);
+
+	let ori_code = get_code().to_vec();
+
+	let tx1_error = chain
+		.build_transaction(
+			Some((account1.0.clone(), 0, 10)),
+			"contract".to_string(),
+			"create".to_string(),
+			module::contract::CreateParams {
+				code: ori_code.clone(),
+				init_pay_value: 0,
+				init_method: "init".to_string(),
+				init_params: r#"{"value1":"abc"}"#.as_bytes().to_vec(),
+			},
+		)
+		.unwrap_err();
+	assert_eq!(
+		tx1_error.to_string(),
+		"[CommonError] Kind: Executor, Error: ContractError: InvalidParams".to_string()
+	);
+
+	let tx1_error = chain
+		.build_transaction(
+			Some((account1.0.clone(), 0, 10)),
+			"contract".to_string(),
+			"create".to_string(),
+			module::contract::CreateParams {
+				code: vec![1; 1024],
+				init_pay_value: 0,
+				init_method: "init".to_string(),
+				init_params: r#"{"value":"abc"}"#.as_bytes().to_vec(),
+			},
+		)
+		.unwrap_err();
+	assert_eq!(tx1_error.to_string(), "[CommonError] Kind: Executor, Error: PreCompileError: ValidationError: Bad magic number (at offset 0)".to_string());
+}
+
+#[tokio::test]
+async fn test_solo_contract_update_admin() {
 	let _ = env_logger::try_init();
 
 	let dsa = Arc::new(DsaImpl::Ed25519);
@@ -147,43 +176,33 @@ async fn test_contract_update_admin() {
 
 	let (account1, account2) = test_accounts(dsa, address);
 
-	let chain = get_chain(&account1.3);
+	let (chain, txpool, solo) = base::get_service(&account1.3);
 
-	let txpool_config = TxPoolConfig {
-		pool_capacity: 32,
-		buffer_capacity: 32,
-	};
+	let ori_code = get_code().to_vec();
 
-	let txpool = Arc::new(TxPool::new(txpool_config, chain.clone()).unwrap());
+	let tx1_hash = base::insert_tx(
+		&chain,
+		&txpool,
+		chain
+			.build_transaction(
+				Some((account1.0.clone(), 0, 10)),
+				"contract".to_string(),
+				"create".to_string(),
+				module::contract::CreateParams {
+					code: ori_code.clone(),
+					init_pay_value: 0,
+					init_method: "init".to_string(),
+					init_params: r#"{"value":"abc"}"#.as_bytes().to_vec(),
+				},
+			)
+			.unwrap(),
+	)
+	.await;
+	base::wait_txpool(&txpool, 1).await;
 
-	let support = Arc::new(DefaultConsensusSupport::new(chain.clone(), txpool.clone()));
-
-	let _solo = Solo::new(support).unwrap();
-
-	let delay_to_insert_tx = time_until_next(duration_now(), 1000) / 2;
-
-	// block 0
-	delay_for(delay_to_insert_tx).await;
-
-	let ori_code = vec![1u8];
-
-	let tx1 = chain
-		.build_transaction(
-			Some((account1.0.clone(), 0, 10)),
-			"contract".to_string(),
-			"create".to_string(),
-			module::contract::CreateParams {
-				code: ori_code.clone(),
-				value: 0,
-				init_params: vec![2],
-			},
-		)
-		.unwrap();
-	let tx1_hash = chain.hash_transaction(&tx1).unwrap();
-	txpool.insert(tx1).await.unwrap();
-
-	// block 1
-	delay_for(Duration::from_millis(1000)).await;
+	// generate block 1
+	solo.generate_block().await.unwrap();
+	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
 	let tx1_result = tx1_receipt.result.unwrap();
@@ -215,32 +234,37 @@ async fn test_contract_update_admin() {
 	);
 
 	// update admin
-	let tx1 = chain
-		.build_transaction(
-			Some((account1.0.clone(), 0, 10)),
-			"contract".to_string(),
-			"update_admin".to_string(),
-			module::contract::UpdateAdminParams {
-				contract_address: contract_address.clone(),
-				admin: module::contract::Admin {
-					threshold: 2,
-					members: vec![(account1.3.clone(), 1), (account2.3.clone(), 1)],
+	let tx1_hash = base::insert_tx(
+		&chain,
+		&txpool,
+		chain
+			.build_transaction(
+				Some((account1.0.clone(), 0, 10)),
+				"contract".to_string(),
+				"update_admin".to_string(),
+				module::contract::UpdateAdminParams {
+					contract_address: contract_address.clone(),
+					admin: module::contract::Admin {
+						threshold: 2,
+						members: vec![(account1.3.clone(), 1), (account2.3.clone(), 1)],
+					},
 				},
-			},
-		)
-		.unwrap();
-	let tx1_hash = chain.hash_transaction(&tx1).unwrap();
-	txpool.insert(tx1).await.unwrap();
+			)
+			.unwrap(),
+	)
+	.await;
+	base::wait_txpool(&txpool, 1).await;
 
-	// block 2
-	delay_for(Duration::from_millis(1000)).await;
+	// generate block 2
+	solo.generate_block().await.unwrap();
+	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
 	let tx1_events = tx1_receipt
 		.events
 		.into_iter()
 		.map(|x| {
-			let event: module::contract::UpdateAdminEvent = Decode::decode(&mut &x.0[..]).unwrap();
+			let event = String::from_utf8(x.0).unwrap();
 			event
 		})
 		.collect::<Vec<_>>();
@@ -269,46 +293,54 @@ async fn test_contract_update_admin() {
 	);
 
 	// update admin
-	let tx1 = chain
-		.build_transaction(
-			Some((account2.0.clone(), 0, 10)),
-			"contract".to_string(),
-			"update_admin".to_string(),
-			module::contract::UpdateAdminParams {
-				contract_address: contract_address.clone(),
-				admin: module::contract::Admin {
-					threshold: 1,
-					members: vec![(account2.3.clone(), 1)],
+	let tx1_hash = base::insert_tx(
+		&chain,
+		&txpool,
+		chain
+			.build_transaction(
+				Some((account2.0.clone(), 0, 10)),
+				"contract".to_string(),
+				"update_admin".to_string(),
+				module::contract::UpdateAdminParams {
+					contract_address: contract_address.clone(),
+					admin: module::contract::Admin {
+						threshold: 1,
+						members: vec![(account2.3.clone(), 1)],
+					},
 				},
-			},
-		)
-		.unwrap();
-	let tx1_hash = chain.hash_transaction(&tx1).unwrap();
-	txpool.insert(tx1).await.unwrap();
+			)
+			.unwrap(),
+	)
+	.await;
 
-	let tx2 = chain
-		.build_transaction(
-			Some((account1.0.clone(), 0, 10)),
-			"contract".to_string(),
-			"update_admin_vote".to_string(),
-			module::contract::UpdateAdminVoteParams {
-				contract_address: contract_address.clone(),
-				proposal_id: 2,
-			},
-		)
-		.unwrap();
-	let tx2_hash = chain.hash_transaction(&tx2).unwrap();
-	txpool.insert(tx2).await.unwrap();
+	let tx2_hash = base::insert_tx(
+		&chain,
+		&txpool,
+		chain
+			.build_transaction(
+				Some((account1.0.clone(), 0, 10)),
+				"contract".to_string(),
+				"update_admin_vote".to_string(),
+				module::contract::UpdateAdminVoteParams {
+					contract_address: contract_address.clone(),
+					proposal_id: 2,
+				},
+			)
+			.unwrap(),
+	)
+	.await;
+	base::wait_txpool(&txpool, 2).await;
 
-	// block 3
-	delay_for(Duration::from_millis(1000)).await;
+	// generate block 3
+	solo.generate_block().await.unwrap();
+	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
 	let tx1_events = tx1_receipt
 		.events
 		.into_iter()
 		.map(|x| {
-			let event: module::contract::UpdateAdminEvent = Decode::decode(&mut &x.0[..]).unwrap();
+			let event = String::from_utf8(x.0).unwrap();
 			event
 		})
 		.collect::<Vec<_>>();
@@ -320,7 +352,7 @@ async fn test_contract_update_admin() {
 		.events
 		.into_iter()
 		.map(|x| {
-			let event: module::contract::UpdateAdminEvent = Decode::decode(&mut &x.0[..]).unwrap();
+			let event = String::from_utf8(x.0).unwrap();
 			event
 		})
 		.collect::<Vec<_>>();
@@ -350,51 +382,42 @@ async fn test_contract_update_admin() {
 }
 
 #[tokio::test]
-async fn test_contract_update_code() {
+async fn test_solo_contract_update_code() {
 	let _ = env_logger::try_init();
 
 	let dsa = Arc::new(DsaImpl::Ed25519);
 	let address = Arc::new(AddressImpl::Blake2b160);
+	let hasher = Arc::new(HashImpl::Blake2b256);
 
 	let (account1, account2) = test_accounts(dsa, address);
 
-	let chain = get_chain(&account1.3);
+	let (chain, txpool, solo) = base::get_service(&account1.3);
 
-	let txpool_config = TxPoolConfig {
-		pool_capacity: 32,
-		buffer_capacity: 32,
-	};
+	let ori_code = get_code().to_vec();
 
-	let txpool = Arc::new(TxPool::new(txpool_config, chain.clone()).unwrap());
+	let tx1_hash = base::insert_tx(
+		&chain,
+		&txpool,
+		chain
+			.build_transaction(
+				Some((account1.0.clone(), 0, 10)),
+				"contract".to_string(),
+				"create".to_string(),
+				module::contract::CreateParams {
+					code: ori_code.clone(),
+					init_pay_value: 0,
+					init_method: "init".to_string(),
+					init_params: r#"{"value":"abc"}"#.as_bytes().to_vec(),
+				},
+			)
+			.unwrap(),
+	)
+	.await;
+	base::wait_txpool(&txpool, 1).await;
 
-	let support = Arc::new(DefaultConsensusSupport::new(chain.clone(), txpool.clone()));
-
-	let _solo = Solo::new(support).unwrap();
-
-	let delay_to_insert_tx = time_until_next(duration_now(), 1000) / 2;
-
-	// block 0
-	delay_for(delay_to_insert_tx).await;
-
-	let ori_code = vec![1u8];
-
-	let tx1 = chain
-		.build_transaction(
-			Some((account1.0.clone(), 0, 10)),
-			"contract".to_string(),
-			"create".to_string(),
-			module::contract::CreateParams {
-				code: ori_code.clone(),
-				value: 0,
-				init_params: vec![2],
-			},
-		)
-		.unwrap();
-	let tx1_hash = chain.hash_transaction(&tx1).unwrap();
-	txpool.insert(tx1).await.unwrap();
-
-	// block 1
-	delay_for(Duration::from_millis(1000)).await;
+	// generate block 1
+	solo.generate_block().await.unwrap();
+	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
 	let tx1_result = tx1_receipt.result.unwrap();
@@ -417,7 +440,6 @@ async fn test_contract_update_code() {
 		)
 		.unwrap()
 		.unwrap();
-	log::info!("code: {:?}", code);
 	assert_eq!(code, Some(ori_code));
 
 	let admin: Option<module::contract::Admin> = chain
@@ -442,32 +464,37 @@ async fn test_contract_update_code() {
 	);
 
 	// update admin
-	let tx1 = chain
-		.build_transaction(
-			Some((account1.0.clone(), 0, 10)),
-			"contract".to_string(),
-			"update_admin".to_string(),
-			module::contract::UpdateAdminParams {
-				contract_address: contract_address.clone(),
-				admin: module::contract::Admin {
-					threshold: 2,
-					members: vec![(account1.3.clone(), 1), (account2.3.clone(), 1)],
+	let tx1_hash = base::insert_tx(
+		&chain,
+		&txpool,
+		chain
+			.build_transaction(
+				Some((account1.0.clone(), 0, 10)),
+				"contract".to_string(),
+				"update_admin".to_string(),
+				module::contract::UpdateAdminParams {
+					contract_address: contract_address.clone(),
+					admin: module::contract::Admin {
+						threshold: 2,
+						members: vec![(account1.3.clone(), 1), (account2.3.clone(), 1)],
+					},
 				},
-			},
-		)
-		.unwrap();
-	let tx1_hash = chain.hash_transaction(&tx1).unwrap();
-	txpool.insert(tx1).await.unwrap();
+			)
+			.unwrap(),
+	)
+	.await;
+	base::wait_txpool(&txpool, 1).await;
 
-	// block 2
-	delay_for(Duration::from_millis(1000)).await;
+	// generate block 2
+	solo.generate_block().await.unwrap();
+	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
 	let tx1_events = tx1_receipt
 		.events
 		.into_iter()
 		.map(|x| {
-			let event: module::contract::UpdateAdminEvent = Decode::decode(&mut &x.0[..]).unwrap();
+			let event = String::from_utf8(x.0).unwrap();
 			event
 		})
 		.collect::<Vec<_>>();
@@ -496,44 +523,52 @@ async fn test_contract_update_code() {
 	);
 
 	// update code
-	let new_code = vec![2];
-	let tx1 = chain
-		.build_transaction(
-			Some((account2.0.clone(), 0, 10)),
-			"contract".to_string(),
-			"update_code".to_string(),
-			module::contract::UpdateCodeParams {
-				contract_address: contract_address.clone(),
-				code: new_code.clone(),
-			},
-		)
-		.unwrap();
-	let tx1_hash = chain.hash_transaction(&tx1).unwrap();
-	txpool.insert(tx1).await.unwrap();
+	let new_code = get_code().to_vec();
+	let tx1_hash = base::insert_tx(
+		&chain,
+		&txpool,
+		chain
+			.build_transaction(
+				Some((account2.0.clone(), 0, 10)),
+				"contract".to_string(),
+				"update_code".to_string(),
+				module::contract::UpdateCodeParams {
+					contract_address: contract_address.clone(),
+					code: new_code.clone(),
+				},
+			)
+			.unwrap(),
+	)
+	.await;
 
-	let tx2 = chain
-		.build_transaction(
-			Some((account1.0.clone(), 0, 10)),
-			"contract".to_string(),
-			"update_code_vote".to_string(),
-			module::contract::UpdateCodeVoteParams {
-				contract_address: contract_address.clone(),
-				proposal_id: 1,
-			},
-		)
-		.unwrap();
-	let tx2_hash = chain.hash_transaction(&tx2).unwrap();
-	txpool.insert(tx2).await.unwrap();
+	let tx2_hash = base::insert_tx(
+		&chain,
+		&txpool,
+		chain
+			.build_transaction(
+				Some((account1.0.clone(), 0, 10)),
+				"contract".to_string(),
+				"update_code_vote".to_string(),
+				module::contract::UpdateCodeVoteParams {
+					contract_address: contract_address.clone(),
+					proposal_id: 1,
+				},
+			)
+			.unwrap(),
+	)
+	.await;
+	base::wait_txpool(&txpool, 2).await;
 
-	// block 3
-	delay_for(Duration::from_millis(1000)).await;
+	// generate block 3
+	solo.generate_block().await.unwrap();
+	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
 	let tx1_events = tx1_receipt
 		.events
 		.into_iter()
 		.map(|x| {
-			let event: module::contract::UpdateCodeEvent = Decode::decode(&mut &x.0[..]).unwrap();
+			let event = String::from_utf8(x.0).unwrap();
 			event
 		})
 		.collect::<Vec<_>>();
@@ -545,7 +580,7 @@ async fn test_contract_update_code() {
 		.events
 		.into_iter()
 		.map(|x| {
-			let event: module::contract::UpdateCodeEvent = Decode::decode(&mut &x.0[..]).unwrap();
+			let event = String::from_utf8(x.0).unwrap();
 			event
 		})
 		.collect::<Vec<_>>();
@@ -565,86 +600,33 @@ async fn test_contract_update_code() {
 		)
 		.unwrap()
 		.unwrap();
-	log::info!("code: {:?}", code);
-	assert_eq!(code, Some(new_code),);
+	assert_eq!(code, Some(new_code.clone()),);
+
+	let code_hash: Option<Hash> = chain
+		.execute_call_with_block_number(
+			&block_number,
+			None,
+			"contract".to_string(),
+			"get_code_hash".to_string(),
+			module::contract::GetCodeHashParams {
+				contract_address: contract_address.clone(),
+				version: None,
+			},
+		)
+		.unwrap()
+		.unwrap();
+	let expect_code_hash = {
+		let mut out = vec![0; hasher.length().into()];
+		hasher.hash(&mut out, &new_code);
+		Hash(out)
+	};
+	log::info!("code_hash: {:?}", code_hash);
+	assert_eq!(code_hash, Some(expect_code_hash),);
 }
 
-fn get_chain(address: &Address) -> Arc<Chain> {
-	let path = tempdir().expect("could not create a temp dir");
-	let home = path.into_path();
-
-	init(&home, address);
-
-	let chain_config = ChainConfig { home };
-
-	let chain = Arc::new(Chain::new(chain_config).unwrap());
-
-	chain
-}
-
-fn init(home: &PathBuf, address: &Address) {
-	let config_path = home.join("config");
-
-	fs::create_dir_all(&config_path).unwrap();
-
-	let spec = format!(
-		r#"
-[basic]
-hash = "blake2b_256"
-dsa = "ed25519"
-address = "blake2b_160"
-
-[genesis]
-
-[[genesis.txs]]
-module = "system"
-method = "init"
-params = '''
-{{
-    "chain_id": "chain-test",
-    "timestamp": "2020-04-29T15:51:36.502+08:00",
-    "until_gap": 20
-}}
-'''
-
-[[genesis.txs]]
-module = "balance"
-method = "init"
-params = '''
-{{
-    "endow": [
-    	["{}", 10]
-    ]
-}}
-'''
-
-[[genesis.txs]]
-module = "solo"
-method = "init"
-params = '''
-{{
-    "block_interval": 1000
-}}
-'''
-	"#,
-		address
+fn get_code() -> &'static [u8] {
+	let code = include_bytes!(
+		"../../../vm/contract-samples/hello-world/release/contract_samples_hello_world_bg.wasm"
 	);
-
-	fs::write(config_path.join("spec.toml"), &spec).unwrap();
-}
-
-fn time_until_next(now: Duration, duration: u64) -> Duration {
-	let remaining_full_millis = duration - (now.as_millis() as u64 % duration) - 1;
-	Duration::from_millis(remaining_full_millis)
-}
-
-fn duration_now() -> Duration {
-	let now = SystemTime::now();
-	now.duration_since(SystemTime::UNIX_EPOCH)
-		.unwrap_or_else(|e| {
-			panic!(
-				"Current time {:?} is before unix epoch. Something is wrong: {:?}",
-				now, e,
-			)
-		})
+	code
 }

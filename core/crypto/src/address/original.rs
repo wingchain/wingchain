@@ -25,7 +25,8 @@ impl Address for Original160 {
 		AddressLength::AddressLength20
 	}
 	fn address(&self, out: &mut [u8], data: &[u8]) {
-		assert_eq!(out.len(), self.length().into());
+		let len: usize = self.length().into();
+		assert_eq!(out.len(), len);
 		out.copy_from_slice(data);
 	}
 }
@@ -40,7 +41,8 @@ impl Address for Original256 {
 		AddressLength::AddressLength32
 	}
 	fn address(&self, out: &mut [u8], data: &[u8]) {
-		assert_eq!(out.len(), self.length().into());
+		let len: usize = self.length().into();
+		assert_eq!(out.len(), len);
 		out.copy_from_slice(data);
 	}
 }

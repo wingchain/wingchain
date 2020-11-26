@@ -65,7 +65,7 @@ pub fn load_hasher(hash_impl: Arc<HashImpl>) -> CommonResult<()> {
 							.name(),
 						name,
 					)
-					.into())
+					.into());
 				}
 			}
 		}
@@ -89,7 +89,7 @@ pub fn load_hasher(hash_impl: Arc<HashImpl>) -> CommonResult<()> {
 							.name(),
 						name,
 					)
-					.into())
+					.into());
 				}
 			}
 		}
@@ -113,7 +113,7 @@ pub fn load_hasher(hash_impl: Arc<HashImpl>) -> CommonResult<()> {
 							.name(),
 						name,
 					)
-					.into())
+					.into());
 				}
 			}
 		}

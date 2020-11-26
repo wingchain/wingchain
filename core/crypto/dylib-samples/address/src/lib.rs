@@ -31,7 +31,8 @@ impl Address for Blake2b160 {
 		AddressLength::AddressLength20
 	}
 	fn address(&self, out: &mut [u8], data: &[u8]) {
-		assert_eq!(out.len(), self.length().into());
+		let len: usize = self.length().into();
+		assert_eq!(out.len(), len);
 		blake2b::Blake2b::blake2b(out, data, &[]);
 	}
 }

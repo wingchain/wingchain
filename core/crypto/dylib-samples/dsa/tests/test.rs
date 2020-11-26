@@ -14,12 +14,13 @@
 
 #![cfg(feature = "build-dep-test")]
 
+use std::ffi::CStr;
 use std::os::raw::{c_char, c_uchar, c_uint};
+use std::str::FromStr;
+
+use libloading::{Library, Symbol};
 
 use crypto::dsa::{CLength, Dsa, DsaImpl, KeyPair, Verifier};
-use libloading::{Library, Symbol};
-use std::ffi::CStr;
-use std::str::FromStr;
 
 #[test]
 fn test_custom_lib_dsa() {

@@ -16,54 +16,52 @@ use std::rc::Rc;
 
 use executor_macro::{call, module};
 use executor_primitives::{
-	errors, Context, ContextEnv, EmptyParams, Module as ModuleT, StorageValue, Validator,
+	errors, Context, ContextEnv, EmptyParams, Module as ModuleT, ModuleResult, OpaqueModuleResult,
+	StorageValue, Util,
 };
 use primitives::codec::{Decode, Encode};
-use primitives::errors::CommonResult;
-use primitives::types::CallResult;
-use primitives::{codec, Address, Call, TransactionResult};
+use primitives::{codec, Address, Call};
 
-pub struct Module<C>
+pub struct Module<C, U>
 where
 	C: Context,
+	U: Util,
 {
 	env: Rc<ContextEnv>,
-	block_interval: StorageValue<u64, C>,
+	#[allow(dead_code)]
+	util: U,
+	block_interval: StorageValue<Option<u64>, Self>,
 }
 
 #[module]
-impl<C: Context> Module<C> {
+impl<C: Context, U: Util> Module<C, U> {
 	const META_MODULE: bool = true;
 	const STORAGE_KEY: &'static [u8] = b"solo";
 
-	fn new(context: C) -> Self {
+	fn new(context: C, util: U) -> Self {
 		Self {
 			env: context.env(),
-			block_interval: StorageValue::new::<Self>(context.clone(), b"block_interval"),
+			util,
+			block_interval: StorageValue::new(context.clone(), b"block_interval"),
 		}
 	}
 
 	#[call(write = true)]
-	fn init(&self, _sender: Option<&Address>, params: InitParams) -> CommonResult<CallResult<()>> {
+	fn init(&self, _sender: Option<&Address>, params: InitParams) -> ModuleResult<()> {
 		if self.env.number != 0 {
-			return Ok(Err("not genesis".to_string()));
+			return Err("Not genesis".into());
 		}
 		self.block_interval.set(&params.block_interval)?;
-		Ok(Ok(()))
+		Ok(())
 	}
 
 	#[call]
-	fn get_meta(
-		&self,
-		_sender: Option<&Address>,
-		_params: EmptyParams,
-	) -> CommonResult<CallResult<Meta>> {
-		let block_interval = match self.block_interval.get()? {
-			Some(block_interval) => block_interval,
-			None => return Ok(Err("unexpected none".to_string())),
-		};
+	fn get_meta(&self, _sender: Option<&Address>, _params: EmptyParams) -> ModuleResult<Meta> {
+		let block_interval = self.block_interval.get()?;
+		let block_interval = block_interval.ok_or("unexpected none")?;
+
 		let meta = Meta { block_interval };
-		Ok(Ok(meta))
+		Ok(meta)
 	}
 }
 
@@ -71,5 +69,5 @@ pub type InitParams = Meta;
 
 #[derive(Encode, Decode, Debug, PartialEq)]
 pub struct Meta {
-	pub block_interval: u64,
+	pub block_interval: Option<u64>,
 }

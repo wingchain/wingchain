@@ -37,7 +37,7 @@ pub fn dispatcher(_attr: TokenStream, item: TokenStream) -> TokenStream {
 		.iter()
 		.map(|x| {
 			let ident = &x.ident;
-			quote! { stringify!(#ident) => Ok(module::#ident::Module::<C>::META_MODULE) }
+			quote! { stringify!(#ident) => Ok(module::#ident::Module::<C, U>::META_MODULE), }
 		})
 		.collect::<Vec<_>>();
 
@@ -45,7 +45,16 @@ pub fn dispatcher(_attr: TokenStream, item: TokenStream) -> TokenStream {
 		.iter()
 		.map(|x| {
 			let ident = &x.ident;
-			quote! { stringify!(#ident) => module::#ident::Module::<C>::validate_call(validator, &call) }
+			quote! { stringify!(#ident) => {
+				let result = module::#ident::Module::<C, U>::validate_call(util, &call);
+				match result {
+					Ok(result) => Ok(Ok(result)),
+					Err(e) => match e {
+						ModuleError::System(e) => Err(e),
+						ModuleError::Application(e) => Ok(Err(e.to_string())),
+					}
+				}
+			}, }
 		})
 		.collect::<Vec<_>>();
 
@@ -53,7 +62,7 @@ pub fn dispatcher(_attr: TokenStream, item: TokenStream) -> TokenStream {
 		.iter()
 		.map(|x| {
 			let ident = &x.ident;
-			quote! { stringify!(#ident) => Ok(module::#ident::Module::<C>::is_write_call(&call)) }
+			quote! { stringify!(#ident) => Ok(module::#ident::Module::<C, U>::is_write_call(&call)), }
 		})
 		.collect::<Vec<_>>();
 
@@ -62,10 +71,16 @@ pub fn dispatcher(_attr: TokenStream, item: TokenStream) -> TokenStream {
 		.map(|x| {
 			let ident = &x.ident;
 			quote! { stringify!(#ident) => {
-				let module = module::#ident::Module::<_>::new(context.clone());
+				let module = module::#ident::Module::<_, _>::new(context.clone(), util.clone());
 				let result = module.execute_call(sender, call);
-				result
-			} }
+				match result {
+					Ok(result) => Ok(Ok(result)),
+					Err(e) => match e {
+						ModuleError::System(e) => Err(e),
+						ModuleError::Application(e) => Ok(Err(e.to_string())),
+					}
+				}
+			}, }
 		})
 		.collect::<Vec<_>>();
 
@@ -73,27 +88,27 @@ pub fn dispatcher(_attr: TokenStream, item: TokenStream) -> TokenStream {
 	let gen = quote! {
 		struct #type_name;
 		impl #type_name {
-			fn is_meta<C: ContextT>(module: &str) -> CommonResult<bool>{
+			fn is_meta<C: ContextT, U: UtilT>(module: &str) -> CommonResult<bool>{
 				match module {
-					#(#is_meta_ts_vec),*,
+					#(#is_meta_ts_vec)*
 					other => Err(errors::ErrorKind::InvalidTxModule(other.to_string()).into()),
 				}
 			}
-			fn validate_call<C: ContextT, V: ValidatorT>(module: &str, validator: &V, call: &Call) -> CommonResult<()>{
+			fn validate_call<C: ContextT, U: UtilT>(module: &str, util: &U, call: &Call) -> CommonResult<CallResult<()>>{
 				match module {
-					#(#validate_call_ts_vec),*,
+					#(#validate_call_ts_vec)*
 					other => Err(errors::ErrorKind::InvalidTxModule(other.to_string()).into()),
 				}
 			}
-			fn is_write_call<C: ContextT>(module: &str, call: &Call) -> CommonResult<Option<bool>> {
+			fn is_write_call<C: ContextT, U: UtilT>(module: &str, call: &Call) -> CommonResult<Option<bool>> {
 				match module {
-					#(#is_write_call_ts_vec),*,
+					#(#is_write_call_ts_vec)*
 					other => Err(errors::ErrorKind::InvalidTxModule(other.to_string()).into()),
 				}
 			}
-			fn execute_call<C: ContextT>(module: &str, context: &C, sender: Option<&Address>, call: &Call) -> CommonResult<TransactionResult>{
+			fn execute_call<C: ContextT, U: UtilT>(module: &str, context: &C, util: &U, sender: Option<&Address>, call: &Call) -> CommonResult<OpaqueCallResult>{
 				match module {
-					#(#execute_call_ts_vec),*,
+					#(#execute_call_ts_vec)*
 					other => Err(errors::ErrorKind::InvalidTxModule(other.to_string()).into()),
 				}
 			}
@@ -122,7 +137,7 @@ pub fn module(_attr: TokenStream, item: TokenStream) -> TokenStream {
 			let params_ident = x.params_ident.clone();
 			let validate = match &x.validate_ident {
 				Some(validate_ident) => quote! {
-					Self::#validate_ident(validator, params)
+					Self::#validate_ident(&util, params)
 				},
 				None => quote! {Ok(())},
 			};
@@ -133,7 +148,7 @@ pub fn module(_attr: TokenStream, item: TokenStream) -> TokenStream {
 						Err(_) => return Err(errors::ErrorKind::InvalidTxParams("codec error".to_string()).into()),
 					};
 					#validate
-				}
+				},
 			}
 		})
 		.collect::<Vec<_>>();
@@ -143,7 +158,7 @@ pub fn module(_attr: TokenStream, item: TokenStream) -> TokenStream {
 		.map(|x| {
 			let method_ident = &x.method_ident;
 			let is_write = x.write;
-			quote! { stringify!(#method_ident) => Some(#is_write) }
+			quote! { stringify!(#method_ident) => Some(#is_write), }
 		})
 		.collect::<Vec<_>>();
 
@@ -160,19 +175,11 @@ pub fn module(_attr: TokenStream, item: TokenStream) -> TokenStream {
 					};
 					let result = self.#method_ident(sender, params);
 
-					// CallResult to TransactionResult
-					let result = match result {
-						Ok(result) => {
-							let result = match result {
-								Ok(result) => Ok(codec::encode(&result)?),
-								Err(e) => Err(e),
-							};
-							Ok(result)
-						},
-						Err(e) => Err(e),
-					};
-					result
-				}
+					// ModuleResult to OpaqueModuleResult
+					let result = result?;
+					let result = codec::encode(&result)?;
+					Ok(result)
+				},
 			}
 		})
 		.collect::<Vec<_>>();
@@ -181,19 +188,22 @@ pub fn module(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
 		#impl_item
 
-		impl<C> ModuleT<C> for #type_name<C> where C: Context {
+		impl<C, U> ModuleT for #type_name<C, U> where C: Context, U: Util {
 
 			const META_MODULE: bool = Self::META_MODULE;
 			const STORAGE_KEY: &'static [u8] = Self::STORAGE_KEY;
 
-			fn new(context: C) -> Self {
-				Self::new(context)
+			type C = C;
+			type U = U;
+
+			fn new(context: Self::C, util: Self::U) -> Self {
+				Self::new(context, util)
 			}
 
-			fn validate_call<V: Validator>(validator: &V, call: &Call) -> CommonResult<()> {
+			fn validate_call(util: &Self::U, call: &Call) -> ModuleResult<()> {
 				let params = &call.params.0[..];
 				match call.method.as_str() {
-					#(#validate_call_ts_vec),*,
+					#(#validate_call_ts_vec)*
 					other => Err(errors::ErrorKind::InvalidTxMethod(other.to_string()).into()),
 				}
 			}
@@ -201,16 +211,16 @@ pub fn module(_attr: TokenStream, item: TokenStream) -> TokenStream {
 			fn is_write_call(call: &Call) -> Option<bool> {
 				let method = call.method.as_str();
 				match method {
-					#(#is_write_call_ts_vec),*,
+					#(#is_write_call_ts_vec)*
 					other => None,
 				}
 			}
 
-			fn execute_call(&self, sender: Option<&Address>, call: &Call) -> CommonResult<TransactionResult> {
+			fn execute_call(&self, sender: Option<&Address>, call: &Call) -> OpaqueModuleResult {
 				let params = &call.params.0[..];
 				let method = call.method.as_str();
 				match method {
-					#(#execute_call_ts_vec),*,
+					#(#execute_call_ts_vec)*
 					other => Err(errors::ErrorKind::InvalidTxMethod(other.to_string()).into()),
 				}
 			}
@@ -340,7 +350,7 @@ fn get_method_params_ident(method: &ImplItemMethod) -> Ident {
 		};
 		params_ident
 	} else {
-		panic!("call method input should be (&self, params: Type)");
+		panic!("call method input should be (&self, sender: Option<&Address>, params: Type)");
 	}
 }
 

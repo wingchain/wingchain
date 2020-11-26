@@ -446,8 +446,8 @@ impl From<primitives::Event> for Hex {
 	}
 }
 
-impl From<primitives::TransactionResult> for Hex {
-	fn from(result: primitives::TransactionResult) -> Self {
+impl From<primitives::OpaqueCallResult> for Hex {
+	fn from(result: primitives::OpaqueCallResult) -> Self {
 		Hex(format!(
 			"0x{}",
 			hex::encode(codec::encode(&result).expect("qed"))
