@@ -17,8 +17,9 @@ use std::sync::Arc;
 use crypto::address::AddressImpl;
 use crypto::dsa::DsaImpl;
 use node_executor::module;
+use node_executor_primitives::EmptyParams;
 use primitives::codec::Decode;
-use primitives::Address;
+use primitives::{Address, Balance};
 use utils_test::test_accounts;
 
 mod base;
@@ -439,6 +440,380 @@ async fn test_solo_contract_hw_write() {
 	let result = String::from_utf8(result).unwrap();
 	log::info!("result: {}", result);
 	assert_eq!(result, r#"{"value":"abc"}"#.to_string(),);
+}
+
+#[tokio::test]
+async fn test_solo_contract_hw_transfer_success() {
+	let _ = env_logger::try_init();
+
+	let dsa = Arc::new(DsaImpl::Ed25519);
+	let address = Arc::new(AddressImpl::Blake2b160);
+
+	let (account1, account2) = test_accounts(dsa, address);
+
+	let (chain, txpool, solo) = base::get_service(&account1.3);
+
+	let ori_code = get_code().to_vec();
+
+	let tx1_hash = base::insert_tx(
+		&chain,
+		&txpool,
+		chain
+			.build_transaction(
+				Some((account1.0.clone(), 0, 10)),
+				"contract".to_string(),
+				"create".to_string(),
+				module::contract::CreateParams {
+					code: ori_code.clone(),
+					init_pay_value: 0,
+					init_method: "init".to_string(),
+					init_params: r#"{"value":"abc"}"#.as_bytes().to_vec(),
+				},
+			)
+			.unwrap(),
+	)
+	.await;
+	base::wait_txpool(&txpool, 1).await;
+
+	// generate block 1
+	solo.generate_block().await.unwrap();
+	base::wait_block_execution(&chain).await;
+
+	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
+	let tx1_result = tx1_receipt.result.unwrap();
+	let contract_address: Address = Decode::decode(&mut &tx1_result[..]).unwrap();
+	log::info!("contract_address: {:x?}", contract_address);
+
+	let tx1_hash = base::insert_tx(
+		&chain,
+		&txpool,
+		chain
+			.build_transaction(
+				Some((account1.0.clone(), 0, 10)),
+				"contract".to_string(),
+				"execute".to_string(),
+				module::contract::ExecuteParams {
+					contract_address: contract_address.clone(),
+					pay_value: 4,
+					method: "balance_transfer".to_string(),
+					params: format!(
+						r#"{{"recipient":"{}", "value": 1}}"#,
+						Address((account2.3).0.clone())
+					)
+					.as_bytes()
+					.to_vec(),
+				},
+			)
+			.unwrap(),
+	)
+	.await;
+	base::wait_txpool(&txpool, 1).await;
+
+	// generate block 2
+	solo.generate_block().await.unwrap();
+	base::wait_block_execution(&chain).await;
+
+	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
+	let tx1_events = tx1_receipt
+		.events
+		.into_iter()
+		.map(|event| String::from_utf8(event.0).unwrap())
+		.collect::<Vec<_>>();
+	log::info!("tx1_events: {:?}", tx1_events);
+	assert_eq!(
+		tx1_events,
+		vec![
+			r#"{"name":"Transferred","data":{"sender":"b4decd5a5f8f2ba708f8ced72eec89f44f3be96a","recipient":"99e06bc6f62af0126724d9a5979379c033b431d3","value":4}}"#,
+			r#"{"name":"Transferred","data":{"sender":"99e06bc6f62af0126724d9a5979379c033b431d3","recipient":"43346e326b6721be4a070bfb2eb49127322fa5e4","value":1}}"#
+		]
+	);
+
+	// check balance
+	let result: Balance = chain
+		.execute_call_with_block_number(
+			&2,
+			Some(&account1.3),
+			"balance".to_string(),
+			"get_balance".to_string(),
+			EmptyParams,
+		)
+		.unwrap()
+		.unwrap();
+	log::info!("result: {}", result);
+	assert_eq!(result, 6);
+
+	let result: Balance = chain
+		.execute_call_with_block_number(
+			&2,
+			Some(&contract_address),
+			"balance".to_string(),
+			"get_balance".to_string(),
+			EmptyParams,
+		)
+		.unwrap()
+		.unwrap();
+	log::info!("result: {}", result);
+	assert_eq!(result, 3);
+
+	let result: Balance = chain
+		.execute_call_with_block_number(
+			&2,
+			Some(&account2.3),
+			"balance".to_string(),
+			"get_balance".to_string(),
+			EmptyParams,
+		)
+		.unwrap()
+		.unwrap();
+	log::info!("result: {}", result);
+	assert_eq!(result, 1);
+}
+
+#[tokio::test]
+async fn test_solo_contract_hw_transfer_failed() {
+	let _ = env_logger::try_init();
+
+	let dsa = Arc::new(DsaImpl::Ed25519);
+	let address = Arc::new(AddressImpl::Blake2b160);
+
+	let (account1, account2) = test_accounts(dsa, address);
+
+	let (chain, txpool, solo) = base::get_service(&account1.3);
+
+	let ori_code = get_code().to_vec();
+
+	let tx1_hash = base::insert_tx(
+		&chain,
+		&txpool,
+		chain
+			.build_transaction(
+				Some((account1.0.clone(), 0, 10)),
+				"contract".to_string(),
+				"create".to_string(),
+				module::contract::CreateParams {
+					code: ori_code.clone(),
+					init_pay_value: 0,
+					init_method: "init".to_string(),
+					init_params: r#"{"value":"abc"}"#.as_bytes().to_vec(),
+				},
+			)
+			.unwrap(),
+	)
+	.await;
+	base::wait_txpool(&txpool, 1).await;
+
+	// generate block 1
+	solo.generate_block().await.unwrap();
+	base::wait_block_execution(&chain).await;
+
+	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
+	let tx1_result = tx1_receipt.result.unwrap();
+	let contract_address: Address = Decode::decode(&mut &tx1_result[..]).unwrap();
+	log::info!("contract_address: {:x?}", contract_address);
+
+	let tx1_hash = base::insert_tx(
+		&chain,
+		&txpool,
+		chain
+			.build_transaction(
+				Some((account1.0.clone(), 0, 10)),
+				"contract".to_string(),
+				"execute".to_string(),
+				module::contract::ExecuteParams {
+					contract_address: contract_address.clone(),
+					pay_value: 4,
+					method: "balance_transfer".to_string(),
+					params: format!(
+						r#"{{"recipient":"{}", "value": 5}}"#,
+						Address((account2.3).0.clone())
+					)
+					.as_bytes()
+					.to_vec(),
+				},
+			)
+			.unwrap(),
+	)
+	.await;
+	base::wait_txpool(&txpool, 1).await;
+
+	// generate block 2
+	solo.generate_block().await.unwrap();
+	base::wait_block_execution(&chain).await;
+
+	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
+	let tx1_events = tx1_receipt
+		.events
+		.into_iter()
+		.map(|event| String::from_utf8(event.0).unwrap())
+		.collect::<Vec<_>>();
+	log::info!("tx1_events: {:?}", tx1_events);
+	assert_eq!(tx1_events, Vec::<String>::new(),);
+
+	// check balance
+	let result: Balance = chain
+		.execute_call_with_block_number(
+			&2,
+			Some(&account1.3),
+			"balance".to_string(),
+			"get_balance".to_string(),
+			EmptyParams,
+		)
+		.unwrap()
+		.unwrap();
+	log::info!("result: {}", result);
+	assert_eq!(result, 10);
+
+	let result: Balance = chain
+		.execute_call_with_block_number(
+			&2,
+			Some(&contract_address),
+			"balance".to_string(),
+			"get_balance".to_string(),
+			EmptyParams,
+		)
+		.unwrap()
+		.unwrap();
+	log::info!("result: {}", result);
+	assert_eq!(result, 0);
+
+	let result: Balance = chain
+		.execute_call_with_block_number(
+			&2,
+			Some(&account2.3),
+			"balance".to_string(),
+			"get_balance".to_string(),
+			EmptyParams,
+		)
+		.unwrap()
+		.unwrap();
+	log::info!("result: {}", result);
+	assert_eq!(result, 0);
+}
+
+#[tokio::test]
+async fn test_solo_contract_hw_transfer_partial_failed() {
+	let _ = env_logger::try_init();
+
+	let dsa = Arc::new(DsaImpl::Ed25519);
+	let address = Arc::new(AddressImpl::Blake2b160);
+
+	let (account1, account2) = test_accounts(dsa, address);
+
+	let (chain, txpool, solo) = base::get_service(&account1.3);
+
+	let ori_code = get_code().to_vec();
+
+	let tx1_hash = base::insert_tx(
+		&chain,
+		&txpool,
+		chain
+			.build_transaction(
+				Some((account1.0.clone(), 0, 10)),
+				"contract".to_string(),
+				"create".to_string(),
+				module::contract::CreateParams {
+					code: ori_code.clone(),
+					init_pay_value: 0,
+					init_method: "init".to_string(),
+					init_params: r#"{"value":"abc"}"#.as_bytes().to_vec(),
+				},
+			)
+			.unwrap(),
+	)
+	.await;
+	base::wait_txpool(&txpool, 1).await;
+
+	// generate block 1
+	solo.generate_block().await.unwrap();
+	base::wait_block_execution(&chain).await;
+
+	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
+	let tx1_result = tx1_receipt.result.unwrap();
+	let contract_address: Address = Decode::decode(&mut &tx1_result[..]).unwrap();
+	log::info!("contract_address: {:x?}", contract_address);
+
+	let tx1_hash = base::insert_tx(
+		&chain,
+		&txpool,
+		chain
+			.build_transaction(
+				Some((account1.0.clone(), 0, 10)),
+				"contract".to_string(),
+				"execute".to_string(),
+				module::contract::ExecuteParams {
+					contract_address: contract_address.clone(),
+					pay_value: 4,
+					method: "balance_transfer_ea".to_string(),
+					params: format!(
+						r#"{{"recipient":"{}", "value": 5}}"#,
+						Address((account2.3).0.clone())
+					)
+					.as_bytes()
+					.to_vec(),
+				},
+			)
+			.unwrap(),
+	)
+	.await;
+	base::wait_txpool(&txpool, 1).await;
+
+	// generate block 2
+	solo.generate_block().await.unwrap();
+	base::wait_block_execution(&chain).await;
+
+	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
+	let tx1_events = tx1_receipt
+		.events
+		.into_iter()
+		.map(|event| String::from_utf8(event.0).unwrap())
+		.collect::<Vec<_>>();
+	log::info!("tx1_events: {:?}", tx1_events);
+	assert_eq!(
+		tx1_events,
+		vec![
+			r#"{"name":"Transferred","data":{"sender":"b4decd5a5f8f2ba708f8ced72eec89f44f3be96a","recipient":"99e06bc6f62af0126724d9a5979379c033b431d3","value":4}}"#,
+		]
+	);
+
+	// check balance
+	let result: Balance = chain
+		.execute_call_with_block_number(
+			&2,
+			Some(&account1.3),
+			"balance".to_string(),
+			"get_balance".to_string(),
+			EmptyParams,
+		)
+		.unwrap()
+		.unwrap();
+	log::info!("result: {}", result);
+	assert_eq!(result, 6);
+
+	let result: Balance = chain
+		.execute_call_with_block_number(
+			&2,
+			Some(&contract_address),
+			"balance".to_string(),
+			"get_balance".to_string(),
+			EmptyParams,
+		)
+		.unwrap()
+		.unwrap();
+	log::info!("result: {}", result);
+	assert_eq!(result, 4);
+
+	let result: Balance = chain
+		.execute_call_with_block_number(
+			&2,
+			Some(&account2.3),
+			"balance".to_string(),
+			"get_balance".to_string(),
+			EmptyParams,
+		)
+		.unwrap()
+		.unwrap();
+	log::info!("result: {}", result);
+	assert_eq!(result, 0);
 }
 
 fn get_code() -> &'static [u8] {
