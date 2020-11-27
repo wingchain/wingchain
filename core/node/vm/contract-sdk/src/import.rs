@@ -49,6 +49,27 @@ mod env {
 			error_share_id: u64,
 		) -> u64;
 		pub fn pay();
+		pub fn contract_execute(
+			contract_address_len: u64,
+			contract_address_ptr: u64,
+			method_len: u64,
+			method_ptr: u64,
+			params_len: u64,
+			params_ptr: u64,
+			pay_value: u64,
+			share_id: u64,
+		);
+		pub fn contract_execute_ea(
+			contract_address_len: u64,
+			contract_address_ptr: u64,
+			method_len: u64,
+			method_ptr: u64,
+			params_len: u64,
+			params_ptr: u64,
+			pay_value: u64,
+			share_id: u64,
+			error_share_id: u64,
+		) -> u64;
 	}
 }
 
@@ -158,4 +179,54 @@ pub fn balance_transfer_ea(
 
 pub fn pay() {
 	unsafe { env::pay() }
+}
+
+pub fn contract_execute(
+	contract_address_len: u64,
+	contract_address_ptr: u64,
+	method_len: u64,
+	method_ptr: u64,
+	params_len: u64,
+	params_ptr: u64,
+	pay_value: u64,
+	share_id: u64,
+) {
+	unsafe {
+		env::contract_execute(
+			contract_address_len,
+			contract_address_ptr,
+			method_len,
+			method_ptr,
+			params_len,
+			params_ptr,
+			pay_value,
+			share_id,
+		)
+	}
+}
+
+pub fn contract_execute_ea(
+	contract_address_len: u64,
+	contract_address_ptr: u64,
+	method_len: u64,
+	method_ptr: u64,
+	params_len: u64,
+	params_ptr: u64,
+	pay_value: u64,
+	share_id: u64,
+	error_share_id: u64,
+) -> u64 {
+	unsafe {
+		env::contract_execute_ea(
+			contract_address_len,
+			contract_address_ptr,
+			method_len,
+			method_ptr,
+			params_len,
+			params_ptr,
+			pay_value,
+			share_id,
+			error_share_id,
+		)
+	}
 }

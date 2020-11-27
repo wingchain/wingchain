@@ -140,6 +140,8 @@ pub fn import(state: &mut State, memory: Memory) -> VMResult<ImportObject> {
 			"balance_transfer" => func!(balance_transfer),
 			"balance_transfer_ea" => func!(balance_transfer_ea),
 			"pay" => func!(pay),
+			"contract_execute" => func!(contract_execute),
+			"contract_execute_ea" => func!(contract_execute_ea),
 		}
 	};
 	Ok(import_object)
@@ -417,4 +419,72 @@ fn pay(ctx: &mut Ctx) -> VMResult<()> {
 		.module_apply_events(state.context.module_drain_events()?)?;
 
 	Ok(())
+}
+
+fn contract_execute(
+	ctx: &mut Ctx,
+	contract_address_len: u64,
+	contract_address_ptr: u64,
+	method_len: u64,
+	method_ptr: u64,
+	params_len: u64,
+	params_ptr: u64,
+	pay_value: u64,
+	share_id: u64,
+) -> VMResult<()> {
+	let state = State::from_ctx(ctx);
+	let contract_address = state.memory_to_vec(contract_address_len, contract_address_ptr);
+	let contract_address = Address(contract_address);
+	let method = state.memory_to_vec(method_len, method_ptr);
+	let method = String::from_utf8(method).map_err(|_| ContractError::InvalidMethod)?;
+	let params = state.memory_to_vec(params_len, params_ptr);
+
+	let result =
+		state
+			.context
+			.nested_vm_contract_execute(&contract_address, &method, &params, pay_value)?;
+
+	state.vec_to_share(share_id, result)?;
+
+	state
+		.context
+		.nested_vm_payload_apply(state.context.nested_vm_payload_drain_buffer()?)?;
+	state
+		.context
+		.nested_vm_apply_events(state.context.nested_vm_drain_events()?)?;
+
+	Ok(())
+}
+
+fn contract_execute_ea(
+	ctx: &mut Ctx,
+	contract_address_len: u64,
+	contract_address_ptr: u64,
+	method_len: u64,
+	method_ptr: u64,
+	params_len: u64,
+	params_ptr: u64,
+	pay_value: u64,
+	share_id: u64,
+	error_share_id: u64,
+) -> VMResult<u64> {
+	let result = contract_execute(
+		ctx,
+		contract_address_len,
+		contract_address_ptr,
+		method_len,
+		method_ptr,
+		params_len,
+		params_ptr,
+		pay_value,
+		share_id,
+	);
+
+	let state = State::from_ctx(ctx);
+
+	if result.is_err() {
+		state.context.nested_vm_payload_drain_buffer()?;
+		state.context.nested_vm_drain_events()?;
+	}
+	state.to_error_aware(result, error_share_id)
 }

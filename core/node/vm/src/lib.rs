@@ -169,6 +169,17 @@ pub trait VMContext {
 	fn module_payload_apply(&self, items: Vec<(DBKey, Option<DBValue>)>) -> VMResult<()>;
 	fn module_drain_events(&self) -> VMResult<Vec<Event>>;
 	fn module_apply_events(&self, items: Vec<Event>) -> VMResult<()>;
+	fn nested_vm_contract_execute(
+		&self,
+		contract_address: &Address,
+		method: &str,
+		params: &[u8],
+		pay_value: Balance,
+	) -> VMResult<Vec<u8>>;
+	fn nested_vm_payload_drain_buffer(&self) -> VMResult<Vec<(DBKey, Option<DBValue>)>>;
+	fn nested_vm_payload_apply(&self, items: Vec<(DBKey, Option<DBValue>)>) -> VMResult<()>;
+	fn nested_vm_drain_events(&self) -> VMResult<Vec<Event>>;
+	fn nested_vm_apply_events(&self, items: Vec<Event>) -> VMResult<()>;
 }
 
 pub struct VMContextEnv {
@@ -250,6 +261,27 @@ impl VMContext for DummyVMContext {
 		unreachable!()
 	}
 	fn module_apply_events(&self, _items: Vec<Event>) -> VMResult<()> {
+		unreachable!()
+	}
+	fn nested_vm_contract_execute(
+		&self,
+		contract_address: &Address,
+		method: &str,
+		params: &[u8],
+		pay_value: Balance,
+	) -> VMResult<Vec<u8>> {
+		unreachable!()
+	}
+	fn nested_vm_payload_drain_buffer(&self) -> VMResult<Vec<(DBKey, Option<DBValue>)>> {
+		unreachable!()
+	}
+	fn nested_vm_payload_apply(&self, items: Vec<(DBKey, Option<DBValue>)>) -> VMResult<()> {
+		unreachable!()
+	}
+	fn nested_vm_drain_events(&self) -> VMResult<Vec<Event>> {
+		unreachable!()
+	}
+	fn nested_vm_apply_events(&self, items: Vec<Event>) -> VMResult<()> {
 		unreachable!()
 	}
 }

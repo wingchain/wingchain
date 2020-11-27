@@ -523,8 +523,16 @@ async fn test_solo_contract_hw_transfer_success() {
 	assert_eq!(
 		tx1_events,
 		vec![
-			r#"{"name":"Transferred","data":{"sender":"b4decd5a5f8f2ba708f8ced72eec89f44f3be96a","recipient":"99e06bc6f62af0126724d9a5979379c033b431d3","value":4}}"#,
-			r#"{"name":"Transferred","data":{"sender":"99e06bc6f62af0126724d9a5979379c033b431d3","recipient":"43346e326b6721be4a070bfb2eb49127322fa5e4","value":1}}"#
+			format!(
+				r#"{{"name":"Transferred","data":{{"sender":"{}","recipient":"{}","value":4}}}}"#,
+				&account1.3, &contract_address
+			)
+			.as_str(),
+			format!(
+				r#"{{"name":"Transferred","data":{{"sender":"{}","recipient":"{}","value":1}}}}"#,
+				&contract_address, &account2.3
+			)
+			.as_str(),
 		]
 	);
 
@@ -770,9 +778,11 @@ async fn test_solo_contract_hw_transfer_partial_failed() {
 	log::info!("tx1_events: {:?}", tx1_events);
 	assert_eq!(
 		tx1_events,
-		vec![
-			r#"{"name":"Transferred","data":{"sender":"b4decd5a5f8f2ba708f8ced72eec89f44f3be96a","recipient":"99e06bc6f62af0126724d9a5979379c033b431d3","value":4}}"#,
-		]
+		vec![format!(
+			r#"{{"name":"Transferred","data":{{"sender":"{}","recipient":"{}","value":4}}}}"#,
+			&account1.3, &contract_address
+		)
+		.as_str(),]
 	);
 
 	// check balance

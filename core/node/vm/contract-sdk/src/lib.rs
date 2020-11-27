@@ -51,14 +51,14 @@ impl Context {
 		let timestamp = import::env_block_timestamp();
 
 		let tx_hash =
-			get_option_from_func(|share_id| import::env_tx_hash_read(share_id))?.map(Hash);
+			option_vec_from_func(|share_id| import::env_tx_hash_read(share_id))?.map(Hash);
 
-		let contract_address = Address(get_from_func(|share_id| {
+		let contract_address = Address(vec_from_func(|share_id| {
 			import::env_contract_address_read(share_id)
 		})?);
 
 		let sender_address =
-			get_option_from_func(|share_id| import::env_sender_address_read(share_id))?
+			option_vec_from_func(|share_id| import::env_sender_address_read(share_id))?
 				.map(Address);
 
 		let context = Self {
@@ -97,27 +97,78 @@ impl Context {
 		value: Balance,
 	) -> ContractResult<()> {
 		let recipient_address = &recipient_address.0;
-		import::balance_transfer(
-			recipient_address.len() as _,
-			recipient_address.as_ptr() as _,
-			value,
-		);
-		Ok(())
+		null_from_func(|| {
+			import::balance_transfer(
+				recipient_address.len() as _,
+				recipient_address.as_ptr() as _,
+				value,
+			)
+		})
 	}
 	pub fn balance_transfer_ea(
 		&self,
 		recipient_address: &Address,
 		value: Balance,
 	) -> ContractResult<()> {
-		let share_id = 0u8 as *const u8 as u64;
 		let recipient_address = &recipient_address.0;
-		let error = import::balance_transfer_ea(
-			recipient_address.len() as _,
-			recipient_address.as_ptr() as _,
-			value,
-			share_id,
-		);
-		from_error_aware(error, share_id, ())
+
+		null_from_func_ea(|error_share_id| {
+			import::balance_transfer_ea(
+				recipient_address.len() as _,
+				recipient_address.as_ptr() as _,
+				value,
+				error_share_id,
+			)
+		})
+	}
+
+	pub fn contract_execute(
+		&self,
+		contract_address: &Address,
+		method: &str,
+		params: &[u8],
+		pay_value: Balance,
+	) -> ContractResult<Vec<u8>> {
+		let contract_address = &contract_address.0;
+		let method = method.as_bytes();
+		let result = vec_from_func(|share_id| {
+			import::contract_execute(
+				contract_address.len() as _,
+				contract_address.as_ptr() as _,
+				method.len() as _,
+				method.as_ptr() as _,
+				params.len() as _,
+				params.as_ptr() as _,
+				pay_value,
+				share_id,
+			)
+		})?;
+		Ok(result)
+	}
+
+	pub fn contract_execute_ea(
+		&self,
+		contract_address: &Address,
+		method: &str,
+		params: &[u8],
+		pay_value: Balance,
+	) -> ContractResult<Vec<u8>> {
+		let contract_address = &contract_address.0;
+		let method = method.as_bytes();
+		let result = vec_from_func_ea(|data_share_id, error_share_id| {
+			import::contract_execute_ea(
+				contract_address.len() as _,
+				contract_address.as_ptr() as _,
+				method.len() as _,
+				method.as_ptr() as _,
+				params.len() as _,
+				params.as_ptr() as _,
+				pay_value,
+				data_share_id,
+				error_share_id,
+			)
+		})?;
+		Ok(result)
 	}
 }
 
@@ -126,13 +177,13 @@ impl Util {
 		Ok(Util)
 	}
 	pub fn hash(&self, data: &[u8]) -> ContractResult<Hash> {
-		let result = get_from_func(|share_id| {
+		let result = vec_from_func(|share_id| {
 			import::util_hash(data.len() as _, data.as_ptr() as _, share_id)
 		})?;
 		Ok(Hash(result))
 	}
 	pub fn address(&self, data: &[u8]) -> ContractResult<Address> {
-		let result = get_from_func(|share_id| {
+		let result = vec_from_func(|share_id| {
 			import::util_address(data.len() as _, data.as_ptr() as _, share_id)
 		})?;
 		Ok(Address(result))
@@ -146,7 +197,7 @@ impl Util {
 		let data = address.0.as_slice();
 		let share_id = 0u8 as *const u8 as u64;
 		let error = import::util_validate_address_ea(data.len() as _, data.as_ptr() as _, share_id);
-		from_error_aware(error, share_id, ())
+		from_error_aware(error, share_id, || Ok(()))
 	}
 }
 
@@ -245,7 +296,7 @@ pub struct ContractEnv {
 }
 
 fn storage_get<V: DeserializeOwned>(key: &[u8]) -> ContractResult<Option<V>> {
-	let value = get_option_from_func(|share_id| {
+	let value = option_vec_from_func(|share_id| {
 		import::storage_read(key.len() as _, key.as_ptr() as _, share_id)
 	})?;
 
@@ -273,17 +324,17 @@ fn storage_delete(key: &[u8]) -> ContractResult<()> {
 	Ok(())
 }
 
-fn get_from_func<F: Fn(u64)>(f: F) -> ContractResult<Vec<u8>> {
+fn vec_from_func<F: Fn(u64)>(f: F) -> ContractResult<Vec<u8>> {
 	let share_id = 0u8 as *const u8 as u64;
 	f(share_id);
-	get_from_share(share_id).ok_or(ContractError::ShareIllegalAccess)
+	share_to_vec(share_id).ok_or(ContractError::ShareIllegalAccess)
 }
 
-fn get_option_from_func<F: Fn(u64) -> u64>(f: F) -> ContractResult<Option<Vec<u8>>> {
+fn option_vec_from_func<F: Fn(u64) -> u64>(f: F) -> ContractResult<Option<Vec<u8>>> {
 	let share_id = 0u8 as *const u8 as u64;
 	let value = match f(share_id) {
 		1 => {
-			let value = get_from_share(share_id).ok_or(ContractError::ShareIllegalAccess)?;
+			let value = share_to_vec(share_id).ok_or(ContractError::ShareIllegalAccess)?;
 			Some(value)
 		}
 		_ => None,
@@ -291,7 +342,27 @@ fn get_option_from_func<F: Fn(u64) -> u64>(f: F) -> ContractResult<Option<Vec<u8
 	Ok(value)
 }
 
-fn get_from_share(share_id: u64) -> Option<Vec<u8>> {
+fn null_from_func<F: Fn()>(f: F) -> ContractResult<()> {
+	Ok(f())
+}
+
+fn vec_from_func_ea<F: Fn(u64, u64) -> u64>(f: F) -> ContractResult<Vec<u8>> {
+	let data_share_id = 0u8 as *const u8 as u64;
+	let error_share_id = 1u8 as *const u8 as u64;
+	let error = f(data_share_id, error_share_id);
+	let get_data = || -> ContractResult<Vec<u8>> {
+		share_to_vec(data_share_id).ok_or(ContractError::ShareIllegalAccess)
+	};
+	from_error_aware(error, error_share_id, get_data)
+}
+
+fn null_from_func_ea<F: Fn(u64) -> u64>(f: F) -> ContractResult<()> {
+	let error_share_id = 0u8 as *const u8 as u64;
+	let error = f(error_share_id);
+	from_error_aware(error, error_share_id, || Ok(()))
+}
+
+fn share_to_vec(share_id: u64) -> Option<Vec<u8>> {
 	let len = import::share_len(share_id);
 	match len {
 		u64::MAX => None,
@@ -303,13 +374,17 @@ fn get_from_share(share_id: u64) -> Option<Vec<u8>> {
 	}
 }
 
-fn from_error_aware<T>(error: u64, share_id: u64, data: T) -> ContractResult<T> {
+fn from_error_aware<F: Fn() -> ContractResult<T>, T>(
+	error: u64,
+	error_share_id: u64,
+	get_data: F,
+) -> ContractResult<T> {
 	match error {
 		1 => {
-			let error = get_from_share(share_id).ok_or(ContractError::ShareIllegalAccess)?;
+			let error = share_to_vec(error_share_id).ok_or(ContractError::ShareIllegalAccess)?;
 			let error = String::from_utf8(error).map_err(|_| ContractError::BadUTF8)?;
 			Err(error.as_str().into())
 		}
-		_ => Ok(data),
+		_ => get_data(),
 	}
 }

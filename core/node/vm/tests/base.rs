@@ -64,7 +64,7 @@ pub fn vm_execute(
 	context: &dyn VMContext,
 	mode: Mode,
 	method: &str,
-	params: &str,
+	params: &[u8],
 	pay_value: Balance,
 ) -> VMResult<String> {
 	let hash = Arc::new(HashImpl::Blake2b256);
@@ -77,7 +77,6 @@ pub fn vm_execute(
 		hash.hash(&mut out, &code);
 		Hash(out)
 	};
-	let params = params.as_bytes();
 
 	let result = vm
 		.execute(&code_hash, &code, context, mode, method, params, pay_value)
@@ -293,41 +292,47 @@ pub struct TestVMContext<EC: ExecutorContext> {
 	hash: Arc<HashImpl>,
 	address: Arc<AddressImpl>,
 	module_context: StackedExecutorContext<EC>,
+	nested_vm_context: RefCell<Option<ClonableTestVMContext<EC>>>,
 }
 
 impl<EC: ExecutorContext> TestVMContext<EC> {
-	pub fn new(sender_address: Address, executor_context: EC) -> Self {
+	pub fn new(
+		tx_hash: Option<Hash>,
+		contract_address: Address,
+		sender_address: Option<Address>,
+		context: EC,
+	) -> Self {
+		let base_context = StackedExecutorContext::new(context);
+		Self::new_with_base_context(tx_hash, contract_address, sender_address, base_context)
+	}
+	fn new_with_base_context(
+		tx_hash: Option<Hash>,
+		contract_address: Address,
+		sender_address: Option<Address>,
+		base_context: StackedExecutorContext<EC>,
+	) -> Self {
 		let hash = Arc::new(HashImpl::Blake2b256);
 		let address = Arc::new(AddressImpl::Blake2b160);
 
-		let tx_hash = {
-			let mut out = vec![0u8; hash.length().into()];
-			hash.hash(&mut out, &vec![1]);
-			Hash(out)
-		};
-		let contract_address = {
-			let mut out = vec![0u8; address.length().into()];
-			address.address(&mut out, &vec![1]);
-			Address(out)
-		};
-		let base_context = StackedExecutorContext::new(executor_context);
 		let module_context = base_context.derive();
+
+		let nested_vm_context = RefCell::new(None);
+
 		let context = TestVMContext {
 			env: Rc::new(VMContextEnv {
 				number: 10,
 				timestamp: 12345,
 			}),
-			call_env: Rc::new(VMCallEnv {
-				tx_hash: Some(tx_hash),
-			}),
+			call_env: Rc::new(VMCallEnv { tx_hash: tx_hash }),
 			contract_env: Rc::new(VMContractEnv {
 				contract_address,
-				sender_address: Some(sender_address),
+				sender_address: sender_address,
 			}),
 			base_context,
 			hash: hash.clone(),
 			address: address.clone(),
 			module_context,
+			nested_vm_context,
 		};
 
 		context
@@ -338,6 +343,32 @@ impl<EC: ExecutorContext> TestVMContext<EC> {
 		let key = self.hash(key)?;
 		let key = [b"contract", SEPARATOR, b"contract_data", SEPARATOR, &key.0].concat();
 		Ok(key)
+	}
+
+	fn inner_get_code(
+		&self,
+		contract_address: &Address,
+		version: Option<u32>,
+	) -> VMResult<Option<Vec<u8>>> {
+		let version = match version {
+			Some(version) => version,
+			None => {
+				let current_version: Option<u32> = storage_map_get(
+					self.module_context.clone(),
+					b"contract",
+					b"version",
+					&contract_address,
+				)?;
+				match current_version {
+					Some(current_version) => current_version,
+					None => return Ok(None),
+				}
+			}
+		};
+
+		let key = codec::encode(&(&contract_address, version))?;
+		let code = storage_map_raw_get(self.module_context.clone(), b"contract", b"code", &key)?;
+		Ok(code)
 	}
 }
 
@@ -455,10 +486,182 @@ impl<EC: ExecutorContext> VMContext for TestVMContext<EC> {
 	fn module_apply_events(&self, items: Vec<Event>) -> VMResult<()> {
 		self.module_context.apply_events(items)
 	}
+	fn nested_vm_contract_execute(
+		&self,
+		contract_address: &Address,
+		method: &str,
+		params: &[u8],
+		pay_value: Balance,
+	) -> VMResult<Vec<u8>> {
+		if self.nested_vm_context.borrow().is_none() {
+			let base_context = self.base_context.derive();
+			let vm_context = ClonableTestVMContext {
+				inner: Rc::new(TestVMContext::new_with_base_context(
+					self.call_env.tx_hash.clone(),
+					contract_address.clone(),
+					Some(self.contract_env.contract_address.clone()),
+					base_context,
+				)),
+			};
+			self.nested_vm_context.borrow_mut().replace(vm_context);
+		}
+
+		let nested_vm_context = self
+			.nested_vm_context
+			.borrow()
+			.as_ref()
+			.expect("qed")
+			.clone();
+
+		let code = self
+			.inner_get_code(&contract_address, None)?
+			.ok_or(ContractError::NestedContractNotFound)?;
+		let code_hash = self.hash(&code)?;
+		let vm = VM::new(VMConfig::default());
+
+		let result = vm.execute(
+			&code_hash,
+			&code,
+			&nested_vm_context,
+			Mode::Call,
+			method,
+			params,
+			pay_value,
+		)?;
+		Ok(result)
+	}
+	fn nested_vm_payload_drain_buffer(&self) -> VMResult<Vec<(DBKey, Option<DBValue>)>> {
+		let nested_vm_context = self
+			.nested_vm_context
+			.borrow()
+			.as_ref()
+			.expect("qed")
+			.clone();
+		nested_vm_context.payload_drain_buffer()
+	}
+	fn nested_vm_payload_apply(&self, items: Vec<(DBKey, Option<DBValue>)>) -> VMResult<()> {
+		let nested_vm_context = self
+			.nested_vm_context
+			.borrow()
+			.as_ref()
+			.expect("qed")
+			.clone();
+		nested_vm_context.payload_apply(items)
+	}
+	fn nested_vm_drain_events(&self) -> VMResult<Vec<Event>> {
+		let nested_vm_context = self
+			.nested_vm_context
+			.borrow()
+			.as_ref()
+			.expect("qed")
+			.clone();
+		nested_vm_context.drain_events()
+	}
+	fn nested_vm_apply_events(&self, items: Vec<Event>) -> VMResult<()> {
+		let nested_vm_context = self
+			.nested_vm_context
+			.borrow()
+			.as_ref()
+			.expect("qed")
+			.clone();
+		nested_vm_context.apply_events(items)
+	}
+}
+
+#[derive(Clone)]
+struct ClonableTestVMContext<EC: ExecutorContext> {
+	inner: Rc<TestVMContext<EC>>,
+}
+
+impl<EC: ExecutorContext> VMContext for ClonableTestVMContext<EC> {
+	fn env(&self) -> Rc<VMContextEnv> {
+		self.inner.env()
+	}
+	fn call_env(&self) -> Rc<VMCallEnv> {
+		self.inner.call_env()
+	}
+	fn contract_env(&self) -> Rc<VMContractEnv> {
+		self.inner.contract_env()
+	}
+	fn payload_get(&self, key: &[u8]) -> VMResult<Option<DBValue>> {
+		self.inner.payload_get(key)
+	}
+	fn payload_set(&self, key: &[u8], value: Option<DBValue>) -> VMResult<()> {
+		self.inner.payload_set(key, value)
+	}
+	fn payload_drain_buffer(&self) -> VMResult<Vec<(DBKey, Option<DBValue>)>> {
+		self.inner.payload_drain_buffer()
+	}
+	fn payload_apply(&self, items: Vec<(DBKey, Option<DBValue>)>) -> VMResult<()> {
+		self.inner.payload_apply(items)
+	}
+	fn emit_event(&self, event: Event) -> VMResult<()> {
+		self.inner.emit_event(event)
+	}
+	fn drain_events(&self) -> VMResult<Vec<Event>> {
+		self.inner.drain_events()
+	}
+	fn apply_events(&self, items: Vec<Event>) -> VMResult<()> {
+		self.inner.apply_events(items)
+	}
+	fn hash(&self, data: &[u8]) -> VMResult<Hash> {
+		self.inner.hash(data)
+	}
+	fn address(&self, data: &[u8]) -> VMResult<Address> {
+		self.inner.address(data)
+	}
+	fn validate_address(&self, address: &Address) -> VMResult<()> {
+		self.inner.validate_address(address)
+	}
+	fn module_balance_get(&self, address: &Address) -> VMResult<Balance> {
+		self.inner.module_balance_get(address)
+	}
+	fn module_balance_transfer(
+		&self,
+		sender: &Address,
+		recipient: &Address,
+		value: Balance,
+	) -> VMResult<()> {
+		self.inner.module_balance_transfer(sender, recipient, value)
+	}
+	fn module_payload_drain_buffer(&self) -> VMResult<Vec<(DBKey, Option<DBValue>)>> {
+		self.inner.module_payload_drain_buffer()
+	}
+	fn module_payload_apply(&self, items: Vec<(DBKey, Option<DBValue>)>) -> VMResult<()> {
+		self.inner.module_payload_apply(items)
+	}
+	fn module_drain_events(&self) -> VMResult<Vec<Event>> {
+		self.inner.module_drain_events()
+	}
+	fn module_apply_events(&self, items: Vec<Event>) -> VMResult<()> {
+		self.inner.module_apply_events(items)
+	}
+	fn nested_vm_contract_execute(
+		&self,
+		contract_address: &Address,
+		method: &str,
+		params: &[u8],
+		pay_value: Balance,
+	) -> VMResult<Vec<u8>> {
+		self.inner
+			.nested_vm_contract_execute(contract_address, method, params, pay_value)
+	}
+	fn nested_vm_payload_drain_buffer(&self) -> VMResult<Vec<(DBKey, Option<DBValue>)>> {
+		self.inner.nested_vm_payload_drain_buffer()
+	}
+	fn nested_vm_payload_apply(&self, items: Vec<(DBKey, Option<DBValue>)>) -> VMResult<()> {
+		self.inner.nested_vm_payload_apply(items)
+	}
+	fn nested_vm_drain_events(&self) -> VMResult<Vec<Event>> {
+		self.inner.nested_vm_drain_events()
+	}
+	fn nested_vm_apply_events(&self, items: Vec<Event>) -> VMResult<()> {
+		self.inner.nested_vm_apply_events(items)
+	}
 }
 
 #[allow(dead_code)]
-pub fn storage_mint<EC: ExecutorContext>(
+pub fn endow<EC: ExecutorContext>(
 	executor_context: EC,
 	items: Vec<(Address, Balance)>,
 ) -> VMResult<()> {
@@ -474,6 +677,45 @@ pub fn storage_mint<EC: ExecutorContext>(
 	Ok(())
 }
 
+#[allow(dead_code)]
+pub fn create_contract<EC: ExecutorContext>(
+	contract_address: &Address,
+	sender: &Address,
+	code: &[u8],
+	executor_context: EC,
+	method: &str,
+	params: &[u8],
+	pay_value: Balance,
+) -> VMResult<()> {
+	let version = 1u32;
+	storage_map_set(
+		executor_context.clone(),
+		b"contract",
+		b"version",
+		&contract_address,
+		&version,
+	)?;
+	storage_map_set(
+		executor_context.clone(),
+		b"contract",
+		b"code",
+		&(&contract_address, version),
+		&code,
+	)?;
+	let tx_hash = Some(Hash(vec![1]));
+
+	let context = TestVMContext::new(
+		tx_hash,
+		contract_address.clone(),
+		Some(sender.clone()),
+		executor_context,
+	);
+
+	let _result = vm_execute(code, &context, Mode::Init, method, params, pay_value)?;
+
+	Ok(())
+}
+
 fn storage_map_get<K: Encode, V: Decode, EC: ExecutorContext>(
 	executor_context: EC,
 	module_name: &[u8],
@@ -481,6 +723,15 @@ fn storage_map_get<K: Encode, V: Decode, EC: ExecutorContext>(
 	key: &K,
 ) -> VMResult<Option<V>> {
 	let key = codec::encode(key)?;
+	storage_map_raw_get(executor_context, module_name, storage_name, &key)
+}
+
+fn storage_map_raw_get<V: Decode, EC: ExecutorContext>(
+	executor_context: EC,
+	module_name: &[u8],
+	storage_name: &[u8],
+	key: &[u8],
+) -> VMResult<Option<V>> {
 	let key = &[module_name, SEPARATOR, storage_name, SEPARATOR, &key].concat();
 	let value = executor_context.payload_get(key)?;
 	let value = match value {
@@ -502,6 +753,16 @@ fn storage_map_set<K: Encode, V: Encode, EC: ExecutorContext>(
 	value: &V,
 ) -> VMResult<()> {
 	let key = codec::encode(key)?;
+	storage_map_raw_set(executor_context, module_name, storage_name, &key, value)
+}
+
+fn storage_map_raw_set<V: Encode, EC: ExecutorContext>(
+	executor_context: EC,
+	module_name: &[u8],
+	storage_name: &[u8],
+	key: &[u8],
+	value: &V,
+) -> VMResult<()> {
 	let key = &[module_name, SEPARATOR, storage_name, SEPARATOR, &key].concat();
 
 	let value = codec::encode(value)?;

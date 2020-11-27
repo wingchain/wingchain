@@ -413,4 +413,25 @@ impl<M: Module> VMContext for DefaultVMContext<M> {
 			.map_err(Self::module_to_vm_error)?;
 		Ok(())
 	}
+	fn nested_vm_contract_execute(
+		&self,
+		contract_address: &Address,
+		method: &str,
+		params: &[u8],
+		pay_value: Balance,
+	) -> VMResult<Vec<u8>> {
+		unimplemented!()
+	}
+	fn nested_vm_payload_drain_buffer(&self) -> VMResult<Vec<(DBKey, Option<DBValue>)>> {
+		unimplemented!()
+	}
+	fn nested_vm_payload_apply(&self, items: Vec<(DBKey, Option<DBValue>)>) -> VMResult<()> {
+		unimplemented!()
+	}
+	fn nested_vm_drain_events(&self) -> VMResult<Vec<Event>> {
+		unimplemented!()
+	}
+	fn nested_vm_apply_events(&self, items: Vec<Event>) -> VMResult<()> {
+		unimplemented!()
+	}
 }
