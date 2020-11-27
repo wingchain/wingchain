@@ -503,9 +503,14 @@ impl<C: Context, U: Util> Module<C, U> {
 			contract_address,
 			sender_address,
 		});
-		let vm_context =
-			DefaultVMContext::<Self>::new(contract_env, self.context.clone(), self.util.clone());
-		let vm = VM::new(VMConfig::default());
+		let vm_config = VMConfig::default();
+		let vm_context = DefaultVMContext::<Self>::new(
+			vm_config.clone(),
+			contract_env,
+			self.context.clone(),
+			self.util.clone(),
+		);
+		let vm = VM::new(vm_config);
 		let code_hash = self.util.hash(&code)?;
 
 		let contract_method = params.method;

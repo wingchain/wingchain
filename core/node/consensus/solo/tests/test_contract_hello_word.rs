@@ -523,8 +523,16 @@ async fn test_solo_contract_hw_transfer_success() {
 	assert_eq!(
 		tx1_events,
 		vec![
-			r#"{"name":"Transferred","data":{"sender":"b4decd5a5f8f2ba708f8ced72eec89f44f3be96a","recipient":"99e06bc6f62af0126724d9a5979379c033b431d3","value":4}}"#,
-			r#"{"name":"Transferred","data":{"sender":"99e06bc6f62af0126724d9a5979379c033b431d3","recipient":"43346e326b6721be4a070bfb2eb49127322fa5e4","value":1}}"#
+			format!(
+				r#"{{"name":"Transferred","data":{{"sender":"{}","recipient":"{}","value":4}}}}"#,
+				&account1.3, &contract_address
+			)
+			.as_str(),
+			format!(
+				r#"{{"name":"Transferred","data":{{"sender":"{}","recipient":"{}","value":1}}}}"#,
+				&contract_address, &account2.3
+			)
+			.as_str(),
 		]
 	);
 
@@ -770,9 +778,11 @@ async fn test_solo_contract_hw_transfer_partial_failed() {
 	log::info!("tx1_events: {:?}", tx1_events);
 	assert_eq!(
 		tx1_events,
-		vec![
-			r#"{"name":"Transferred","data":{"sender":"b4decd5a5f8f2ba708f8ced72eec89f44f3be96a","recipient":"99e06bc6f62af0126724d9a5979379c033b431d3","value":4}}"#,
-		]
+		vec![format!(
+			r#"{{"name":"Transferred","data":{{"sender":"{}","recipient":"{}","value":4}}}}"#,
+			&account1.3, &contract_address
+		)
+		.as_str(),]
 	);
 
 	// check balance
@@ -814,6 +824,78 @@ async fn test_solo_contract_hw_transfer_partial_failed() {
 		.unwrap();
 	log::info!("result: {}", result);
 	assert_eq!(result, 0);
+}
+
+#[tokio::test]
+async fn test_solo_contract_hw_nested_contract() {
+	let _ = env_logger::try_init();
+
+	let dsa = Arc::new(DsaImpl::Ed25519);
+	let address = Arc::new(AddressImpl::Blake2b160);
+
+	let (account1, _account2) = test_accounts(dsa, address);
+
+	let (chain, txpool, solo) = base::get_service(&account1.3);
+
+	let ori_code = get_code().to_vec();
+
+	let tx1_hash = base::insert_tx(
+		&chain,
+		&txpool,
+		chain
+			.build_transaction(
+				Some((account1.0.clone(), 0, 10)),
+				"contract".to_string(),
+				"create".to_string(),
+				module::contract::CreateParams {
+					code: ori_code.clone(),
+					init_pay_value: 0,
+					init_method: "init".to_string(),
+					init_params: r#"{"value":"abc"}"#.as_bytes().to_vec(),
+				},
+			)
+			.unwrap(),
+	)
+	.await;
+	base::wait_txpool(&txpool, 1).await;
+
+	// generate block 1
+	solo.generate_block().await.unwrap();
+	base::wait_block_execution(&chain).await;
+
+	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
+	let tx1_result = tx1_receipt.result.unwrap();
+	let contract_address: Address = Decode::decode(&mut &tx1_result[..]).unwrap();
+	log::info!("contract_address: {:x?}", contract_address);
+
+	let tx1_hash = base::insert_tx(
+		&chain,
+		&txpool,
+		chain
+			.build_transaction(
+				Some((account1.0.clone(), 0, 10)),
+				"contract".to_string(),
+				"execute".to_string(),
+				module::contract::ExecuteParams {
+					contract_address: contract_address.clone(),
+					pay_value: 0,
+					method: "nested_contract_execute".to_string(),
+					params: "".as_bytes().to_vec(),
+				},
+			)
+			.unwrap(),
+	)
+	.await;
+	base::wait_txpool(&txpool, 1).await;
+
+	// generate block 2
+	solo.generate_block().await.unwrap();
+	base::wait_block_execution(&chain).await;
+
+	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
+	let tx1_error = tx1_receipt.result.unwrap_err();
+	log::info!("tx1_error: {:?}", tx1_error);
+	assert_eq!(tx1_error, "ContractError: NestDepthExceeded".to_string());
 }
 
 fn get_code() -> &'static [u8] {

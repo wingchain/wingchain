@@ -151,6 +151,10 @@ impl Contract {
 		let sender_balance = self.balance.get(&sender_address.0)?.unwrap_or(0);
 		let recipient_balance = self.balance.get(&recipient_address.0)?.unwrap_or(0);
 
+		if value > sender_balance {
+			return Err("Insufficient balance".into());
+		}
+
 		let (sender_balance, overflow) = sender_balance.overflowing_sub(value);
 		if overflow {
 			return Err("U64 overflow".into());

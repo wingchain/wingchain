@@ -30,12 +30,14 @@ mod compile;
 pub mod errors;
 mod import;
 
+#[derive(Clone)]
 pub struct VMConfig {
-	max_stack_height: u32,
-	initial_memory_pages: u32,
-	max_memory_pages: u32,
-	max_share_value_len: u64,
-	max_share_size: u64,
+	pub max_stack_height: u32,
+	pub initial_memory_pages: u32,
+	pub max_memory_pages: u32,
+	pub max_share_value_len: u64,
+	pub max_share_size: u64,
+	pub max_nest_depth: u32,
 }
 
 impl Default for VMConfig {
@@ -46,6 +48,7 @@ impl Default for VMConfig {
 			max_memory_pages: 2u32.pow(11),
 			max_share_value_len: 2u64.pow(20) * 100,
 			max_share_size: 1024,
+			max_nest_depth: 8,
 		}
 	}
 }
@@ -169,6 +172,17 @@ pub trait VMContext {
 	fn module_payload_apply(&self, items: Vec<(DBKey, Option<DBValue>)>) -> VMResult<()>;
 	fn module_drain_events(&self) -> VMResult<Vec<Event>>;
 	fn module_apply_events(&self, items: Vec<Event>) -> VMResult<()>;
+	fn nested_vm_contract_execute(
+		&self,
+		contract_address: &Address,
+		method: &str,
+		params: &[u8],
+		pay_value: Balance,
+	) -> VMResult<Vec<u8>>;
+	fn nested_vm_payload_drain_buffer(&self) -> VMResult<Vec<(DBKey, Option<DBValue>)>>;
+	fn nested_vm_payload_apply(&self, items: Vec<(DBKey, Option<DBValue>)>) -> VMResult<()>;
+	fn nested_vm_drain_events(&self) -> VMResult<Vec<Event>>;
+	fn nested_vm_apply_events(&self, items: Vec<Event>) -> VMResult<()>;
 }
 
 pub struct VMContextEnv {
@@ -250,6 +264,27 @@ impl VMContext for DummyVMContext {
 		unreachable!()
 	}
 	fn module_apply_events(&self, _items: Vec<Event>) -> VMResult<()> {
+		unreachable!()
+	}
+	fn nested_vm_contract_execute(
+		&self,
+		_contract_address: &Address,
+		_method: &str,
+		_params: &[u8],
+		_pay_value: Balance,
+	) -> VMResult<Vec<u8>> {
+		unreachable!()
+	}
+	fn nested_vm_payload_drain_buffer(&self) -> VMResult<Vec<(DBKey, Option<DBValue>)>> {
+		unreachable!()
+	}
+	fn nested_vm_payload_apply(&self, _items: Vec<(DBKey, Option<DBValue>)>) -> VMResult<()> {
+		unreachable!()
+	}
+	fn nested_vm_drain_events(&self) -> VMResult<Vec<Event>> {
+		unreachable!()
+	}
+	fn nested_vm_apply_events(&self, _items: Vec<Event>) -> VMResult<()> {
 		unreachable!()
 	}
 }
