@@ -826,6 +826,78 @@ async fn test_solo_contract_hw_transfer_partial_failed() {
 	assert_eq!(result, 0);
 }
 
+#[tokio::test]
+async fn test_solo_contract_hw_nested_contract() {
+	let _ = env_logger::try_init();
+
+	let dsa = Arc::new(DsaImpl::Ed25519);
+	let address = Arc::new(AddressImpl::Blake2b160);
+
+	let (account1, _account2) = test_accounts(dsa, address);
+
+	let (chain, txpool, solo) = base::get_service(&account1.3);
+
+	let ori_code = get_code().to_vec();
+
+	let tx1_hash = base::insert_tx(
+		&chain,
+		&txpool,
+		chain
+			.build_transaction(
+				Some((account1.0.clone(), 0, 10)),
+				"contract".to_string(),
+				"create".to_string(),
+				module::contract::CreateParams {
+					code: ori_code.clone(),
+					init_pay_value: 0,
+					init_method: "init".to_string(),
+					init_params: r#"{"value":"abc"}"#.as_bytes().to_vec(),
+				},
+			)
+			.unwrap(),
+	)
+	.await;
+	base::wait_txpool(&txpool, 1).await;
+
+	// generate block 1
+	solo.generate_block().await.unwrap();
+	base::wait_block_execution(&chain).await;
+
+	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
+	let tx1_result = tx1_receipt.result.unwrap();
+	let contract_address: Address = Decode::decode(&mut &tx1_result[..]).unwrap();
+	log::info!("contract_address: {:x?}", contract_address);
+
+	let tx1_hash = base::insert_tx(
+		&chain,
+		&txpool,
+		chain
+			.build_transaction(
+				Some((account1.0.clone(), 0, 10)),
+				"contract".to_string(),
+				"execute".to_string(),
+				module::contract::ExecuteParams {
+					contract_address: contract_address.clone(),
+					pay_value: 0,
+					method: "nested_contract_execute".to_string(),
+					params: "".as_bytes().to_vec(),
+				},
+			)
+			.unwrap(),
+	)
+	.await;
+	base::wait_txpool(&txpool, 1).await;
+
+	// generate block 2
+	solo.generate_block().await.unwrap();
+	base::wait_block_execution(&chain).await;
+
+	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
+	let tx1_error = tx1_receipt.result.unwrap_err();
+	log::info!("tx1_error: {:?}", tx1_error);
+	assert_eq!(tx1_error, "ContractError: NestDepthExceeded".to_string());
+}
+
 fn get_code() -> &'static [u8] {
 	let code = include_bytes!(
 		"../../../vm/contract-samples/hello-world/release/contract_samples_hello_world_bg.wasm"

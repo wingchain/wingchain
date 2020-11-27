@@ -207,6 +207,7 @@ impl<EC: Context> Context for StackedExecutorContext<EC> {
 }
 
 pub struct DefaultVMContext<M: Module> {
+	config: Rc<VMConfig>,
 	env: Rc<VMContextEnv>,
 	call_env: Rc<VMCallEnv>,
 	contract_env: Rc<VMContractEnv>,
@@ -220,14 +221,16 @@ pub struct DefaultVMContext<M: Module> {
 
 impl<M: Module> DefaultVMContext<M> {
 	pub fn new(
+		config: VMConfig,
 		contract_env: Rc<VMContractEnv>,
 		executor_context: M::C,
 		executor_util: M::U,
 	) -> Self {
 		let base_context = StackedExecutorContext::new(executor_context);
-		Self::new_with_base_context(contract_env, base_context, executor_util)
+		Self::new_with_base_context(Rc::new(config), contract_env, base_context, executor_util)
 	}
 	fn new_with_base_context(
+		config: Rc<VMConfig>,
 		contract_env: Rc<VMContractEnv>,
 		base_context: StackedExecutorContext<M::C>,
 		executor_util: M::U,
@@ -252,6 +255,7 @@ impl<M: Module> DefaultVMContext<M> {
 		let code = StorageMap::new(base_context.executor_context.clone(), b"code");
 
 		DefaultVMContext {
+			config,
 			env,
 			call_env,
 			contract_env,
@@ -463,6 +467,11 @@ impl<M: Module> VMContext for DefaultVMContext<M> {
 		pay_value: Balance,
 	) -> VMResult<Vec<u8>> {
 		if self.nested_vm_context.borrow().is_none() {
+			let next_nest_depth = self.base_context.payload_buffer_stack.len() as u32 + 1;
+			if next_nest_depth > self.config.max_nest_depth {
+				return Err(ContractError::NestDepthExceeded.into());
+			}
+
 			let base_context = self.base_context.derive();
 
 			// when contract A executes the nested contract B
@@ -474,6 +483,7 @@ impl<M: Module> VMContext for DefaultVMContext<M> {
 
 			let vm_context = ClonableDefaultVMContext {
 				inner: Rc::new(DefaultVMContext::new_with_base_context(
+					self.config.clone(),
 					contract_env,
 					base_context,
 					self.executor_util.clone(),
@@ -488,7 +498,7 @@ impl<M: Module> VMContext for DefaultVMContext<M> {
 			.inner_get_code(&contract_address, None)?
 			.ok_or(ContractError::NestedContractNotFound)?;
 		let code_hash = self.hash(&code)?;
-		let vm = VM::new(VMConfig::default());
+		let vm = VM::new((*self.config).clone());
 
 		let result = vm.execute(
 			&code_hash,

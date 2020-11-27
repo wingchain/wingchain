@@ -30,12 +30,14 @@ mod compile;
 pub mod errors;
 mod import;
 
+#[derive(Clone)]
 pub struct VMConfig {
-	max_stack_height: u32,
-	initial_memory_pages: u32,
-	max_memory_pages: u32,
-	max_share_value_len: u64,
-	max_share_size: u64,
+	pub max_stack_height: u32,
+	pub initial_memory_pages: u32,
+	pub max_memory_pages: u32,
+	pub max_share_value_len: u64,
+	pub max_share_size: u64,
+	pub max_nest_depth: u32,
 }
 
 impl Default for VMConfig {
@@ -46,6 +48,7 @@ impl Default for VMConfig {
 			max_memory_pages: 2u32.pow(11),
 			max_share_value_len: 2u64.pow(20) * 100,
 			max_share_size: 1024,
+			max_nest_depth: 8,
 		}
 	}
 }

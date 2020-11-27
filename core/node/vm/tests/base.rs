@@ -285,6 +285,7 @@ impl<EC: ExecutorContext> ExecutorContext for StackedExecutorContext<EC> {
 }
 
 pub struct TestVMContext<EC: ExecutorContext> {
+	config: Rc<VMConfig>,
 	env: Rc<VMContextEnv>,
 	call_env: Rc<VMCallEnv>,
 	contract_env: Rc<VMContractEnv>,
@@ -297,15 +298,23 @@ pub struct TestVMContext<EC: ExecutorContext> {
 
 impl<EC: ExecutorContext> TestVMContext<EC> {
 	pub fn new(
+		config: VMConfig,
 		tx_hash: Option<Hash>,
 		contract_address: Address,
 		sender_address: Option<Address>,
 		context: EC,
 	) -> Self {
 		let base_context = StackedExecutorContext::new(context);
-		Self::new_with_base_context(tx_hash, contract_address, sender_address, base_context)
+		Self::new_with_base_context(
+			Rc::new(config),
+			tx_hash,
+			contract_address,
+			sender_address,
+			base_context,
+		)
 	}
 	fn new_with_base_context(
+		config: Rc<VMConfig>,
 		tx_hash: Option<Hash>,
 		contract_address: Address,
 		sender_address: Option<Address>,
@@ -319,6 +328,7 @@ impl<EC: ExecutorContext> TestVMContext<EC> {
 		let nested_vm_context = RefCell::new(None);
 
 		let context = TestVMContext {
+			config,
 			env: Rc::new(VMContextEnv {
 				number: 10,
 				timestamp: 12345,
@@ -494,9 +504,14 @@ impl<EC: ExecutorContext> VMContext for TestVMContext<EC> {
 		pay_value: Balance,
 	) -> VMResult<Vec<u8>> {
 		if self.nested_vm_context.borrow().is_none() {
+			let next_nest_depth = self.base_context.payload_buffer_stack.len() as u32 + 1;
+			if next_nest_depth > self.config.max_nest_depth {
+				return Err(ContractError::NestDepthExceeded.into());
+			}
 			let base_context = self.base_context.derive();
 			let vm_context = ClonableTestVMContext {
 				inner: Rc::new(TestVMContext::new_with_base_context(
+					self.config.clone(),
 					self.call_env.tx_hash.clone(),
 					contract_address.clone(),
 					Some(self.contract_env.contract_address.clone()),
@@ -517,7 +532,7 @@ impl<EC: ExecutorContext> VMContext for TestVMContext<EC> {
 			.inner_get_code(&contract_address, None)?
 			.ok_or(ContractError::NestedContractNotFound)?;
 		let code_hash = self.hash(&code)?;
-		let vm = VM::new(VMConfig::default());
+		let vm = VM::new((*self.config).clone());
 
 		let result = vm.execute(
 			&code_hash,
@@ -705,6 +720,7 @@ pub fn create_contract<EC: ExecutorContext>(
 	let tx_hash = Some(Hash(vec![1]));
 
 	let context = TestVMContext::new(
+		VMConfig::default(),
 		tx_hash,
 		contract_address.clone(),
 		Some(sender.clone()),

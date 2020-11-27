@@ -654,7 +654,7 @@ async fn test_solo_contract_tb_ea() {
 	let tx1_result = tx1_receipt.result.unwrap();
 	let tx1_result: Vec<u8> = Decode::decode(&mut &tx1_result[..]).unwrap();
 	let tx1_result = String::from_utf8(tx1_result).unwrap();
-	assert_eq!(tx1_result, "false");
+	assert_eq!(tx1_result, r#""false: ContractError: Exceed allowance""#);
 
 	// check bank balance after depositing
 	let result: Vec<u8> = chain

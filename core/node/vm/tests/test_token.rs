@@ -14,7 +14,7 @@
 
 use base::{TestExecutorContext, TestVMContext};
 use node_vm::errors::VMResult;
-use node_vm::{Mode, VMContext};
+use node_vm::{Mode, VMConfig, VMContext};
 use primitives::{Address, Balance, Hash};
 
 mod base;
@@ -28,6 +28,7 @@ fn test_vm_token_transfer() {
 	let executor_context = TestExecutorContext::new();
 	let tx_hash = Some(Hash(vec![1]));
 	let context = TestVMContext::new(
+		VMConfig::default(),
 		tx_hash,
 		contract_address,
 		Some(account1.3.clone()),
@@ -114,6 +115,7 @@ fn test_vm_token_transfer_from() {
 	let executor_context = TestExecutorContext::new();
 	let tx_hash = Some(Hash(vec![1]));
 	let context = TestVMContext::new(
+		VMConfig::default(),
 		tx_hash,
 		contract_address.clone(),
 		Some(account1.3.clone()),
@@ -159,6 +161,7 @@ fn test_vm_token_transfer_from() {
 	// shift to account2
 	let tx_hash = Some(Hash(vec![2]));
 	let context = TestVMContext::new(
+		VMConfig::default(),
 		tx_hash,
 		contract_address,
 		Some(account2.3.clone()),

@@ -108,7 +108,7 @@ impl Contract {
 	}
 
 	#[call]
-	fn deposit_ea(&self, params: DepositParams) -> ContractResult<bool> {
+	fn deposit_ea(&self, params: DepositParams) -> ContractResult<String> {
 		let sender_address = &self.context.contract_env()?.sender_address;
 		let sender_address = sender_address.as_ref().ok_or(ContractError::Unsigned)?;
 
@@ -128,8 +128,8 @@ impl Contract {
 			self.context
 				.contract_execute_ea(&token_contract_address, "transfer_from", &params, 0);
 
-		if result.is_err() {
-			return Ok(false);
+		if let Err(e) = result {
+			return Ok(format!("false: {}", e));
 		}
 
 		let balance = self.balance.get(&sender_address.0)?.unwrap_or(0);
@@ -138,11 +138,11 @@ impl Contract {
 			return Err("U64 overflow".into());
 		}
 		self.balance.set(&sender_address.0, &balance)?;
-		Ok(true)
+		Ok("true".to_string())
 	}
 
 	#[call]
-	fn withdraw_ea(&self, params: WithdrawParams) -> ContractResult<bool> {
+	fn withdraw_ea(&self, params: WithdrawParams) -> ContractResult<String> {
 		let sender_address = &self.context.contract_env()?.sender_address;
 		let sender_address = sender_address.as_ref().ok_or(ContractError::Unsigned)?;
 
@@ -162,8 +162,8 @@ impl Contract {
 		let result =
 			self.context
 				.contract_execute_ea(&token_contract_address, "transfer", &params, 0);
-		if result.is_err() {
-			return Ok(false);
+		if let Err(e) = result {
+			return Ok(format!("false: {}", e));
 		}
 
 		let (balance, overflow) = balance.overflowing_sub(value);
@@ -171,7 +171,7 @@ impl Contract {
 			return Err("U64 overflow".into());
 		}
 		self.balance.set(&sender_address.0, &balance)?;
-		Ok(true)
+		Ok("true".to_string())
 	}
 }
 

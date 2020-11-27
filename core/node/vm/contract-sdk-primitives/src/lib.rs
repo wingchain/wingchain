@@ -49,6 +49,7 @@ pub enum ContractError {
 	ShareSizeExceeded,
 	NotPayable,
 	NestedContractNotFound,
+	NestDepthExceeded,
 	Transfer { msg: String },
 	Panic { msg: String },
 	User { msg: String },
@@ -204,6 +205,7 @@ impl fmt::Display for ContractError {
 			ContractError::ShareValueLenExceeded => write!(f, "ShareValueLenExceeded"),
 			ContractError::NotPayable => write!(f, "NotPayable"),
 			ContractError::NestedContractNotFound => write!(f, "NestedContractNotFound"),
+			ContractError::NestDepthExceeded => write!(f, "NestDepthExceeded"),
 			ContractError::Transfer { msg } => write!(f, "Transfer: {}", msg),
 			ContractError::Panic { msg } => write!(f, "Panic: {}", msg),
 			ContractError::User { msg } => write!(f, "{}", msg),
@@ -226,6 +228,7 @@ impl From<&str> for ContractError {
 			"ShareValueLenExceeded" => ContractError::ShareValueLenExceeded,
 			"NotPayable" => ContractError::NotPayable,
 			"NestedContractNotFound" => ContractError::NestedContractNotFound,
+			"NestDepthExceeded" => ContractError::NestDepthExceeded,
 			_ => {
 				let split = v.find(": ").map(|p| (&v[..p], &v[p + 1..]));
 				match split {

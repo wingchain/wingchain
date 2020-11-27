@@ -14,7 +14,7 @@
 
 use base::{TestExecutorContext, TestVMContext};
 use node_vm::errors::{ContractError, VMError, VMResult};
-use node_vm::{Mode, VMContext};
+use node_vm::{Mode, VMConfig, VMContext};
 use primitives::{Address, Balance, Hash};
 
 use crate::base::ExecutorContext;
@@ -47,6 +47,7 @@ fn test_vm_tb_success() {
 	// init token bank contract
 	let tx_hash = Some(Hash(vec![1]));
 	let context = TestVMContext::new(
+		VMConfig::default(),
 		tx_hash,
 		token_bank_contract_address.clone(),
 		Some(account1.3.clone()),
@@ -74,6 +75,7 @@ fn test_vm_tb_success() {
 	// approve in token contract
 	let tx_hash = Some(Hash(vec![2]));
 	let context = TestVMContext::new(
+		VMConfig::default(),
 		tx_hash,
 		token_contract_address.clone(),
 		Some(account1.3.clone()),
@@ -104,6 +106,7 @@ fn test_vm_tb_success() {
 	// deposit in token bank contract
 	let tx_hash = Some(Hash(vec![3]));
 	let context = TestVMContext::new(
+		VMConfig::default(),
 		tx_hash,
 		token_bank_contract_address.clone(),
 		Some(account1.3.clone()),
@@ -127,6 +130,7 @@ fn test_vm_tb_success() {
 	// check bank balance after depositing
 	let tx_hash = Some(Hash(vec![4]));
 	let context = TestVMContext::new(
+		VMConfig::default(),
 		tx_hash,
 		token_bank_contract_address.clone(),
 		Some(account1.3.clone()),
@@ -150,6 +154,7 @@ fn test_vm_tb_success() {
 	// check token balance after depositing
 	let tx_hash = Some(Hash(vec![5]));
 	let context = TestVMContext::new(
+		VMConfig::default(),
 		tx_hash,
 		token_contract_address.clone(),
 		Some(account1.3.clone()),
@@ -174,6 +179,7 @@ fn test_vm_tb_success() {
 
 	let tx_hash = Some(Hash(vec![6]));
 	let context = TestVMContext::new(
+		VMConfig::default(),
 		tx_hash,
 		token_contract_address.clone(),
 		Some(account1.3.clone()),
@@ -208,6 +214,7 @@ fn test_vm_tb_success() {
 	// withdraw in token bank contract
 	let tx_hash = Some(Hash(vec![7]));
 	let context = TestVMContext::new(
+		VMConfig::default(),
 		tx_hash,
 		token_bank_contract_address.clone(),
 		Some(account1.3.clone()),
@@ -231,6 +238,7 @@ fn test_vm_tb_success() {
 	// check bank balance after withdrawing
 	let tx_hash = Some(Hash(vec![8]));
 	let context = TestVMContext::new(
+		VMConfig::default(),
 		tx_hash,
 		token_bank_contract_address.clone(),
 		Some(account1.3.clone()),
@@ -254,6 +262,7 @@ fn test_vm_tb_success() {
 	// check token balance after withdrawing
 	let tx_hash = Some(Hash(vec![9]));
 	let context = TestVMContext::new(
+		VMConfig::default(),
 		tx_hash,
 		token_contract_address.clone(),
 		Some(account1.3.clone()),
@@ -278,6 +287,7 @@ fn test_vm_tb_success() {
 
 	let tx_hash = Some(Hash(vec![10]));
 	let context = TestVMContext::new(
+		VMConfig::default(),
 		tx_hash,
 		token_contract_address.clone(),
 		Some(account1.3.clone()),
@@ -336,6 +346,7 @@ fn test_vm_tb_failed() {
 	// init token bank contract
 	let tx_hash = Some(Hash(vec![1]));
 	let context = TestVMContext::new(
+		VMConfig::default(),
 		tx_hash,
 		token_bank_contract_address.clone(),
 		Some(account1.3.clone()),
@@ -363,6 +374,7 @@ fn test_vm_tb_failed() {
 	// approve in token contract
 	let tx_hash = Some(Hash(vec![2]));
 	let context = TestVMContext::new(
+		VMConfig::default(),
 		tx_hash,
 		token_contract_address.clone(),
 		Some(account1.3.clone()),
@@ -393,6 +405,7 @@ fn test_vm_tb_failed() {
 	// deposit in token bank contract
 	let tx_hash = Some(Hash(vec![3]));
 	let context = TestVMContext::new(
+		VMConfig::default(),
 		tx_hash,
 		token_bank_contract_address.clone(),
 		Some(account1.3.clone()),
@@ -443,6 +456,7 @@ fn test_vm_tb_ea() {
 	// init token bank contract
 	let tx_hash = Some(Hash(vec![1]));
 	let context = TestVMContext::new(
+		VMConfig::default(),
 		tx_hash,
 		token_bank_contract_address.clone(),
 		Some(account1.3.clone()),
@@ -470,6 +484,7 @@ fn test_vm_tb_ea() {
 	// approve in token contract
 	let tx_hash = Some(Hash(vec![2]));
 	let context = TestVMContext::new(
+		VMConfig::default(),
 		tx_hash,
 		token_contract_address.clone(),
 		Some(account1.3.clone()),
@@ -500,6 +515,7 @@ fn test_vm_tb_ea() {
 	// deposit in token bank contract
 	let tx_hash = Some(Hash(vec![3]));
 	let context = TestVMContext::new(
+		VMConfig::default(),
 		tx_hash,
 		token_bank_contract_address.clone(),
 		Some(account1.3.clone()),
@@ -517,7 +533,10 @@ fn test_vm_tb_ea() {
 		0,
 	)
 	.unwrap();
-	assert_eq!(success, "false".to_string());
+	assert_eq!(
+		success,
+		r#""false: ContractError: Exceed allowance""#.to_string()
+	);
 }
 
 fn vm_execute(

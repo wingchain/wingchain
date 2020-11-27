@@ -190,6 +190,18 @@ impl Contract {
 		};
 		Ok(result)
 	}
+
+	#[call]
+	fn nested_contract_execute(&self, _params: EmptyParams) -> ContractResult<Vec<u8>> {
+		let contract_address = &self.context.contract_env()?.contract_address;
+		let method = "nested_contract_execute";
+		let params = "".as_bytes();
+		let pay_value = 0;
+		let result = self
+			.context
+			.contract_execute(contract_address, method, params, pay_value)?;
+		Ok(result)
+	}
 }
 
 #[derive(Deserialize)]
