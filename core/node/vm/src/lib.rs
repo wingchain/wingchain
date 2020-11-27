@@ -265,23 +265,23 @@ impl VMContext for DummyVMContext {
 	}
 	fn nested_vm_contract_execute(
 		&self,
-		contract_address: &Address,
-		method: &str,
-		params: &[u8],
-		pay_value: Balance,
+		_contract_address: &Address,
+		_method: &str,
+		_params: &[u8],
+		_pay_value: Balance,
 	) -> VMResult<Vec<u8>> {
 		unreachable!()
 	}
 	fn nested_vm_payload_drain_buffer(&self) -> VMResult<Vec<(DBKey, Option<DBValue>)>> {
 		unreachable!()
 	}
-	fn nested_vm_payload_apply(&self, items: Vec<(DBKey, Option<DBValue>)>) -> VMResult<()> {
+	fn nested_vm_payload_apply(&self, _items: Vec<(DBKey, Option<DBValue>)>) -> VMResult<()> {
 		unreachable!()
 	}
 	fn nested_vm_drain_events(&self) -> VMResult<Vec<Event>> {
 		unreachable!()
 	}
-	fn nested_vm_apply_events(&self, items: Vec<Event>) -> VMResult<()> {
+	fn nested_vm_apply_events(&self, _items: Vec<Event>) -> VMResult<()> {
 		unreachable!()
 	}
 }
