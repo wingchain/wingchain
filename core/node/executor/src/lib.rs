@@ -82,12 +82,12 @@ impl ContextEssence {
 
 #[derive(Clone)]
 pub struct Context<'a> {
-	inner: Rc<ContextInner<'a>>,
+	inner: Arc<ContextInner<'a>>,
 }
 
 struct ContextInner<'a> {
 	env: Rc<ContextEnv>,
-	call_env: RefCell<Option<Rc<CallEnv>>>,
+	call_env: RefCell<Rc<CallEnv>>,
 	trie_root: Arc<TrieRoot>,
 	meta_statedb: Arc<StateDB>,
 	meta_state_root: Rc<Hash>,
@@ -129,12 +129,7 @@ impl<'a> ContextT for Context<'a> {
 		self.inner.env.clone()
 	}
 	fn call_env(&self) -> Rc<CallEnv> {
-		self.inner
-			.call_env
-			.borrow()
-			.as_ref()
-			.expect("should set before")
-			.clone()
+		self.inner.call_env.borrow().clone()
 	}
 	fn meta_get(&self, key: &[u8]) -> ModuleResult<Option<DBValue>> {
 		let tx_buffer = self.inner.meta_state.tx_buffer.borrow();
@@ -220,9 +215,9 @@ impl<'a> Context<'a> {
 		let meta_state = ContextState::new(&context_essence.meta_stmt)?;
 		let payload_state = ContextState::new(&context_essence.payload_stmt)?;
 
-		let inner = Rc::new(ContextInner {
+		let inner = Arc::new(ContextInner {
 			env: context_essence.env.clone(),
-			call_env: RefCell::new(None),
+			call_env: RefCell::new(Rc::new(CallEnv::default())),
 			trie_root: context_essence.trie_root.clone(),
 			meta_statedb: context_essence.meta_statedb.clone(),
 			meta_state_root: context_essence.meta_state_root.clone(),
@@ -482,10 +477,6 @@ impl Executor {
 	) -> CommonResult<OpaqueCallResult> {
 		let module = &call.module;
 
-		// prepare call env
-		let call_env = CallEnv { tx_hash: None };
-		context.inner.call_env.replace(Some(Rc::new(call_env)));
-
 		Dispatcher::execute_call::<Context, Util>(module, context, &self.util, sender, call)
 	}
 
@@ -531,10 +522,10 @@ impl Executor {
 			});
 
 			// prepare call env
-			let call_env = CallEnv {
+			let call_env = Rc::new(CallEnv {
 				tx_hash: Some(tx_hash.clone()),
-			};
-			context.inner.call_env.replace(Some(Rc::new(call_env)));
+			});
+			*(context.inner.call_env.borrow_mut()) = call_env;
 
 			let result = Dispatcher::execute_call::<Context, Util>(
 				module,

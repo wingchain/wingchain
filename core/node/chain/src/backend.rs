@@ -17,6 +17,7 @@
 use std::fs;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::time::SystemTime;
 
 use log::{debug, info};
 
@@ -143,7 +144,7 @@ impl Backend {
 		)
 	}
 
-	/// Get the execution block number
+	/// Get the executed block number
 	/// the number may not be confirmed
 	pub fn get_execution_number(&self) -> CommonResult<Option<BlockNumber>> {
 		self.db.get_with(
@@ -280,25 +281,19 @@ impl Backend {
 		sender: Option<&Address>,
 		call: &Call,
 	) -> CommonResult<OpaqueCallResult> {
-		let header = match self.get_header(block_hash)? {
-			Some(header) => header,
-			None => {
-				return Err(
-					errors::ErrorKind::Data(format!("unknown block hash: {}", block_hash)).into(),
-				);
-			}
-		};
+		let header = self
+			.get_header(block_hash)?
+			.ok_or(errors::ErrorKind::Data(format!(
+				"unknown block hash: {}",
+				block_hash
+			)))?;
 
-		let execution = match self.get_execution(block_hash)? {
-			Some(execution) => execution,
-			None => {
-				return Err(errors::ErrorKind::Data(format!(
-					"not execution block hash: {}",
-					block_hash
-				))
-				.into());
-			}
-		};
+		let execution = self
+			.get_execution(block_hash)?
+			.ok_or(errors::ErrorKind::Data(format!(
+				"not execution block hash: {}",
+				block_hash
+			)))?;
 
 		let number = header.number;
 		let timestamp = header.timestamp;
@@ -373,56 +368,42 @@ impl Backend {
 		let number = build_block_params.number;
 		let timestamp = build_block_params.timestamp;
 		let parent_number = number - 1;
-		let parent_hash = match self.get_block_hash(&parent_number)? {
-			Some(parent_hash) => parent_hash,
-			None => {
-				return Err(errors::ErrorKind::Data(format!(
-					"invalid block number: {}",
-					parent_number
-				))
-				.into());
-			}
-		};
+		let parent_hash = self
+			.get_block_hash(&parent_number)?
+			.ok_or(errors::ErrorKind::Data(format!(
+				"invalid block number: {}",
+				parent_number
+			)))?;
 		let env = ContextEnv { number, timestamp };
 
-		let parent_header = match self.get_header(&parent_hash)? {
-			Some(header) => header,
-			None => {
-				return Err(errors::ErrorKind::Data(format!(
-					"invalid block hash: {}",
-					parent_hash
-				))
-				.into());
-			}
-		};
+		let parent_header = self
+			.get_header(&parent_hash)?
+			.ok_or(errors::ErrorKind::Data(format!(
+				"invalid block hash: {}",
+				parent_hash
+			)))?;
+
 		let meta_state_root = parent_header.meta_state_root.clone();
 
-		let execution_number = match self.get_execution_number()? {
-			Some(actual_execution_number) => actual_execution_number,
-			None => {
-				return Err(errors::ErrorKind::Data(format!("execution number not found")).into());
-			}
-		};
-		let execution_block_hash = match self.get_block_hash(&execution_number)? {
-			Some(execution_block_hash) => execution_block_hash,
-			None => {
-				return Err(errors::ErrorKind::Data(format!(
+		let execution_number =
+			self.get_execution_number()?
+				.ok_or(errors::ErrorKind::Data(format!(
+					"execution number not found"
+				)))?;
+
+		let execution_block_hash =
+			self.get_block_hash(&execution_number)?
+				.ok_or(errors::ErrorKind::Data(format!(
 					"invalid block number: {}",
 					execution_number
-				))
-				.into());
-			}
-		};
-		let execution = match self.get_execution(&execution_block_hash)? {
-			Some(actual_execution) => actual_execution,
-			None => {
-				return Err(errors::ErrorKind::Data(format!(
-					"execution not found, block_hash: {}",
+				)))?;
+
+		let execution =
+			self.get_execution(&execution_block_hash)?
+				.ok_or(errors::ErrorKind::Data(format!(
+					"not execution block hash: {}",
 					execution_block_hash
-				))
-				.into());
-			}
-		};
+				)))?;
 
 		let block_execution_gap = (number - execution_number) as i8;
 		let block_execution = execution;
@@ -578,6 +559,70 @@ impl Backend {
 		Ok(())
 	}
 
+	fn on_block_committed(&self, number: u64, block_hash: Hash) {}
+
+	fn on_execution_committed(&self, number: u64, block_hash: Hash) {}
+
+	fn update_current_context(&self) -> CommonResult<()> {
+		let confirmed_number =
+			self.get_confirmed_number()?
+				.ok_or(errors::ErrorKind::Data(format!(
+					"confirmed number not found"
+				)))?;
+		let block_hash = self
+			.get_block_hash(&confirmed_number)?
+			.ok_or(errors::ErrorKind::Data(format!(
+				"invalid block number: {}",
+				confirmed_number
+			)))?;
+		let header = self
+			.get_header(&block_hash)?
+			.ok_or(errors::ErrorKind::Data(format!(
+				"invalid block hash: {}",
+				confirmed_number
+			)))?;
+
+		let execution_number =
+			self.get_execution_number()?
+				.ok_or(errors::ErrorKind::Data(format!(
+					"execution number not found"
+				)))?;
+		let execution_block_hash =
+			self.get_block_hash(&execution_number)?
+				.ok_or(errors::ErrorKind::Data(format!(
+					"invalid block number: {}",
+					execution_number
+				)))?;
+		let execution =
+			self.get_execution(&execution_block_hash)?
+				.ok_or(errors::ErrorKind::Data(format!(
+					"not execution block hash: {}",
+					execution_block_hash
+				)))?;
+
+		let number = confirmed_number + 1;
+		let timestamp = SystemTime::now()
+			.duration_since(SystemTime::UNIX_EPOCH)
+			.map(|timestamp| timestamp.as_millis() as u64)
+			.map_err(|_| errors::ErrorKind::Data(format!("timestamp error")))?;
+
+		let meta_state_root = header.meta_state_root;
+		let payload_state_root = execution.payload_execution_state_root;
+
+		let env = ContextEnv { number, timestamp };
+
+		let context_essence = ContextEssence::new(
+			env,
+			self.trie_root.clone(),
+			self.meta_statedb.clone(),
+			meta_state_root,
+			self.payload_statedb.clone(),
+			payload_state_root,
+		)?;
+
+		Ok(())
+	}
+
 	/// Get the spec
 	/// from the db if the chain is inited
 	/// from the spec file if the chain is not inited
@@ -724,6 +769,32 @@ impl Backend {
 		info!("Genesis block inited: block hash: {:?}", block_hash);
 
 		Ok(())
+	}
+}
+
+struct CurrentContext {
+	context_essence: ContextEssence,
+	context: Context<'static>,
+}
+
+impl CurrentContext {
+	fn new(context_essence: ContextEssence) -> CommonResult<Self> {
+		let context = Context::new(&context_essence)?;
+		let context = unsafe {
+			let context = std::mem::transmute::<Context, Context<'static>>(context);
+			context
+		};
+		Ok(CurrentContext {
+			context_essence,
+			context,
+		})
+	}
+	fn get_context(&self) -> CommonResult<&Context<'static>> {
+		let context = unsafe {
+			let context = std::mem::transmute::<&Context<'static>, &Context>(&self.context);
+			context
+		};
+		Ok(context)
 	}
 }
 

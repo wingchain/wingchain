@@ -48,14 +48,22 @@ pub trait Module {
 }
 
 /// Env variables for a block
+#[derive(Clone)]
 pub struct ContextEnv {
 	pub number: BlockNumber,
 	pub timestamp: u64,
 }
 
 /// Env variables for a call
+#[derive(Clone)]
 pub struct CallEnv {
 	pub tx_hash: Option<Hash>,
+}
+
+impl Default for CallEnv {
+	fn default() -> Self {
+		CallEnv { tx_hash: None }
+	}
 }
 
 pub trait Context: Clone {
