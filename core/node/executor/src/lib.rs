@@ -82,7 +82,7 @@ impl ContextEssence {
 
 #[derive(Clone)]
 pub struct Context<'a> {
-	inner: Arc<ContextInner<'a>>,
+	inner: Rc<ContextInner<'a>>,
 }
 
 struct ContextInner<'a> {
@@ -215,7 +215,7 @@ impl<'a> Context<'a> {
 		let meta_state = ContextState::new(&context_essence.meta_stmt)?;
 		let payload_state = ContextState::new(&context_essence.payload_stmt)?;
 
-		let inner = Arc::new(ContextInner {
+		let inner = Rc::new(ContextInner {
 			env: context_essence.env.clone(),
 			call_env: RefCell::new(Rc::new(CallEnv::default())),
 			trie_root: context_essence.trie_root.clone(),
