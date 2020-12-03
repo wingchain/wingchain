@@ -14,6 +14,7 @@
 
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
@@ -37,7 +38,7 @@ where
 	U: Util,
 {
 	#[allow(dead_code)]
-	env: Rc<ContextEnv>,
+	env: Arc<ContextEnv>,
 	context: C,
 	util: U,
 	/// contract address -> admin
@@ -138,10 +139,10 @@ impl<C: Context, U: Util> Module<C, U> {
 		Ok(code_hash)
 	}
 
-	fn validate_create(util: &U, params: CreateParams) -> ModuleResult<()> {
+	fn validate_create(&self, _sender: Option<&Address>, params: CreateParams) -> ModuleResult<()> {
 		let vm = VM::new(VMConfig::default());
 		let code = params.code;
-		let code_hash = util.hash(&code)?;
+		let code_hash = self.util.hash(&code)?;
 		let init_method = params.init_method;
 		let init_params = params.init_params;
 		let init_pay_value = params.init_pay_value;
@@ -190,9 +191,13 @@ impl<C: Context, U: Util> Module<C, U> {
 		Ok(contract_address)
 	}
 
-	fn validate_update_admin(util: &U, params: UpdateAdminParams) -> ModuleResult<()> {
+	fn validate_update_admin(
+		&self,
+		_sender: Option<&Address>,
+		params: UpdateAdminParams,
+	) -> ModuleResult<()> {
 		for (address, _) in params.admin.members {
-			util.validate_address(&address)?;
+			self.util.validate_address(&address)?;
 		}
 		Ok(())
 	}

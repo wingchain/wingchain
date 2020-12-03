@@ -14,7 +14,7 @@
 
 /// Executor primitives for modules
 use std::marker::PhantomData;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use codec::{Decode, Encode};
 use primitives::{codec, Address, BlockNumber, Call, DBKey, DBValue, Event, Hash};
@@ -37,11 +37,11 @@ pub trait Module {
 
 	fn new(context: Self::C, util: Self::U) -> Self;
 
-	/// validate the call
-	fn validate_call(util: &Self::U, call: &Call) -> ModuleResult<()>;
-
 	/// check if the call is a write call, a transaction should be built by a write call
 	fn is_write_call(call: &Call) -> Option<bool>;
+
+	/// validate the call
+	fn validate_call(&self, sender: Option<&Address>, call: &Call) -> ModuleResult<()>;
 
 	/// execute the call
 	fn execute_call(&self, sender: Option<&Address>, call: &Call) -> OpaqueModuleResult;
@@ -68,9 +68,9 @@ impl Default for CallEnv {
 
 pub trait Context: Clone {
 	/// Env for a context
-	fn env(&self) -> Rc<ContextEnv>;
+	fn env(&self) -> Arc<ContextEnv>;
 	/// Env for a call
-	fn call_env(&self) -> Rc<CallEnv>;
+	fn call_env(&self) -> Arc<CallEnv>;
 	/// get meta state
 	fn meta_get(&self, key: &[u8]) -> ModuleResult<Option<DBValue>>;
 	/// set meta state (only save into tx buffer)

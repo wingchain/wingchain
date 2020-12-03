@@ -15,6 +15,7 @@
 use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
+use std::sync::Arc;
 
 use executor_primitives::{
 	self, CallEnv, Context, ContextEnv, EmptyParams, Module, ModuleError, ModuleResult, StorageMap,
@@ -81,10 +82,10 @@ impl<EC: Context> StackedExecutorContext<EC> {
 }
 
 impl<EC: Context> Context for StackedExecutorContext<EC> {
-	fn env(&self) -> Rc<ContextEnv> {
+	fn env(&self) -> Arc<ContextEnv> {
 		self.executor_context.env()
 	}
-	fn call_env(&self) -> Rc<CallEnv> {
+	fn call_env(&self) -> Arc<CallEnv> {
 		self.executor_context.call_env()
 	}
 	fn meta_get(&self, key: &[u8]) -> ModuleResult<Option<DBValue>> {
@@ -420,14 +421,14 @@ impl<M: Module> VMContext for DefaultVMContext<M> {
 			recipient: recipient.clone(),
 			value,
 		};
-		module_balance::Module::<M::C, M::U>::validate_transfer(
-			&self.executor_util,
-			params.clone(),
-		)
-		.map_err(Self::module_to_vm_error)?;
 		let balance_module =
 			module_balance::Module::new(self.module_context.clone(), self.executor_util.clone());
 		let sender = Some(sender);
+
+		balance_module
+			.validate_transfer(sender, params.clone())
+			.map_err(Self::module_to_vm_error)?;
+
 		balance_module
 			.transfer(sender, params)
 			.map_err(Self::module_to_vm_error)?;

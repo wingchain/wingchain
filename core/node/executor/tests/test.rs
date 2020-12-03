@@ -151,33 +151,6 @@ fn test_executor() {
 	db.write(payload_transaction).unwrap();
 
 	// block 1
-
-	let nonce = 0u32;
-	let until = 1u64;
-
-	let tx = executor
-		.build_tx(
-			Some((account1.0.clone(), nonce, until)),
-			"balance".to_string(),
-			"transfer".to_string(),
-			module::balance::TransferParams {
-				recipient: account2.3.clone(),
-				value: 2,
-			},
-		)
-		.unwrap();
-	executor.validate_tx(&tx, true).unwrap();
-
-	let block_1_meta_txs = vec![];
-
-	let block_1_payload_txs = vec![tx]
-		.into_iter()
-		.map(|tx| {
-			let tx_hash = executor.hash_transaction(&tx).unwrap();
-			Arc::new(FullTransaction { tx, tx_hash })
-		})
-		.collect::<Vec<_>>();
-
 	let number = 1;
 	let timestamp = timestamp + 1;
 
@@ -193,6 +166,32 @@ fn test_executor() {
 	)
 	.unwrap();
 	let context = Context::new(&context_essence).unwrap();
+
+	let nonce = 0u32;
+	let until = 1u64;
+
+	let tx = executor
+		.build_tx(
+			Some((account1.0.clone(), nonce, until)),
+			"balance".to_string(),
+			"transfer".to_string(),
+			module::balance::TransferParams {
+				recipient: account2.3.clone(),
+				value: 2,
+			},
+		)
+		.unwrap();
+	executor.validate_tx(&context, &tx, true).unwrap();
+
+	let block_1_meta_txs = vec![];
+
+	let block_1_payload_txs = vec![tx]
+		.into_iter()
+		.map(|tx| {
+			let tx_hash = executor.hash_transaction(&tx).unwrap();
+			Arc::new(FullTransaction { tx, tx_hash })
+		})
+		.collect::<Vec<_>>();
 
 	executor
 		.execute_txs(&context, block_1_meta_txs.clone())
@@ -225,13 +224,46 @@ fn test_executor() {
 
 #[test]
 fn test_executor_validate_tx() {
+	use tempfile::tempdir;
+
+	let path = tempdir().expect("could not create a temp dir");
+	let path = path.into_path();
+
+	let db = Arc::new(DB::open(&path).unwrap());
+
 	let hasher = Arc::new(HashImpl::Blake2b256);
 	let dsa = Arc::new(DsaImpl::Ed25519);
 	let address = Arc::new(AddressImpl::Blake2b160);
 
 	let (account1, account2) = test_accounts(dsa.clone(), address.clone());
 
-	let executor = Executor::new(hasher, dsa, address);
+	let executor = Executor::new(hasher.clone(), dsa.clone(), address.clone());
+
+	let meta_statedb =
+		Arc::new(StateDB::new(db.clone(), node_db::columns::META_STATE, hasher.clone()).unwrap());
+	let payload_statedb = Arc::new(
+		StateDB::new(db.clone(), node_db::columns::PAYLOAD_STATE, hasher.clone()).unwrap(),
+	);
+	let trie_root = Arc::new(TrieRoot::new(hasher.clone()).unwrap());
+
+	let meta_state_root = meta_statedb.default_root();
+	let payload_state_root = meta_statedb.default_root();
+
+	let env = ContextEnv {
+		number: 0,
+		timestamp: 0,
+	};
+
+	let context_essence = ContextEssence::new(
+		env,
+		trie_root.clone(),
+		meta_statedb.clone(),
+		Hash(meta_state_root),
+		payload_statedb.clone(),
+		Hash(payload_state_root),
+	)
+	.unwrap();
+	let context = Context::new(&context_essence).unwrap();
 
 	let nonce = 0u32;
 	let until = 1u64;
@@ -295,7 +327,7 @@ fn test_executor_validate_tx() {
 		tx.witness = Some(witness);
 		tx
 	};
-	let result = executor.validate_tx(&tx, true);
+	let result = executor.validate_tx(&context, &tx, true);
 	assert!(format!("{}", result.unwrap_err()).contains("Error: Invalid tx witness"));
 }
 

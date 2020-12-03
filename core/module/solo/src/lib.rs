@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::rc::Rc;
+use std::sync::Arc;
 
 use executor_macro::{call, module};
 use executor_primitives::{
@@ -27,7 +27,7 @@ where
 	C: Context,
 	U: Util,
 {
-	env: Rc<ContextEnv>,
+	env: Arc<ContextEnv>,
 	#[allow(dead_code)]
 	util: U,
 	block_interval: StorageValue<Option<u64>, Self>,

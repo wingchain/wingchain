@@ -19,6 +19,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::SystemTime;
 
+use atomic_refcell::AtomicRefCell;
 use log::{debug, info};
 
 use crypto::address::AddressImpl;
@@ -48,6 +49,7 @@ pub struct Backend {
 	trie_root: Arc<TrieRoot>,
 	executor: Executor,
 	basic: Arc<Basic>,
+	current_context_essence: AtomicRefCell<Option<ContextEssence>>,
 }
 
 impl Backend {
@@ -75,6 +77,8 @@ impl Backend {
 
 		let basic = Arc::new(Basic { hash, dsa, address });
 
+		let current_context_essence = AtomicRefCell::new(None);
+
 		let mut backend = Self {
 			db,
 			config,
@@ -83,6 +87,7 @@ impl Backend {
 			trie_root,
 			executor,
 			basic,
+			current_context_essence,
 		};
 
 		info!("Initializing backend: genesis_inited: {}", genesis_inited);
@@ -116,7 +121,11 @@ impl Backend {
 		tx: &Transaction,
 		witness_required: bool,
 	) -> CommonResult<()> {
-		self.executor.validate_tx(tx, witness_required)
+		let context_essence = self.current_context_essence.borrow();
+		let context_essence = context_essence.as_ref().expect("qed");
+		let context = Context::new(&context_essence)?;
+
+		self.executor.validate_tx(&context, tx, witness_required)
 	}
 
 	/// Build a transaction
@@ -488,6 +497,8 @@ impl Backend {
 			number, block_hash
 		);
 
+		self.on_block_committed(number, block_hash)?;
+
 		Ok(())
 	}
 
@@ -556,14 +567,22 @@ impl Backend {
 			number, block_hash
 		);
 
+		self.on_execution_committed(number, block_hash)?;
+
 		Ok(())
 	}
 
-	fn on_block_committed(&self, number: u64, block_hash: Hash) {}
+	fn on_block_committed(&self, _number: u64, _block_hash: Hash) -> CommonResult<()> {
+		self.update_current_context_essence()?;
+		Ok(())
+	}
 
-	fn on_execution_committed(&self, number: u64, block_hash: Hash) {}
+	fn on_execution_committed(&self, _number: u64, _block_hash: Hash) -> CommonResult<()> {
+		self.update_current_context_essence()?;
+		Ok(())
+	}
 
-	fn update_current_context(&self) -> CommonResult<()> {
+	fn update_current_context_essence(&self) -> CommonResult<()> {
 		let confirmed_number =
 			self.get_confirmed_number()?
 				.ok_or(errors::ErrorKind::Data(format!(
@@ -619,6 +638,8 @@ impl Backend {
 			self.payload_statedb.clone(),
 			payload_state_root,
 		)?;
+
+		(*self.current_context_essence.borrow_mut()) = Some(context_essence);
 
 		Ok(())
 	}
@@ -768,33 +789,9 @@ impl Backend {
 
 		info!("Genesis block inited: block hash: {:?}", block_hash);
 
+		self.on_execution_committed(number, block_hash)?;
+
 		Ok(())
-	}
-}
-
-struct CurrentContext {
-	context_essence: ContextEssence,
-	context: Context<'static>,
-}
-
-impl CurrentContext {
-	fn new(context_essence: ContextEssence) -> CommonResult<Self> {
-		let context = Context::new(&context_essence)?;
-		let context = unsafe {
-			let context = std::mem::transmute::<Context, Context<'static>>(context);
-			context
-		};
-		Ok(CurrentContext {
-			context_essence,
-			context,
-		})
-	}
-	fn get_context(&self) -> CommonResult<&Context<'static>> {
-		let context = unsafe {
-			let context = std::mem::transmute::<&Context<'static>, &Context>(&self.context);
-			context
-		};
-		Ok(context)
 	}
 }
 
