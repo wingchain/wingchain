@@ -269,16 +269,6 @@ fn test_executor_validate_tx() {
 	let until = 1u64;
 
 	// invalid tx
-	let tx = executor.build_tx(
-		Some((account1.0.clone(), nonce, until)),
-		"balance".to_string(),
-		"transfer".to_string(),
-		module::balance::TransferParams {
-			recipient: Address(vec![1u8]),
-			value: 2,
-		},
-	);
-	assert!(format!("{}", tx.unwrap_err()).contains("Error: Invalid address"));
 
 	let tx = executor.build_tx(
 		Some((account1.0.clone(), nonce, until)),
@@ -309,6 +299,20 @@ fn test_executor_validate_tx() {
 		Params(vec![0u8]),
 	);
 	assert!(format!("{}", tx.unwrap_err()).contains("Error: Invalid tx params"));
+
+	let tx = executor
+		.build_tx(
+			Some((account1.0.clone(), nonce, until)),
+			"balance".to_string(),
+			"transfer".to_string(),
+			module::balance::TransferParams {
+				recipient: Address(vec![1u8]),
+				value: 2,
+			},
+		)
+		.unwrap();
+	let result = executor.validate_tx(&context, &tx, true);
+	assert!(format!("{}", result.unwrap_err()).contains("Error: Invalid address"));
 
 	let tx = {
 		let mut tx = executor

@@ -133,7 +133,7 @@ async fn test_solo_contract_create_fail() {
 
 	let ori_code = get_code().to_vec();
 
-	let tx1_error = chain
+	let tx1 = chain
 		.build_transaction(
 			Some((account1.0.clone(), 0, 10)),
 			"contract".to_string(),
@@ -145,13 +145,15 @@ async fn test_solo_contract_create_fail() {
 				init_params: r#"{"value1":"abc"}"#.as_bytes().to_vec(),
 			},
 		)
-		.unwrap_err();
+		.unwrap();
+
+	let tx1_error = chain.validate_transaction(&tx1, true).unwrap_err();
 	assert_eq!(
 		tx1_error.to_string(),
 		"[CommonError] Kind: Executor, Error: ContractError: InvalidParams".to_string()
 	);
 
-	let tx1_error = chain
+	let tx1 = chain
 		.build_transaction(
 			Some((account1.0.clone(), 0, 10)),
 			"contract".to_string(),
@@ -163,7 +165,9 @@ async fn test_solo_contract_create_fail() {
 				init_params: r#"{"value":"abc"}"#.as_bytes().to_vec(),
 			},
 		)
-		.unwrap_err();
+		.unwrap();
+	let tx1_error = chain.validate_transaction(&tx1, true).unwrap_err();
+
 	assert_eq!(tx1_error.to_string(), "[CommonError] Kind: Executor, Error: PreCompileError: ValidationError: Bad magic number (at offset 0)".to_string());
 }
 

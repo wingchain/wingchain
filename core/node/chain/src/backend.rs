@@ -716,6 +716,13 @@ impl Backend {
 
 		let context = Context::new(&context_essence)?;
 
+		for tx in &meta_txs {
+			self.executor.validate_tx(&context, &tx.tx, false)?;
+		}
+		for tx in &payload_txs {
+			self.executor.validate_tx(&context, &tx.tx, false)?;
+		}
+
 		self.executor.execute_txs(&context, meta_txs)?;
 		self.executor.execute_txs(&context, payload_txs)?;
 

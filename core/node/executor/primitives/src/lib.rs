@@ -40,7 +40,12 @@ pub trait Module {
 	/// check if the call is a write call, a transaction should be built by a write call
 	fn is_write_call(call: &Call) -> Option<bool>;
 
+	/// check the call
+	/// static check without context
+	fn check_call(call: &Call) -> ModuleResult<()>;
+
 	/// validate the call
+	/// dynamic check with context
 	fn validate_call(&self, sender: Option<&Address>, call: &Call) -> ModuleResult<()>;
 
 	/// execute the call

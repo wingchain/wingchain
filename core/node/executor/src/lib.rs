@@ -393,6 +393,8 @@ impl Executor {
 			params,
 		};
 
+		Dispatcher::check_call::<Context, Util>(&module, &call)?;
+
 		let witness = match witness {
 			Some((secret_key, nonce, until)) => {
 				let genesis_hash = &self.genesis_hash;
