@@ -81,6 +81,10 @@ fn build_tx(
 			let params: module::solo::InitParams = JsonParams(params).try_into()?;
 			executor.build_tx(None, module.clone(), method.clone(), params)
 		}
+		("contract", "init") => {
+			let params: module::contract::InitParams = JsonParams(params).try_into()?;
+			executor.build_tx(None, module.clone(), method.clone(), params)
+		}
 		_ => Err(errors::ErrorKind::Spec(format!(
 			"unknown module or method: {}.{}",
 			module, method
@@ -154,6 +158,32 @@ impl<'a> TryInto<module::solo::InitParams> for JsonParams<'a> {
 	}
 }
 
+impl<'a> TryInto<module::contract::InitParams> for JsonParams<'a> {
+	type Error = CommonError;
+	fn try_into(self) -> Result<module::contract::InitParams, Self::Error> {
+		#[derive(Deserialize)]
+		pub struct InitParams {
+			pub max_stack_height: Option<u32>,
+			pub initial_memory_pages: Option<u32>,
+			pub max_memory_pages: Option<u32>,
+			pub max_share_value_len: Option<u64>,
+			pub max_share_size: Option<u64>,
+			pub max_nest_depth: Option<u32>,
+		}
+		let params = serde_json::from_str::<InitParams>(self.0)
+			.map_err(|e| errors::ErrorKind::Spec(format!("invalid json: {:?}", e)))?;
+
+		Ok(module::contract::InitParams {
+			max_stack_height: params.max_stack_height,
+			initial_memory_pages: params.initial_memory_pages,
+			max_memory_pages: params.max_memory_pages,
+			max_share_value_len: params.max_share_value_len,
+			max_share_size: params.max_share_size,
+			max_nest_depth: params.max_nest_depth,
+		})
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use crypto::address::AddressImpl;
@@ -223,6 +253,56 @@ mod tests {
 	}
 
 	#[test]
+	fn test_into_solo_init_params() {
+		let str = r#"
+		{
+			"block_interval": 1000
+		}
+		"#;
+
+		let json_params = JsonParams(&str);
+
+		let param: module::solo::InitParams = json_params.try_into().unwrap();
+
+		assert_eq!(
+			param,
+			module::solo::InitParams {
+				block_interval: Some(1000),
+			}
+		)
+	}
+
+	#[test]
+	fn test_into_contract_init_params() {
+		let str = r#"
+		{
+			"max_stack_height": 16384,
+			"initial_memory_pages": 1024,
+			"max_memory_pages": 2048,
+			"max_share_value_len": 104857600,
+			"max_share_size": 1024,
+			"max_nest_depth": 8
+		}
+		"#;
+
+		let json_params = JsonParams(&str);
+
+		let param: module::contract::InitParams = json_params.try_into().unwrap();
+
+		assert_eq!(
+			param,
+			module::contract::InitParams {
+				max_stack_height: Some(16384),
+				initial_memory_pages: Some(1024),
+				max_memory_pages: Some(2048),
+				max_share_value_len: Some(104857600),
+				max_share_size: Some(1024),
+				max_nest_depth: Some(8),
+			}
+		)
+	}
+
+	#[test]
 	fn test_build_genesis_txs() {
 		let spec = Spec {
 			basic: Basic {
@@ -256,6 +336,31 @@ mod tests {
 						"#
 						.to_string(),
 					},
+					Tx {
+						module: "solo".to_string(),
+						method: "init".to_string(),
+						params: r#"
+							{
+								"block_interval": 1000
+							}
+						"#
+						.to_string(),
+					},
+					Tx {
+						module: "contract".to_string(),
+						method: "init".to_string(),
+						params: r#"
+							{
+								"max_stack_height": 16384,
+								"initial_memory_pages": 1024,
+								"max_memory_pages": 2048,
+								"max_share_value_len": 104857600,
+								"max_share_size": 1024,
+								"max_nest_depth": 8
+							}
+						"#
+						.to_string(),
+					},
 				],
 			},
 		};
@@ -275,7 +380,7 @@ mod tests {
 
 		assert_eq!(number, 0);
 		assert_eq!(timestamp, 1587051962189);
-		assert_eq!(meta_txs.len(), 1);
-		assert_eq!(payload_txs.len(), 1);
+		assert_eq!(meta_txs.len(), 2);
+		assert_eq!(payload_txs.len(), 2);
 	}
 }

@@ -21,7 +21,7 @@ use serde::{Deserialize, Serialize};
 use executor_macro::{call, module};
 use executor_primitives::{
 	errors, errors::ApplicationError, Context, ContextEnv, Module as ModuleT, ModuleError,
-	ModuleResult, OpaqueModuleResult, StorageMap, Util,
+	ModuleResult, OpaqueModuleResult, StorageMap, StorageValue, Util,
 };
 use node_vm::errors::VMError;
 use node_vm::{Mode, VMConfig, VMContext, VMContractEnv, VM};
@@ -41,6 +41,14 @@ where
 	env: Arc<ContextEnv>,
 	context: C,
 	util: U,
+
+	max_stack_height: StorageValue<Option<u32>, Self>,
+	initial_memory_pages: StorageValue<Option<u32>, Self>,
+	max_memory_pages: StorageValue<Option<u32>, Self>,
+	max_share_value_len: StorageValue<Option<u64>, Self>,
+	max_share_size: StorageValue<Option<u64>, Self>,
+	max_nest_depth: StorageValue<Option<u32>, Self>,
+
 	/// contract address -> admin
 	admin: StorageMap<Address, Admin, Self>,
 	/// contract address -> current version
@@ -71,6 +79,12 @@ impl<C: Context, U: Util> Module<C, U> {
 			env: context.env(),
 			context: context.clone(),
 			util,
+			max_stack_height: StorageValue::new(context.clone(), b"max_stack_height"),
+			initial_memory_pages: StorageValue::new(context.clone(), b"initial_memory_pages"),
+			max_memory_pages: StorageValue::new(context.clone(), b"max_memory_pages"),
+			max_share_value_len: StorageValue::new(context.clone(), b"max_share_value_len"),
+			max_share_size: StorageValue::new(context.clone(), b"max_share_size"),
+			max_nest_depth: StorageValue::new(context.clone(), b"max_nest_depth"),
 			admin: StorageMap::new(context.clone(), b"admin"),
 			version: StorageMap::new(context.clone(), b"version"),
 			code: StorageMap::new(context.clone(), b"code"),
@@ -80,6 +94,21 @@ impl<C: Context, U: Util> Module<C, U> {
 			update_code_proposal_id: StorageMap::new(context.clone(), b"update_code_proposal_id"),
 			update_code_proposal: StorageMap::new(context, b"update_code_proposal"),
 		}
+	}
+
+	#[call(write = true)]
+	fn init(&self, _sender: Option<&Address>, params: InitParams) -> ModuleResult<()> {
+		if self.env.number != 0 {
+			return Err("Not genesis".into());
+		}
+		self.max_stack_height.set(&params.max_stack_height)?;
+		self.initial_memory_pages
+			.set(&params.initial_memory_pages)?;
+		self.max_memory_pages.set(&params.max_memory_pages)?;
+		self.max_share_value_len.set(&params.max_share_value_len)?;
+		self.max_share_size.set(&params.max_share_size)?;
+		self.max_nest_depth.set(&params.max_nest_depth)?;
+		Ok(())
 	}
 
 	#[call]
@@ -140,7 +169,8 @@ impl<C: Context, U: Util> Module<C, U> {
 	}
 
 	fn validate_create(&self, _sender: Option<&Address>, params: CreateParams) -> ModuleResult<()> {
-		let vm = VM::new(VMConfig::default());
+		let vm_config = self.inner_get_vm_config()?;
+		let vm = VM::new(vm_config);
 		let code = params.code;
 		let code_hash = self.util.hash(&code)?;
 		let init_method = params.init_method;
@@ -496,6 +526,43 @@ impl<C: Context, U: Util> Module<C, U> {
 		Ok(code)
 	}
 
+	fn inner_get_vm_config(&self) -> ModuleResult<VMConfig> {
+		let default_vm_config = VMConfig::default();
+		let vm_config = VMConfig {
+			max_stack_height: self
+				.max_stack_height
+				.get()?
+				.ok_or("unexpected none")?
+				.unwrap_or(default_vm_config.max_stack_height),
+			initial_memory_pages: self
+				.initial_memory_pages
+				.get()?
+				.ok_or("unexpected none")?
+				.unwrap_or(default_vm_config.initial_memory_pages),
+			max_memory_pages: self
+				.max_memory_pages
+				.get()?
+				.ok_or("unexpected none")?
+				.unwrap_or(default_vm_config.max_memory_pages),
+			max_share_value_len: self
+				.max_share_value_len
+				.get()?
+				.ok_or("unexpected none")?
+				.unwrap_or(default_vm_config.max_share_value_len),
+			max_share_size: self
+				.max_share_size
+				.get()?
+				.ok_or("unexpected none")?
+				.unwrap_or(default_vm_config.max_share_size),
+			max_nest_depth: self
+				.max_nest_depth
+				.get()?
+				.ok_or("unexpected none")?
+				.unwrap_or(default_vm_config.max_nest_depth),
+		};
+		Ok(vm_config)
+	}
+
 	fn inner_execute(
 		&self,
 		sender_address: Option<Address>,
@@ -508,7 +575,7 @@ impl<C: Context, U: Util> Module<C, U> {
 			contract_address,
 			sender_address,
 		});
-		let vm_config = VMConfig::default();
+		let vm_config = self.inner_get_vm_config()?;
 		let vm_context = DefaultVMContext::<Self>::new(
 			vm_config.clone(),
 			contract_env,
@@ -611,6 +678,16 @@ pub struct ExecuteParams {
 	pub params: Vec<u8>,
 	/// amount sent to contract when execute a payable method
 	pub pay_value: Balance,
+}
+
+#[derive(Encode, Decode, Debug, PartialEq)]
+pub struct InitParams {
+	pub max_stack_height: Option<u32>,
+	pub initial_memory_pages: Option<u32>,
+	pub max_memory_pages: Option<u32>,
+	pub max_share_value_len: Option<u64>,
+	pub max_share_size: Option<u64>,
+	pub max_nest_depth: Option<u32>,
 }
 
 #[derive(Encode, Decode, Debug, PartialEq)]

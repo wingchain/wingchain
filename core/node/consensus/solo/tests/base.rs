@@ -137,6 +137,14 @@ params = '''
     "block_interval": null
 }}
 '''
+
+[[genesis.txs]]
+module = "contract"
+method = "init"
+params = '''
+{{
+}}
+'''
 	"#,
 		address
 	);
