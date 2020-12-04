@@ -272,7 +272,11 @@ impl<M: Module> DefaultVMContext<M> {
 	/// Translate key in vm to key in module
 	/// [module_key]_[contract_data_storage_key]_hash([contract_address]_[key])
 	fn vm_to_module_key(&self, key: &[u8]) -> VMResult<Vec<u8>> {
-		let key = &[&self.contract_env.contract_address.0, SEPARATOR, key].concat();
+		let contract_address = &self.contract_env.contract_address;
+		let contract_address = contract_address
+			.as_ref()
+			.ok_or(ContractError::ContractAddressNotFound)?;
+		let key = &[&contract_address.0, SEPARATOR, key].concat();
 		let key = self
 			.executor_util
 			.hash(key)
@@ -478,8 +482,8 @@ impl<M: Module> VMContext for DefaultVMContext<M> {
 			// when contract A executes the nested contract B
 			// the sender of contract B is contract A
 			let contract_env = Rc::new(VMContractEnv {
-				contract_address: contract_address.clone(),
-				sender_address: Some(self.contract_env.contract_address.clone()),
+				contract_address: Some(contract_address.clone()),
+				sender_address: self.contract_env.contract_address.clone(),
 			});
 
 			let vm_context = ClonableDefaultVMContext {

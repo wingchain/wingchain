@@ -48,6 +48,7 @@ pub enum ContractError {
 	ShareValueLenExceeded,
 	ShareSizeExceeded,
 	NotPayable,
+	ContractAddressNotFound,
 	NestedContractNotFound,
 	NestDepthExceeded,
 	Transfer { msg: String },
@@ -204,6 +205,7 @@ impl fmt::Display for ContractError {
 			ContractError::ShareSizeExceeded => write!(f, "ShareSizeExceeded"),
 			ContractError::ShareValueLenExceeded => write!(f, "ShareValueLenExceeded"),
 			ContractError::NotPayable => write!(f, "NotPayable"),
+			ContractError::ContractAddressNotFound => write!(f, "ContractAddressNotFound"),
 			ContractError::NestedContractNotFound => write!(f, "NestedContractNotFound"),
 			ContractError::NestDepthExceeded => write!(f, "NestDepthExceeded"),
 			ContractError::Transfer { msg } => write!(f, "Transfer: {}", msg),
@@ -227,6 +229,7 @@ impl From<&str> for ContractError {
 			"ShareSizeExceeded" => ContractError::ShareSizeExceeded,
 			"ShareValueLenExceeded" => ContractError::ShareValueLenExceeded,
 			"NotPayable" => ContractError::NotPayable,
+			"ContractAddressNotFound" => ContractError::ContractAddressNotFound,
 			"NestedContractNotFound" => ContractError::NestedContractNotFound,
 			"NestDepthExceeded" => ContractError::NestDepthExceeded,
 			_ => {

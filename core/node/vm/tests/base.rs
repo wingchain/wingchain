@@ -39,6 +39,7 @@ pub fn test_accounts() -> (
 #[allow(dead_code)]
 pub fn vm_validate(
 	code: &[u8],
+	context: &dyn VMContext,
 	mode: Mode,
 	method: &str,
 	params: &str,
@@ -55,7 +56,7 @@ pub fn vm_validate(
 		Hash(out)
 	};
 	let params = params.as_bytes();
-	let result = vm.validate(&code_hash, &code, mode, method, params, pay_value)?;
+	let result = vm.validate(&code_hash, &code, context, mode, method, params, pay_value)?;
 	Ok(result)
 }
 
@@ -300,7 +301,7 @@ impl<EC: ExecutorContext> TestVMContext<EC> {
 	pub fn new(
 		config: VMConfig,
 		tx_hash: Option<Hash>,
-		contract_address: Address,
+		contract_address: Option<Address>,
 		sender_address: Option<Address>,
 		context: EC,
 	) -> Self {
@@ -316,7 +317,7 @@ impl<EC: ExecutorContext> TestVMContext<EC> {
 	fn new_with_base_context(
 		config: Rc<VMConfig>,
 		tx_hash: Option<Hash>,
-		contract_address: Address,
+		contract_address: Option<Address>,
 		sender_address: Option<Address>,
 		base_context: StackedExecutorContext<EC>,
 	) -> Self {
@@ -336,7 +337,7 @@ impl<EC: ExecutorContext> TestVMContext<EC> {
 			call_env: Rc::new(VMCallEnv { tx_hash: tx_hash }),
 			contract_env: Rc::new(VMContractEnv {
 				contract_address,
-				sender_address: sender_address,
+				sender_address,
 			}),
 			base_context,
 			hash: hash.clone(),
@@ -349,7 +350,11 @@ impl<EC: ExecutorContext> TestVMContext<EC> {
 	}
 
 	fn vm_to_module_key(&self, key: &[u8]) -> VMResult<Vec<u8>> {
-		let key = &[&self.contract_env.contract_address.0, SEPARATOR, key].concat();
+		let contract_address = &self.contract_env.contract_address;
+		let contract_address = contract_address
+			.as_ref()
+			.ok_or(ContractError::ContractAddressNotFound)?;
+		let key = &[&contract_address.0, SEPARATOR, key].concat();
 		let key = self.hash(key)?;
 		let key = [b"contract", SEPARATOR, b"contract_data", SEPARATOR, &key.0].concat();
 		Ok(key)
@@ -513,8 +518,8 @@ impl<EC: ExecutorContext> VMContext for TestVMContext<EC> {
 				inner: Rc::new(TestVMContext::new_with_base_context(
 					self.config.clone(),
 					self.call_env.tx_hash.clone(),
-					contract_address.clone(),
-					Some(self.contract_env.contract_address.clone()),
+					Some(contract_address.clone()),
+					self.contract_env.contract_address.clone(),
 					base_context,
 				)),
 			};
@@ -722,7 +727,7 @@ pub fn create_contract<EC: ExecutorContext>(
 	let context = TestVMContext::new(
 		VMConfig::default(),
 		tx_hash,
-		contract_address.clone(),
+		Some(contract_address.clone()),
 		Some(sender.clone()),
 		executor_context,
 	);

@@ -30,7 +30,7 @@ fn test_vm_token_transfer() {
 	let context = TestVMContext::new(
 		VMConfig::default(),
 		tx_hash,
-		contract_address,
+		Some(contract_address),
 		Some(account1.3.clone()),
 		executor_context,
 	);
@@ -117,7 +117,7 @@ fn test_vm_token_transfer_from() {
 	let context = TestVMContext::new(
 		VMConfig::default(),
 		tx_hash,
-		contract_address.clone(),
+		Some(contract_address.clone()),
 		Some(account1.3.clone()),
 		executor_context.clone(),
 	);
@@ -163,7 +163,7 @@ fn test_vm_token_transfer_from() {
 	let context = TestVMContext::new(
 		VMConfig::default(),
 		tx_hash,
-		contract_address,
+		Some(contract_address),
 		Some(account2.3.clone()),
 		executor_context,
 	);

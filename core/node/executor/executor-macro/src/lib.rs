@@ -45,7 +45,7 @@ pub fn dispatcher(_attr: TokenStream, item: TokenStream) -> TokenStream {
 		.iter()
 		.map(|x| {
 			let ident = &x.ident;
-			quote! { stringify!(#ident) => Ok(module::#ident::Module::<C, U>::is_write_call(&call)), }
+			quote! { stringify!(#ident) => Ok(module::#ident::Module::<C, U>::is_write_call(&call)?), }
 		})
 		.collect::<Vec<_>>();
 
@@ -103,7 +103,7 @@ pub fn dispatcher(_attr: TokenStream, item: TokenStream) -> TokenStream {
 					other => Err(errors::ErrorKind::InvalidTxModule(other.to_string()).into()),
 				}
 			}
-			fn is_write_call<C: ContextT, U: UtilT>(module: &str, call: &Call) -> CommonResult<Option<bool>> {
+			fn is_write_call<C: ContextT, U: UtilT>(module: &str, call: &Call) -> CommonResult<bool> {
 				match module {
 					#(#is_write_call_ts_vec)*
 					other => Err(errors::ErrorKind::InvalidTxModule(other.to_string()).into()),
@@ -150,7 +150,7 @@ pub fn module(_attr: TokenStream, item: TokenStream) -> TokenStream {
 		.map(|x| {
 			let method_ident = &x.method_ident;
 			let is_write = x.write;
-			quote! { stringify!(#method_ident) => Some(#is_write), }
+			quote! { stringify!(#method_ident) => Ok(#is_write), }
 		})
 		.collect::<Vec<_>>();
 
@@ -232,11 +232,11 @@ pub fn module(_attr: TokenStream, item: TokenStream) -> TokenStream {
 				Self::new(context, util)
 			}
 
-			fn is_write_call(call: &Call) -> Option<bool> {
+			fn is_write_call(call: &Call) -> ModuleResult<bool> {
 				let method = call.method.as_str();
 				match method {
 					#(#is_write_call_ts_vec)*
-					other => None,
+					other => Err(errors::ErrorKind::InvalidTxMethod(other.to_string()).into()),
 				}
 			}
 

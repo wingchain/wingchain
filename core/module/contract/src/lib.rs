@@ -168,23 +168,18 @@ impl<C: Context, U: Util> Module<C, U> {
 		Ok(code_hash)
 	}
 
-	fn validate_create(&self, _sender: Option<&Address>, params: CreateParams) -> ModuleResult<()> {
-		let vm_config = self.inner_get_vm_config()?;
-		let vm = VM::new(vm_config);
+	fn validate_create(&self, sender: Option<&Address>, params: CreateParams) -> ModuleResult<()> {
 		let code = params.code;
-		let code_hash = self.util.hash(&code)?;
-		let init_method = params.init_method;
-		let init_params = params.init_params;
-		let init_pay_value = params.init_pay_value;
-		vm.validate(
-			&code_hash,
+
+		self.inner_vm_validate(
+			sender.cloned(),
+			None,
 			&code,
 			Mode::Init,
-			&init_method,
-			&init_params,
-			init_pay_value,
-		)
-		.map_err(vm_to_module_error)?;
+			&params.init_method,
+			&params.init_params,
+			params.init_pay_value,
+		)?;
 
 		Ok(())
 	}
@@ -209,14 +204,15 @@ impl<C: Context, U: Util> Module<C, U> {
 		self.code_hash
 			.set(&(contract_address.clone(), version), &code_hash)?;
 
-		let execute_params = ExecuteParams {
-			contract_address: contract_address.clone(),
-			method: params.init_method,
-			params: params.init_params,
-			pay_value: params.init_pay_value,
-		};
-
-		self.inner_execute(Some(sender.clone()), &code, Mode::Init, execute_params)?;
+		self.inner_vm_execute(
+			Some(sender.clone()),
+			Some(contract_address.clone()),
+			&code,
+			Mode::Init,
+			&params.init_method,
+			&params.init_params,
+			params.init_pay_value,
+		)?;
 
 		Ok(contract_address)
 	}
@@ -367,6 +363,29 @@ impl<C: Context, U: Util> Module<C, U> {
 		)
 	}
 
+	fn validate_execute(
+		&self,
+		sender: Option<&Address>,
+		params: ExecuteParams,
+	) -> ModuleResult<()> {
+		let contract_address = &params.contract_address;
+		let code = self
+			.inner_get_code(&contract_address, None)?
+			.ok_or("Contract not found")?;
+
+		self.inner_vm_validate(
+			sender.cloned(),
+			Some(contract_address.clone()),
+			&code,
+			Mode::Call,
+			&params.method,
+			&params.params,
+			params.pay_value,
+		)?;
+
+		Ok(())
+	}
+
 	#[call(write = true)]
 	fn execute(&self, sender: Option<&Address>, params: ExecuteParams) -> ModuleResult<Vec<u8>> {
 		let contract_address = &params.contract_address;
@@ -374,7 +393,15 @@ impl<C: Context, U: Util> Module<C, U> {
 			.inner_get_code(&contract_address, None)?
 			.ok_or("Contract not found")?;
 
-		self.inner_execute(sender.cloned(), &code, Mode::Call, params)
+		self.inner_vm_execute(
+			sender.cloned(),
+			Some(contract_address.clone()),
+			&code,
+			Mode::Call,
+			&params.method,
+			&params.params,
+			params.pay_value,
+		)
 	}
 
 	fn verify_sender(
@@ -563,14 +590,16 @@ impl<C: Context, U: Util> Module<C, U> {
 		Ok(vm_config)
 	}
 
-	fn inner_execute(
+	fn inner_vm_validate(
 		&self,
 		sender_address: Option<Address>,
+		contract_address: Option<Address>,
 		code: &[u8],
 		mode: Mode,
-		params: ExecuteParams,
-	) -> ModuleResult<Vec<u8>> {
-		let contract_address = params.contract_address;
+		method: &str,
+		params: &[u8],
+		pay_value: Balance,
+	) -> ModuleResult<()> {
 		let contract_env = Rc::new(VMContractEnv {
 			contract_address,
 			sender_address,
@@ -585,9 +614,43 @@ impl<C: Context, U: Util> Module<C, U> {
 		let vm = VM::new(vm_config);
 		let code_hash = self.util.hash(&code)?;
 
-		let contract_method = params.method;
-		let contract_params = params.params;
-		let contract_pay_value = params.pay_value;
+		vm.validate(
+			&code_hash,
+			&code,
+			&vm_context,
+			mode,
+			&method,
+			&params,
+			pay_value,
+		)
+		.map_err(vm_to_module_error)?;
+
+		Ok(())
+	}
+
+	fn inner_vm_execute(
+		&self,
+		sender_address: Option<Address>,
+		contract_address: Option<Address>,
+		code: &[u8],
+		mode: Mode,
+		method: &str,
+		params: &[u8],
+		pay_value: Balance,
+	) -> ModuleResult<Vec<u8>> {
+		let contract_env = Rc::new(VMContractEnv {
+			contract_address,
+			sender_address,
+		});
+		let vm_config = self.inner_get_vm_config()?;
+		let vm_context = DefaultVMContext::<Self>::new(
+			vm_config.clone(),
+			contract_env,
+			self.context.clone(),
+			self.util.clone(),
+		);
+		let vm = VM::new(vm_config);
+		let code_hash = self.util.hash(&code)?;
 
 		let result = vm
 			.execute(
@@ -595,9 +658,9 @@ impl<C: Context, U: Util> Module<C, U> {
 				&code,
 				&vm_context,
 				mode,
-				&contract_method,
-				&contract_params,
-				contract_pay_value,
+				&method,
+				&params,
+				pay_value,
 			)
 			.map_err(vm_to_module_error);
 

@@ -53,9 +53,9 @@ impl Context {
 		let tx_hash =
 			option_vec_from_func(|share_id| import::env_tx_hash_read(share_id))?.map(Hash);
 
-		let contract_address = Address(vec_from_func(|share_id| {
-			import::env_contract_address_read(share_id)
-		})?);
+		let contract_address =
+			option_vec_from_func(|share_id| import::env_contract_address_read(share_id))?
+				.map(Address);
 
 		let sender_address =
 			option_vec_from_func(|share_id| import::env_sender_address_read(share_id))?
@@ -291,7 +291,7 @@ pub struct CallEnv {
 }
 
 pub struct ContractEnv {
-	pub contract_address: Address,
+	pub contract_address: Option<Address>,
 	pub sender_address: Option<Address>,
 }
 

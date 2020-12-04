@@ -232,11 +232,16 @@ fn env_tx_hash_read(ctx: &mut Ctx, share_id: u64) -> VMResult<u64> {
 	}
 }
 
-fn env_contract_address_read(ctx: &mut Ctx, share_id: u64) -> VMResult<()> {
+fn env_contract_address_read(ctx: &mut Ctx, share_id: u64) -> VMResult<u64> {
 	let state = State::from_ctx(ctx);
-	let data = state.context.contract_env().contract_address.0.clone();
-	state.vec_to_share(share_id, data)?;
-	Ok(())
+	let data = &state.context.contract_env().contract_address;
+	match data.as_ref() {
+		Some(data) => {
+			state.vec_to_share(share_id, data.0.clone())?;
+			Ok(1)
+		}
+		None => Ok(0),
+	}
 }
 
 fn env_sender_address_read(ctx: &mut Ctx, share_id: u64) -> VMResult<u64> {
@@ -360,6 +365,9 @@ fn balance_transfer(
 	let state = State::from_ctx(ctx);
 
 	let sender_address = &state.context.contract_env().contract_address;
+	let sender_address = sender_address
+		.as_ref()
+		.ok_or(ContractError::ContractAddressNotFound)?;
 
 	let recipient_address = state.memory_to_vec(recipient_address_len, recipient_address_ptr);
 	let recipient_address = Address(recipient_address);
@@ -403,6 +411,9 @@ fn pay(ctx: &mut Ctx) -> VMResult<()> {
 	let sender_address = sender_address.as_ref().ok_or(ContractError::Unsigned)?;
 
 	let contract_address = &state.context.contract_env().contract_address;
+	let contract_address = contract_address
+		.as_ref()
+		.ok_or(ContractError::ContractAddressNotFound)?;
 	let pay_value = state.pay_value;
 
 	if pay_value > 0 {

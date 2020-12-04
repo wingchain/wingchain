@@ -25,7 +25,7 @@ mod env {
 		pub fn env_block_number() -> u64;
 		pub fn env_block_timestamp() -> u64;
 		pub fn env_tx_hash_read(share_id: u64) -> u64;
-		pub fn env_contract_address_read(share_id: u64);
+		pub fn env_contract_address_read(share_id: u64) -> u64;
 		pub fn env_sender_address_read(share_id: u64) -> u64;
 		pub fn storage_read(key_len: u64, key_ptr: u64, share_id: u64) -> u64;
 		pub fn storage_write(
@@ -117,7 +117,7 @@ pub fn env_tx_hash_read(share_id: u64) -> u64 {
 	unsafe { env::env_tx_hash_read(share_id) }
 }
 
-pub fn env_contract_address_read(share_id: u64) {
+pub fn env_contract_address_read(share_id: u64) -> u64 {
 	unsafe { env::env_contract_address_read(share_id) }
 }
 

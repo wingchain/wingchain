@@ -19,6 +19,10 @@ use syn::{
 };
 
 use quote::quote;
+use std::collections::{HashMap, HashSet};
+
+/// Contract method validate_xxx will be treated as the validator of method xxx
+const VALIDATE_METHOD_PREFIX: &'static str = "validate_";
 
 #[proc_macro_attribute]
 pub fn call(_attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -47,6 +51,12 @@ pub fn contract(_attr: TokenStream, item: TokenStream) -> TokenStream {
 				let method_ident = &x.method_ident;
 				let params_ident = x.params_ident.clone();
 				let is_payable = x.payable;
+				let validate = match &x.validate_ident {
+					Some(validate_ident) => quote! {
+					self.#validate_ident(params)
+				},
+					None => quote! {Ok(())},
+				};
 				quote! {
 					stringify!(#method_ident) => {
 						if pay_value > 0 {
@@ -55,8 +65,8 @@ pub fn contract(_attr: TokenStream, item: TokenStream) -> TokenStream {
 							}
 						}
 
-						let _params : #params_ident = serde_json::from_slice(&params).map_err(|_|ContractError::InvalidParams)?;
-						Ok(())
+						let params : #params_ident = serde_json::from_slice(&params).map_err(|_|ContractError::InvalidParams)?;
+						#validate
 					},
 				}
 			})
@@ -101,14 +111,14 @@ pub fn contract(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
 		impl #type_name {
 
-			fn validate_init(method: &str, params: Vec<u8>, pay_value: Balance) -> ContractResult<()> {
+			fn validate_init(&self, method: &str, params: Vec<u8>, pay_value: Balance) -> ContractResult<()> {
 				match method {
 					#(#validate_init_ts_vec)*
 					other => Err(ContractError::InvalidMethod),
 				}
 			}
 
-			fn validate_call(method: &str, params: Vec<u8>, pay_value: Balance) -> ContractResult<()> {
+			fn validate_call(&self, method: &str, params: Vec<u8>, pay_value: Balance) -> ContractResult<()> {
 				match method {
 					#(#validate_call_ts_vec)*
 					other => Err(ContractError::InvalidMethod),
@@ -171,7 +181,8 @@ pub fn contract(_attr: TokenStream, item: TokenStream) -> TokenStream {
 			let params = get_params()?;
 			let pay_value = get_pay_value()?;
 
-			#type_name::validate_init(&method, params, pay_value)?;
+			let contract = #type_name::new()?;
+			contract.validate_init(&method, params, pay_value)?;
 
 			Ok(())
 		}
@@ -181,7 +192,8 @@ pub fn contract(_attr: TokenStream, item: TokenStream) -> TokenStream {
 			let params = get_params()?;
 			let pay_value = get_pay_value()?;
 
-			#type_name::validate_call(&method, params, pay_value)?;
+			let contract = #type_name::new()?;
+			contract.validate_call(&method, params, pay_value)?;
 
 			Ok(())
 		}
@@ -265,6 +277,7 @@ fn get_module_methods_by_name(impl_item: &ItemImpl, name: &str) -> Vec<ModuleMet
 							if word.segments[0].ident == name {
 								Some(ModuleMethod {
 									payable: false,
+									validate_ident: None,
 									method_ident: method.sig.ident.clone(),
 									params_ident: get_method_params_ident(&method),
 									method: method.clone(),
@@ -289,6 +302,7 @@ fn get_module_methods_by_name(impl_item: &ItemImpl, name: &str) -> Vec<ModuleMet
 								let payable = payable.unwrap_or(false);
 								Some(ModuleMethod {
 									payable,
+									validate_ident: None,
 									method_ident: method.sig.ident.clone(),
 									params_ident: get_method_params_ident(&method),
 									method: method.clone(),
@@ -304,6 +318,41 @@ fn get_module_methods_by_name(impl_item: &ItemImpl, name: &str) -> Vec<ModuleMet
 			} else {
 				None
 			}
+		})
+		.collect::<Vec<_>>();
+
+	let method_names = methods
+		.iter()
+		.map(|x| x.method_ident.to_string())
+		.collect::<HashSet<_>>();
+	let method_validates = impl_item
+		.items
+		.iter()
+		.filter_map(|item| {
+			if let ImplItem::Method(method) = item {
+				let method_name = method.sig.ident.to_string();
+				if method_name.starts_with(VALIDATE_METHOD_PREFIX) {
+					let method_name = method_name.trim_start_matches(VALIDATE_METHOD_PREFIX);
+					if method_names.contains(method_name) {
+						Some((method_name.to_string(), method.sig.ident.clone()))
+					} else {
+						None
+					}
+				} else {
+					None
+				}
+			} else {
+				None
+			}
+		})
+		.collect::<HashMap<_, _>>();
+
+	let methods = methods
+		.into_iter()
+		.map(|mut method| {
+			let method_name = method.method_ident.to_string();
+			method.validate_ident = method_validates.get(&method_name).cloned();
+			method
 		})
 		.collect::<Vec<_>>();
 
@@ -337,4 +386,5 @@ struct ModuleMethod {
 	method_ident: Ident,
 	params_ident: Ident,
 	payable: bool,
+	validate_ident: Option<Ident>,
 }

@@ -71,6 +71,25 @@ async fn test_solo_contract_hw_read() {
 	let block_hash = chain.get_block_hash(&1).unwrap().unwrap();
 	let header = chain.get_header(&block_hash).unwrap().unwrap();
 
+	// hello validate
+	let error = chain
+		.execute_call_with_block_number::<_, Vec<u8>>(
+			&block_number,
+			Some(&account1.3),
+			"contract".to_string(),
+			"execute".to_string(),
+			module::contract::ExecuteParams {
+				contract_address: contract_address.clone(),
+				method: "hello".to_string(),
+				params: r#"{"name": ""}"#.as_bytes().to_vec(),
+				pay_value: 0,
+			},
+		)
+		.unwrap()
+		.unwrap_err();
+	log::info!("error: {}", error);
+	assert_eq!(error, r#"ContractError: Empty name"#.to_string(),);
+
 	// hello
 	let result: Vec<u8> = chain
 		.execute_call_with_block_number(
@@ -234,7 +253,7 @@ async fn test_solo_contract_hw_read() {
 			"execute".to_string(),
 			module::contract::ExecuteParams {
 				contract_address: contract_address.clone(),
-				method: "validate_address".to_string(),
+				method: "verify_address".to_string(),
 				params: r#"{"address":"aa"}"#.as_bytes().to_vec(),
 				pay_value: 0,
 			},
@@ -253,7 +272,7 @@ async fn test_solo_contract_hw_read() {
 			"execute".to_string(),
 			module::contract::ExecuteParams {
 				contract_address: contract_address.clone(),
-				method: "validate_address_ea".to_string(),
+				method: "verify_address_ea".to_string(),
 				params: r#"{"address":"aa"}"#.as_bytes().to_vec(),
 				pay_value: 0,
 			},
