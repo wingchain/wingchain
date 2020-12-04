@@ -388,13 +388,14 @@ impl<C: Context, U: Util> Module<C, U> {
 
 	#[call(write = true)]
 	fn execute(&self, sender: Option<&Address>, params: ExecuteParams) -> ModuleResult<Vec<u8>> {
+		let sender = sender.ok_or(ApplicationError::Unsigned)?;
 		let contract_address = &params.contract_address;
 		let code = self
 			.inner_get_code(&contract_address, None)?
 			.ok_or("Contract not found")?;
 
 		self.inner_vm_execute(
-			sender.cloned(),
+			Some(sender.clone()),
 			Some(contract_address.clone()),
 			&code,
 			Mode::Call,
