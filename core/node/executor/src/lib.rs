@@ -44,14 +44,15 @@ const META_TXS_SIZE: usize = 16;
 const PAYLOAD_TXS_SIZE: usize = 512;
 const EVENT_SIZE: usize = 4;
 
+/// ContextEssence is Send
 pub struct ContextEssence {
-	env: Rc<ContextEnv>,
+	env: Arc<ContextEnv>,
 	trie_root: Arc<TrieRoot>,
 	meta_statedb: Arc<StateDB>,
-	meta_state_root: Rc<Hash>,
+	meta_state_root: Arc<Hash>,
 	meta_stmt: StateDBStmt,
 	payload_statedb: Arc<StateDB>,
-	payload_state_root: Rc<Hash>,
+	payload_state_root: Arc<Hash>,
 	payload_stmt: StateDBStmt,
 }
 
@@ -68,13 +69,13 @@ impl ContextEssence {
 		let payload_stmt = payload_statedb.prepare_stmt(&payload_state_root.0)?;
 
 		Ok(Self {
-			env: Rc::new(env),
+			env: Arc::new(env),
 			trie_root,
 			meta_statedb,
-			meta_state_root: Rc::new(meta_state_root),
+			meta_state_root: Arc::new(meta_state_root),
 			meta_stmt,
 			payload_statedb,
-			payload_state_root: Rc::new(payload_state_root),
+			payload_state_root: Arc::new(payload_state_root),
 			payload_stmt,
 		})
 	}
@@ -86,16 +87,16 @@ pub struct Context<'a> {
 }
 
 struct ContextInner<'a> {
-	env: Rc<ContextEnv>,
-	call_env: RefCell<Option<Rc<CallEnv>>>,
+	env: Arc<ContextEnv>,
+	call_env: RefCell<Arc<CallEnv>>,
 	trie_root: Arc<TrieRoot>,
 	meta_statedb: Arc<StateDB>,
-	meta_state_root: Rc<Hash>,
+	meta_state_root: Arc<Hash>,
 	meta_state: ContextState<'a>,
 	meta_txs: RefCell<Vec<Arc<FullTransaction>>>,
 	meta_receipts: RefCell<Vec<Arc<FullReceipt>>>,
 	payload_statedb: Arc<StateDB>,
-	payload_state_root: Rc<Hash>,
+	payload_state_root: Arc<Hash>,
 	payload_state: ContextState<'a>,
 	payload_txs: RefCell<Vec<Arc<FullTransaction>>>,
 	payload_receipts: RefCell<Vec<Arc<FullReceipt>>>,
@@ -125,16 +126,11 @@ impl<'a> ContextState<'a> {
 }
 
 impl<'a> ContextT for Context<'a> {
-	fn env(&self) -> Rc<ContextEnv> {
+	fn env(&self) -> Arc<ContextEnv> {
 		self.inner.env.clone()
 	}
-	fn call_env(&self) -> Rc<CallEnv> {
-		self.inner
-			.call_env
-			.borrow()
-			.as_ref()
-			.expect("should set before")
-			.clone()
+	fn call_env(&self) -> Arc<CallEnv> {
+		self.inner.call_env.borrow().clone()
 	}
 	fn meta_get(&self, key: &[u8]) -> ModuleResult<Option<DBValue>> {
 		let tx_buffer = self.inner.meta_state.tx_buffer.borrow();
@@ -222,7 +218,7 @@ impl<'a> Context<'a> {
 
 		let inner = Rc::new(ContextInner {
 			env: context_essence.env.clone(),
-			call_env: RefCell::new(None),
+			call_env: RefCell::new(Arc::new(CallEnv::default())),
 			trie_root: context_essence.trie_root.clone(),
 			meta_statedb: context_essence.meta_statedb.clone(),
 			meta_state_root: context_essence.meta_state_root.clone(),
@@ -397,8 +393,7 @@ impl Executor {
 			params,
 		};
 
-		Dispatcher::validate_call::<Context, _>(&module, &self.util, &call)?
-			.map_err(|e| ErrorKind::Application(e))?;
+		Dispatcher::check_call::<Context, Util>(&module, &call)?;
 
 		let witness = match witness {
 			Some((secret_key, nonce, until)) => {
@@ -430,7 +425,12 @@ impl Executor {
 	}
 
 	/// Validate a transaction
-	pub fn validate_tx(&self, tx: &Transaction, witness_required: bool) -> CommonResult<()> {
+	pub fn validate_tx(
+		&self,
+		context: &Context,
+		tx: &Transaction,
+		witness_required: bool,
+	) -> CommonResult<()> {
 		let call = &tx.call;
 
 		match &tx.witness {
@@ -452,9 +452,22 @@ impl Executor {
 			}
 		};
 
+		let sender = tx.witness.as_ref().map(|witness| {
+			let public_key = &witness.public_key;
+			let mut address = vec![0u8; self.address.length().into()];
+			self.address.address(&mut address, &public_key.0);
+			Address(address)
+		});
+
 		let module = &call.module;
-		Dispatcher::validate_call::<Context, _>(module, &self.util, &call)?
-			.map_err(|e| ErrorKind::Application(e))?;
+		Dispatcher::validate_call::<Context, _>(
+			module,
+			context,
+			&self.util,
+			sender.as_ref(),
+			&call,
+		)?
+		.map_err(|e| ErrorKind::Application(e))?;
 
 		let write = Dispatcher::is_write_call::<Context, Util>(module, &call)?;
 		if write != Some(true) {
@@ -482,10 +495,8 @@ impl Executor {
 	) -> CommonResult<OpaqueCallResult> {
 		let module = &call.module;
 
-		// prepare call env
-		let call_env = CallEnv { tx_hash: None };
-		context.inner.call_env.replace(Some(Rc::new(call_env)));
-
+		Dispatcher::validate_call::<Context, Util>(module, context, &self.util, sender, call)?
+			.map_err(|e| ErrorKind::Application(e))?;
 		Dispatcher::execute_call::<Context, Util>(module, context, &self.util, sender, call)
 	}
 
@@ -531,10 +542,10 @@ impl Executor {
 			});
 
 			// prepare call env
-			let call_env = CallEnv {
+			let call_env = Arc::new(CallEnv {
 				tx_hash: Some(tx_hash.clone()),
-			};
-			context.inner.call_env.replace(Some(Rc::new(call_env)));
+			});
+			*(context.inner.call_env.borrow_mut()) = call_env;
 
 			let result = Dispatcher::execute_call::<Context, Util>(
 				module,

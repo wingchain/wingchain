@@ -38,3 +38,11 @@ params = '''
     "block_interval": 3000
 }
 '''
+
+[[genesis.txs]]
+module = "contract"
+method = "init"
+params = '''
+{
+}
+'''

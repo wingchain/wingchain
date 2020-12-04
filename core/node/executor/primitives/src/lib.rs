@@ -14,7 +14,7 @@
 
 /// Executor primitives for modules
 use std::marker::PhantomData;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use codec::{Decode, Encode};
 use primitives::{codec, Address, BlockNumber, Call, DBKey, DBValue, Event, Hash};
@@ -37,32 +37,45 @@ pub trait Module {
 
 	fn new(context: Self::C, util: Self::U) -> Self;
 
-	/// validate the call
-	fn validate_call(util: &Self::U, call: &Call) -> ModuleResult<()>;
-
 	/// check if the call is a write call, a transaction should be built by a write call
 	fn is_write_call(call: &Call) -> Option<bool>;
+
+	/// check the call
+	/// static check without context
+	fn check_call(call: &Call) -> ModuleResult<()>;
+
+	/// validate the call
+	/// dynamic check with context
+	fn validate_call(&self, sender: Option<&Address>, call: &Call) -> ModuleResult<()>;
 
 	/// execute the call
 	fn execute_call(&self, sender: Option<&Address>, call: &Call) -> OpaqueModuleResult;
 }
 
 /// Env variables for a block
+#[derive(Clone)]
 pub struct ContextEnv {
 	pub number: BlockNumber,
 	pub timestamp: u64,
 }
 
 /// Env variables for a call
+#[derive(Clone)]
 pub struct CallEnv {
 	pub tx_hash: Option<Hash>,
 }
 
+impl Default for CallEnv {
+	fn default() -> Self {
+		CallEnv { tx_hash: None }
+	}
+}
+
 pub trait Context: Clone {
 	/// Env for a context
-	fn env(&self) -> Rc<ContextEnv>;
+	fn env(&self) -> Arc<ContextEnv>;
 	/// Env for a call
-	fn call_env(&self) -> Rc<CallEnv>;
+	fn call_env(&self) -> Arc<CallEnv>;
 	/// get meta state
 	fn meta_get(&self, key: &[u8]) -> ModuleResult<Option<DBValue>>;
 	/// set meta state (only save into tx buffer)

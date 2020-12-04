@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::rc::Rc;
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
@@ -29,7 +29,7 @@ where
 	C: Context,
 	U: Util,
 {
-	env: Rc<ContextEnv>,
+	env: Arc<ContextEnv>,
 	context: C,
 	#[allow(dead_code)]
 	util: U,
@@ -61,9 +61,9 @@ impl<C: Context, U: Util> Module<C, U> {
 		Ok(())
 	}
 
-	fn validate_init(util: &U, params: InitParams) -> ModuleResult<()> {
+	fn validate_init(&self, _sender: Option<&Address>, params: InitParams) -> ModuleResult<()> {
 		for (address, _) in params.endow {
-			util.validate_address(&address)?;
+			self.util.validate_address(&address)?;
 		}
 		Ok(())
 	}
@@ -121,8 +121,12 @@ impl<C: Context, U: Util> Module<C, U> {
 		Ok(())
 	}
 
-	pub fn validate_transfer(util: &U, params: TransferParams) -> ModuleResult<()> {
-		util.validate_address(&params.recipient)?;
+	pub fn validate_transfer(
+		&self,
+		_sender: Option<&Address>,
+		params: TransferParams,
+	) -> ModuleResult<()> {
+		self.util.validate_address(&params.recipient)?;
 		Ok(())
 	}
 }

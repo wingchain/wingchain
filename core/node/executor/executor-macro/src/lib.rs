@@ -41,12 +41,29 @@ pub fn dispatcher(_attr: TokenStream, item: TokenStream) -> TokenStream {
 		})
 		.collect::<Vec<_>>();
 
+	let is_write_call_ts_vec = variants
+		.iter()
+		.map(|x| {
+			let ident = &x.ident;
+			quote! { stringify!(#ident) => Ok(module::#ident::Module::<C, U>::is_write_call(&call)), }
+		})
+		.collect::<Vec<_>>();
+
+	let check_call_ts_vec = variants
+		.iter()
+		.map(|x| {
+			let ident = &x.ident;
+			quote! { stringify!(#ident) => Ok(module::#ident::Module::<C, U>::check_call(&call)?), }
+		})
+		.collect::<Vec<_>>();
+
 	let validate_call_ts_vec = variants
 		.iter()
 		.map(|x| {
 			let ident = &x.ident;
 			quote! { stringify!(#ident) => {
-				let result = module::#ident::Module::<C, U>::validate_call(util, &call);
+				let module = module::#ident::Module::<_, _>::new(context.clone(), util.clone());
+				let result = module.validate_call(sender, &call);
 				match result {
 					Ok(result) => Ok(Ok(result)),
 					Err(e) => match e {
@@ -55,14 +72,6 @@ pub fn dispatcher(_attr: TokenStream, item: TokenStream) -> TokenStream {
 					}
 				}
 			}, }
-		})
-		.collect::<Vec<_>>();
-
-	let is_write_call_ts_vec = variants
-		.iter()
-		.map(|x| {
-			let ident = &x.ident;
-			quote! { stringify!(#ident) => Ok(module::#ident::Module::<C, U>::is_write_call(&call)), }
 		})
 		.collect::<Vec<_>>();
 
@@ -94,15 +103,21 @@ pub fn dispatcher(_attr: TokenStream, item: TokenStream) -> TokenStream {
 					other => Err(errors::ErrorKind::InvalidTxModule(other.to_string()).into()),
 				}
 			}
-			fn validate_call<C: ContextT, U: UtilT>(module: &str, util: &U, call: &Call) -> CommonResult<CallResult<()>>{
-				match module {
-					#(#validate_call_ts_vec)*
-					other => Err(errors::ErrorKind::InvalidTxModule(other.to_string()).into()),
-				}
-			}
 			fn is_write_call<C: ContextT, U: UtilT>(module: &str, call: &Call) -> CommonResult<Option<bool>> {
 				match module {
 					#(#is_write_call_ts_vec)*
+					other => Err(errors::ErrorKind::InvalidTxModule(other.to_string()).into()),
+				}
+			}
+			fn check_call<C: ContextT, U: UtilT>(module: &str, call: &Call) -> CommonResult<()> {
+				match module {
+					#(#check_call_ts_vec)*
+					other => Err(errors::ErrorKind::InvalidTxModule(other.to_string()).into()),
+				}
+			}
+			fn validate_call<C: ContextT, U: UtilT>(module: &str, context: &C, util: &U, sender: Option<&Address>, call: &Call) -> CommonResult<CallResult<()>>{
+				match module {
+					#(#validate_call_ts_vec)*
 					other => Err(errors::ErrorKind::InvalidTxModule(other.to_string()).into()),
 				}
 			}
@@ -130,6 +145,32 @@ pub fn module(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
 	let methods = get_module_call_methods(&impl_item);
 
+	let is_write_call_ts_vec = methods
+		.iter()
+		.map(|x| {
+			let method_ident = &x.method_ident;
+			let is_write = x.write;
+			quote! { stringify!(#method_ident) => Some(#is_write), }
+		})
+		.collect::<Vec<_>>();
+
+	let check_call_ts_vec = methods
+		.iter()
+		.map(|x| {
+			let method_ident = &x.method_ident;
+			let params_ident = x.params_ident.clone();
+			quote! {
+				stringify!(#method_ident) => {
+					let _params = match codec::decode::<#params_ident>(&params) {
+						Ok(params) => params,
+						Err(_) => return Err(errors::ErrorKind::InvalidTxParams("codec error".to_string()).into()),
+					};
+					Ok(())
+				},
+			}
+		})
+		.collect::<Vec<_>>();
+
 	let validate_call_ts_vec = methods
 		.iter()
 		.map(|x| {
@@ -137,7 +178,7 @@ pub fn module(_attr: TokenStream, item: TokenStream) -> TokenStream {
 			let params_ident = x.params_ident.clone();
 			let validate = match &x.validate_ident {
 				Some(validate_ident) => quote! {
-					Self::#validate_ident(&util, params)
+					self.#validate_ident(sender, params)
 				},
 				None => quote! {Ok(())},
 			};
@@ -150,15 +191,6 @@ pub fn module(_attr: TokenStream, item: TokenStream) -> TokenStream {
 					#validate
 				},
 			}
-		})
-		.collect::<Vec<_>>();
-
-	let is_write_call_ts_vec = methods
-		.iter()
-		.map(|x| {
-			let method_ident = &x.method_ident;
-			let is_write = x.write;
-			quote! { stringify!(#method_ident) => Some(#is_write), }
 		})
 		.collect::<Vec<_>>();
 
@@ -200,14 +232,6 @@ pub fn module(_attr: TokenStream, item: TokenStream) -> TokenStream {
 				Self::new(context, util)
 			}
 
-			fn validate_call(util: &Self::U, call: &Call) -> ModuleResult<()> {
-				let params = &call.params.0[..];
-				match call.method.as_str() {
-					#(#validate_call_ts_vec)*
-					other => Err(errors::ErrorKind::InvalidTxMethod(other.to_string()).into()),
-				}
-			}
-
 			fn is_write_call(call: &Call) -> Option<bool> {
 				let method = call.method.as_str();
 				match method {
@@ -216,10 +240,25 @@ pub fn module(_attr: TokenStream, item: TokenStream) -> TokenStream {
 				}
 			}
 
+			fn check_call(call: &Call) -> ModuleResult<()> {
+				let params = &call.params.0[..];
+				match call.method.as_str() {
+					#(#check_call_ts_vec)*
+					other => Err(errors::ErrorKind::InvalidTxMethod(other.to_string()).into()),
+				}
+			}
+
+			fn validate_call(&self, sender: Option<&Address>, call: &Call) -> ModuleResult<()> {
+				let params = &call.params.0[..];
+				match call.method.as_str() {
+					#(#validate_call_ts_vec)*
+					other => Err(errors::ErrorKind::InvalidTxMethod(other.to_string()).into()),
+				}
+			}
+
 			fn execute_call(&self, sender: Option<&Address>, call: &Call) -> OpaqueModuleResult {
 				let params = &call.params.0[..];
-				let method = call.method.as_str();
-				match method {
+				match call.method.as_str() {
 					#(#execute_call_ts_vec)*
 					other => Err(errors::ErrorKind::InvalidTxMethod(other.to_string()).into()),
 				}
