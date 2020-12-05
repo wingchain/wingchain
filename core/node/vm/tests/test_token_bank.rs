@@ -49,7 +49,7 @@ fn test_vm_tb_success() {
 	let context = TestVMContext::new(
 		VMConfig::default(),
 		tx_hash,
-		token_bank_contract_address.clone(),
+		Some(token_bank_contract_address.clone()),
 		Some(account1.3.clone()),
 		executor_context.clone(),
 	);
@@ -77,7 +77,7 @@ fn test_vm_tb_success() {
 	let context = TestVMContext::new(
 		VMConfig::default(),
 		tx_hash,
-		token_contract_address.clone(),
+		Some(token_contract_address.clone()),
 		Some(account1.3.clone()),
 		executor_context.clone(),
 	);
@@ -108,7 +108,7 @@ fn test_vm_tb_success() {
 	let context = TestVMContext::new(
 		VMConfig::default(),
 		tx_hash,
-		token_bank_contract_address.clone(),
+		Some(token_bank_contract_address.clone()),
 		Some(account1.3.clone()),
 		executor_context.clone(),
 	);
@@ -132,7 +132,7 @@ fn test_vm_tb_success() {
 	let context = TestVMContext::new(
 		VMConfig::default(),
 		tx_hash,
-		token_bank_contract_address.clone(),
+		Some(token_bank_contract_address.clone()),
 		Some(account1.3.clone()),
 		executor_context.clone(),
 	);
@@ -156,7 +156,7 @@ fn test_vm_tb_success() {
 	let context = TestVMContext::new(
 		VMConfig::default(),
 		tx_hash,
-		token_contract_address.clone(),
+		Some(token_contract_address.clone()),
 		Some(account1.3.clone()),
 		executor_context.clone(),
 	);
@@ -181,7 +181,7 @@ fn test_vm_tb_success() {
 	let context = TestVMContext::new(
 		VMConfig::default(),
 		tx_hash,
-		token_contract_address.clone(),
+		Some(token_contract_address.clone()),
 		Some(account1.3.clone()),
 		executor_context.clone(),
 	);
@@ -216,7 +216,7 @@ fn test_vm_tb_success() {
 	let context = TestVMContext::new(
 		VMConfig::default(),
 		tx_hash,
-		token_bank_contract_address.clone(),
+		Some(token_bank_contract_address.clone()),
 		Some(account1.3.clone()),
 		executor_context.clone(),
 	);
@@ -240,7 +240,7 @@ fn test_vm_tb_success() {
 	let context = TestVMContext::new(
 		VMConfig::default(),
 		tx_hash,
-		token_bank_contract_address.clone(),
+		Some(token_bank_contract_address.clone()),
 		Some(account1.3.clone()),
 		executor_context.clone(),
 	);
@@ -264,7 +264,7 @@ fn test_vm_tb_success() {
 	let context = TestVMContext::new(
 		VMConfig::default(),
 		tx_hash,
-		token_contract_address.clone(),
+		Some(token_contract_address.clone()),
 		Some(account1.3.clone()),
 		executor_context.clone(),
 	);
@@ -289,7 +289,7 @@ fn test_vm_tb_success() {
 	let context = TestVMContext::new(
 		VMConfig::default(),
 		tx_hash,
-		token_contract_address.clone(),
+		Some(token_contract_address.clone()),
 		Some(account1.3.clone()),
 		executor_context.clone(),
 	);
@@ -348,7 +348,7 @@ fn test_vm_tb_failed() {
 	let context = TestVMContext::new(
 		VMConfig::default(),
 		tx_hash,
-		token_bank_contract_address.clone(),
+		Some(token_bank_contract_address.clone()),
 		Some(account1.3.clone()),
 		executor_context.clone(),
 	);
@@ -376,7 +376,7 @@ fn test_vm_tb_failed() {
 	let context = TestVMContext::new(
 		VMConfig::default(),
 		tx_hash,
-		token_contract_address.clone(),
+		Some(token_contract_address.clone()),
 		Some(account1.3.clone()),
 		executor_context.clone(),
 	);
@@ -407,7 +407,7 @@ fn test_vm_tb_failed() {
 	let context = TestVMContext::new(
 		VMConfig::default(),
 		tx_hash,
-		token_bank_contract_address.clone(),
+		Some(token_bank_contract_address.clone()),
 		Some(account1.3.clone()),
 		executor_context.clone(),
 	);
@@ -458,7 +458,7 @@ fn test_vm_tb_ea() {
 	let context = TestVMContext::new(
 		VMConfig::default(),
 		tx_hash,
-		token_bank_contract_address.clone(),
+		Some(token_bank_contract_address.clone()),
 		Some(account1.3.clone()),
 		executor_context.clone(),
 	);
@@ -486,7 +486,7 @@ fn test_vm_tb_ea() {
 	let context = TestVMContext::new(
 		VMConfig::default(),
 		tx_hash,
-		token_contract_address.clone(),
+		Some(token_contract_address.clone()),
 		Some(account1.3.clone()),
 		executor_context.clone(),
 	);
@@ -517,7 +517,7 @@ fn test_vm_tb_ea() {
 	let context = TestVMContext::new(
 		VMConfig::default(),
 		tx_hash,
-		token_bank_contract_address.clone(),
+		Some(token_bank_contract_address.clone()),
 		Some(account1.3.clone()),
 		executor_context.clone(),
 	);

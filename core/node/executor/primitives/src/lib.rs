@@ -38,7 +38,7 @@ pub trait Module {
 	fn new(context: Self::C, util: Self::U) -> Self;
 
 	/// check if the call is a write call, a transaction should be built by a write call
-	fn is_write_call(call: &Call) -> Option<bool>;
+	fn is_write_call(call: &Call) -> ModuleResult<bool>;
 
 	/// check the call
 	/// static check without context

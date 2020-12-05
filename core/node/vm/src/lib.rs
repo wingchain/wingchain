@@ -14,6 +14,7 @@
 
 //! Virtual machine to execute contract
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -53,13 +54,32 @@ impl Default for VMConfig {
 	}
 }
 
-pub struct VM {
-	config: VMConfig,
-}
-
 pub enum Mode {
 	Init,
 	Call,
+}
+
+pub trait VMCodeProvider<'a> {
+	fn provide_code_hash(&self) -> VMResult<&Hash>;
+	fn provide_code(&self) -> VMResult<Cow<'a, [u8]>>;
+}
+
+pub struct LazyCodeProvider<'a, F: Fn() -> VMResult<Cow<'a, [u8]>>> {
+	pub code_hash: Hash,
+	pub code: F,
+}
+
+impl<'a, F: Fn() -> VMResult<Cow<'a, [u8]>>> VMCodeProvider<'a> for LazyCodeProvider<'a, F> {
+	fn provide_code_hash(&self) -> VMResult<&Hash> {
+		Ok(&self.code_hash)
+	}
+	fn provide_code(&self) -> VMResult<Cow<'a, [u8]>> {
+		(self.code)()
+	}
+}
+
+pub struct VM {
+	config: VMConfig,
 }
 
 impl VM {
@@ -70,8 +90,8 @@ impl VM {
 
 	pub fn validate(
 		&self,
-		code_hash: &Hash,
-		code: &[u8],
+		code: &dyn VMCodeProvider,
+		context: &dyn VMContext,
 		mode: Mode,
 		method: &str,
 		params: &[u8],
@@ -81,15 +101,13 @@ impl VM {
 			Mode::Init => "validate_init",
 			Mode::Call => "validate_call",
 		};
-		let context = &DummyVMContext;
-		self.run(code_hash, code, context, func, method, params, pay_value)?;
+		self.run(code, context, func, method, params, pay_value)?;
 		Ok(())
 	}
 
 	pub fn execute(
 		&self,
-		code_hash: &Hash,
-		code: &[u8],
+		code: &dyn VMCodeProvider,
 		context: &dyn VMContext,
 		mode: Mode,
 		method: &str,
@@ -100,20 +118,19 @@ impl VM {
 			Mode::Init => "execute_init",
 			Mode::Call => "execute_call",
 		};
-		self.run(code_hash, code, context, func, method, params, pay_value)
+		self.run(code, context, func, method, params, pay_value)
 	}
 
 	fn run(
 		&self,
-		code_hash: &Hash,
-		code: &[u8],
+		code: &dyn VMCodeProvider,
 		context: &dyn VMContext,
 		func: &str,
 		method: &str,
 		params: &[u8],
 		pay_value: Balance,
 	) -> VMResult<Vec<u8>> {
-		let module = compile::compile(code_hash, code, &self.config)?;
+		let module = compile::compile(code, &self.config)?;
 
 		let desc = MemoryDescriptor::new(
 			Pages(self.config.initial_memory_pages),
@@ -191,100 +208,10 @@ pub struct VMContextEnv {
 }
 
 pub struct VMCallEnv {
-	/// tx hash is none for read call
 	pub tx_hash: Option<Hash>,
 }
 
 pub struct VMContractEnv {
-	pub contract_address: Address,
-	/// sender address is none for read call
+	pub contract_address: Option<Address>,
 	pub sender_address: Option<Address>,
-}
-
-struct DummyVMContext;
-
-impl VMContext for DummyVMContext {
-	fn env(&self) -> Rc<VMContextEnv> {
-		unreachable!()
-	}
-	fn call_env(&self) -> Rc<VMCallEnv> {
-		unreachable!()
-	}
-	fn contract_env(&self) -> Rc<VMContractEnv> {
-		unreachable!()
-	}
-	fn payload_get(&self, _key: &[u8]) -> VMResult<Option<DBValue>> {
-		unreachable!()
-	}
-	fn payload_set(&self, _key: &[u8], _value: Option<DBValue>) -> VMResult<()> {
-		unreachable!()
-	}
-	fn payload_drain_buffer(&self) -> VMResult<Vec<(DBKey, Option<DBValue>)>> {
-		unreachable!()
-	}
-	fn payload_apply(&self, _items: Vec<(DBKey, Option<DBValue>)>) -> VMResult<()> {
-		unreachable!()
-	}
-	fn emit_event(&self, _event: Event) -> VMResult<()> {
-		unreachable!()
-	}
-	fn drain_events(&self) -> VMResult<Vec<Event>> {
-		unreachable!()
-	}
-	fn apply_events(&self, _items: Vec<Event>) -> VMResult<()> {
-		unreachable!()
-	}
-	fn hash(&self, _data: &[u8]) -> VMResult<Hash> {
-		unreachable!()
-	}
-	fn address(&self, _data: &[u8]) -> VMResult<Address> {
-		unreachable!()
-	}
-	fn validate_address(&self, _address: &Address) -> VMResult<()> {
-		unreachable!()
-	}
-	fn module_balance_get(&self, _address: &Address) -> VMResult<Balance> {
-		unreachable!()
-	}
-	fn module_balance_transfer(
-		&self,
-		_sender: &Address,
-		_recipient: &Address,
-		_value: Balance,
-	) -> VMResult<()> {
-		unreachable!()
-	}
-	fn module_payload_drain_buffer(&self) -> VMResult<Vec<(DBKey, Option<DBValue>)>> {
-		unreachable!()
-	}
-	fn module_payload_apply(&self, _items: Vec<(DBKey, Option<DBValue>)>) -> VMResult<()> {
-		unreachable!()
-	}
-	fn module_drain_events(&self) -> VMResult<Vec<Event>> {
-		unreachable!()
-	}
-	fn module_apply_events(&self, _items: Vec<Event>) -> VMResult<()> {
-		unreachable!()
-	}
-	fn nested_vm_contract_execute(
-		&self,
-		_contract_address: &Address,
-		_method: &str,
-		_params: &[u8],
-		_pay_value: Balance,
-	) -> VMResult<Vec<u8>> {
-		unreachable!()
-	}
-	fn nested_vm_payload_drain_buffer(&self) -> VMResult<Vec<(DBKey, Option<DBValue>)>> {
-		unreachable!()
-	}
-	fn nested_vm_payload_apply(&self, _items: Vec<(DBKey, Option<DBValue>)>) -> VMResult<()> {
-		unreachable!()
-	}
-	fn nested_vm_drain_events(&self) -> VMResult<Vec<Event>> {
-		unreachable!()
-	}
-	fn nested_vm_apply_events(&self, _items: Vec<Event>) -> VMResult<()> {
-		unreachable!()
-	}
 }

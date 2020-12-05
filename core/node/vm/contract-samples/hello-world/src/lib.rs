@@ -39,6 +39,16 @@ impl Contract {
 		Ok(())
 	}
 
+	fn validate_hello(&self, params: HelloParams) -> ContractResult<()> {
+		let name = params.name;
+		if name.len() == 0 {
+			return Err(ContractError::User {
+				msg: "Empty name".to_string(),
+			});
+		}
+		Ok(())
+	}
+
 	#[call]
 	fn hello(&self, params: HelloParams) -> ContractResult<String> {
 		let name = params.name;
@@ -176,13 +186,13 @@ impl Contract {
 	}
 
 	#[call]
-	fn validate_address(&self, params: ValidateAddressParams) -> ContractResult<()> {
+	fn verify_address(&self, params: VerifyAddressParams) -> ContractResult<()> {
 		let result = self.util.validate_address(&params.address)?;
 		Ok(result)
 	}
 
 	#[call]
-	fn validate_address_ea(&self, params: ValidateAddressParams) -> ContractResult<String> {
+	fn verify_address_ea(&self, params: VerifyAddressParams) -> ContractResult<String> {
 		let result = self.util.validate_address_ea(&params.address);
 		let result = match result {
 			Ok(_) => "true".to_string(),
@@ -194,6 +204,9 @@ impl Contract {
 	#[call]
 	fn nested_contract_execute(&self, _params: EmptyParams) -> ContractResult<Vec<u8>> {
 		let contract_address = &self.context.contract_env()?.contract_address;
+		let contract_address = contract_address
+			.as_ref()
+			.ok_or(ContractError::ContractAddressNotFound)?;
 		let method = "nested_contract_execute";
 		let params = "".as_bytes();
 		let pay_value = 0;
@@ -227,7 +240,7 @@ struct GetCallEnvOutput {
 
 #[derive(Serialize)]
 struct GetContractEnvOutput {
-	pub contract_address: Address,
+	pub contract_address: Option<Address>,
 	pub sender_address: Option<Address>,
 }
 
@@ -289,6 +302,6 @@ struct ComputeAddressParams {
 }
 
 #[derive(Deserialize)]
-struct ValidateAddressParams {
+struct VerifyAddressParams {
 	address: Address,
 }

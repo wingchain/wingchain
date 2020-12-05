@@ -53,6 +53,9 @@ impl Contract {
 		let sender_address = sender_address.as_ref().ok_or(ContractError::Unsigned)?;
 
 		let this_contract_address = &self.context.contract_env()?.contract_address;
+		let this_contract_address = this_contract_address
+			.as_ref()
+			.ok_or(ContractError::ContractAddressNotFound)?;
 
 		let token_contract_address = self.token_contract_address.get()?.expect("qed");
 
@@ -113,6 +116,9 @@ impl Contract {
 		let sender_address = sender_address.as_ref().ok_or(ContractError::Unsigned)?;
 
 		let this_contract_address = &self.context.contract_env()?.contract_address;
+		let this_contract_address = this_contract_address
+			.as_ref()
+			.ok_or(ContractError::ContractAddressNotFound)?;
 
 		let token_contract_address = self.token_contract_address.get()?.expect("qed");
 

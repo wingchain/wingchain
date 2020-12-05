@@ -2,12 +2,11 @@ language: rust
 
 rust:
   - nightly
-  -
-cache: cargo
 
-before_cache:
-  - rm -rf "$TRAVIS_HOME"/.cargo/registry/src"
+cache:
+  cargo: true
+  apt: true
 
 script:
-  - travis_wait 30 cargo build --verbose --all
-  - cargo test --verbose --all --all-features
+  - travis_wait 30 cargo build --verbose --workspace
+  - cargo test --verbose --workspace --all-features

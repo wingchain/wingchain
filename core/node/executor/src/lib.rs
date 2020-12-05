@@ -470,7 +470,7 @@ impl Executor {
 		.map_err(|e| ErrorKind::Application(e))?;
 
 		let write = Dispatcher::is_write_call::<Context, Util>(module, &call)?;
-		if write != Some(true) {
+		if !write {
 			return Err(
 				errors::ErrorKind::InvalidTxMethod(format!("{}: not write", call.method)).into(),
 			);
@@ -495,8 +495,11 @@ impl Executor {
 	) -> CommonResult<OpaqueCallResult> {
 		let module = &call.module;
 
-		Dispatcher::validate_call::<Context, Util>(module, context, &self.util, sender, call)?
-			.map_err(|e| ErrorKind::Application(e))?;
+		match Dispatcher::validate_call::<Context, Util>(module, context, &self.util, sender, call)?
+		{
+			Ok(_) => (),
+			Err(e) => return Ok(Err(e)),
+		}
 		Dispatcher::execute_call::<Context, Util>(module, context, &self.util, sender, call)
 	}
 
