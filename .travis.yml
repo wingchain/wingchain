@@ -4,8 +4,15 @@ rust:
   - nightly
 
 cache:
-  cargo: true
   apt: true
+  directories:
+    - $TRAVIS_HOME/.cache/sccache
+    - $TRAVIS_HOME/.cargo/
+    - $TRAVIS_HOME/.rustup/
+
+before_cache:
+  - rm -rf "$TRAVIS_HOME/.cargo/registry"
+  - rm -rf "$TRAVIS_HOME/.cargo/git"
 
 install:
   - travis_wait 30 cargo build --verbose --workspace
