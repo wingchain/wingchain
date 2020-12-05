@@ -24,19 +24,21 @@ use wasmer_runtime_core::Module;
 use primitives::Hash;
 
 use crate::errors::{PreCompileError, VMResult};
-use crate::VMConfig;
+use crate::{VMCodeProvider, VMConfig};
 
 const CACHE_SIZE: usize = 1024;
 
 static MODULE_CACHE: Lazy<Mutex<LruCache<Hash, Module>>> =
 	Lazy::new(|| Mutex::new(LruCache::new(CACHE_SIZE)));
 
-pub fn compile(code_hash: &Hash, code: &[u8], config: &VMConfig) -> VMResult<Module> {
+pub fn compile(code: &dyn VMCodeProvider, config: &VMConfig) -> VMResult<Module> {
+	let code_hash = code.provide_code_hash()?;
 	let mut guard = MODULE_CACHE.lock();
 	if let Some(module) = guard.get(code_hash) {
 		return Ok(module.clone());
 	}
 
+	let code = &*code.provide_code()?;
 	let code = pre_compile(code, config)?;
 
 	let module = wasmer_runtime::compile(&code)?;

@@ -12,19 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 use std::sync::Arc;
 
 use executor_primitives::{
-	self, CallEnv, Context, ContextEnv, EmptyParams, Module, ModuleError, ModuleResult, StorageMap,
-	Util, SEPARATOR,
+	self, CallEnv, Context, ContextEnv, EmptyParams, Module, ModuleResult, StorageMap, Util,
+	SEPARATOR,
 };
 use module_balance::TransferParams;
-use node_vm::errors::{ContractError, VMError, VMResult};
-use node_vm::{Mode, VMCallEnv, VMConfig, VMContext, VMContextEnv, VMContractEnv, VM};
+use node_vm::errors::{ContractError, VMResult};
+use node_vm::{
+	LazyCodeProvider, Mode, VMCallEnv, VMConfig, VMContext, VMContextEnv, VMContractEnv, VM,
+};
 use primitives::{codec, Address, Balance, DBKey, DBValue, Event, Hash};
+
+use crate::module_to_vm_error;
 
 const CONTRACT_DATA_STORAGE_KEY: &[u8] = b"contract_data";
 
@@ -218,6 +223,7 @@ pub struct DefaultVMContext<M: Module> {
 	nested_vm_context: RefCell<Option<ClonableDefaultVMContext<M>>>,
 	version: StorageMap<Address, u32, M>,
 	code: StorageMap<(Address, u32), Vec<u8>, M>,
+	code_hash: StorageMap<(Address, u32), Hash, M>,
 }
 
 impl<M: Module> DefaultVMContext<M> {
@@ -254,6 +260,7 @@ impl<M: Module> DefaultVMContext<M> {
 
 		let version = StorageMap::new(base_context.executor_context.clone(), b"version");
 		let code = StorageMap::new(base_context.executor_context.clone(), b"code");
+		let code_hash = StorageMap::new(base_context.executor_context.clone(), b"code_hash");
 
 		DefaultVMContext {
 			config,
@@ -266,6 +273,7 @@ impl<M: Module> DefaultVMContext<M> {
 			nested_vm_context,
 			version,
 			code,
+			code_hash,
 		}
 	}
 
@@ -277,10 +285,7 @@ impl<M: Module> DefaultVMContext<M> {
 			.as_ref()
 			.ok_or(ContractError::ContractAddressNotFound)?;
 		let key = &[&contract_address.0, SEPARATOR, key].concat();
-		let key = self
-			.executor_util
-			.hash(key)
-			.map_err(Self::module_to_vm_error)?;
+		let key = self.executor_util.hash(key).map_err(module_to_vm_error)?;
 		let key = [
 			M::STORAGE_KEY,
 			SEPARATOR,
@@ -292,21 +297,39 @@ impl<M: Module> DefaultVMContext<M> {
 		Ok(key)
 	}
 
-	fn module_to_vm_error(e: ModuleError) -> VMError {
-		match e {
-			ModuleError::System(e) => VMError::System(e),
-			ModuleError::Application(e) => match e {
-				executor_primitives::errors::ApplicationError::InvalidAddress(_) => {
-					ContractError::InvalidAddress.into()
+	fn inner_get_version(
+		&self,
+		contract_address: &Address,
+		version: Option<u32>,
+	) -> VMResult<Option<u32>> {
+		match version {
+			Some(version) => Ok(Some(version)),
+			None => {
+				let current_version = self
+					.version
+					.get(&contract_address)
+					.map_err(module_to_vm_error)?;
+				match current_version {
+					Some(current_version) => Ok(Some(current_version)),
+					None => Ok(None),
 				}
-				executor_primitives::errors::ApplicationError::Unsigned => {
-					ContractError::Unsigned.into()
-				}
-				executor_primitives::errors::ApplicationError::User { msg } => {
-					(ContractError::User { msg }).into()
-				}
-			},
+			}
 		}
+	}
+
+	fn inner_get_code_hash(
+		&self,
+		contract_address: &Address,
+		version: Option<u32>,
+	) -> VMResult<Option<Hash>> {
+		let version = match self.inner_get_version(contract_address, version)? {
+			Some(version) => version,
+			None => return Ok(None),
+		};
+
+		let key = codec::encode(&(&contract_address, version))?;
+		let code = self.code_hash.raw_get(&key).map_err(module_to_vm_error)?;
+		Ok(code)
 	}
 
 	fn inner_get_code(
@@ -314,22 +337,13 @@ impl<M: Module> DefaultVMContext<M> {
 		contract_address: &Address,
 		version: Option<u32>,
 	) -> VMResult<Option<Vec<u8>>> {
-		let version = match version {
+		let version = match self.inner_get_version(contract_address, version)? {
 			Some(version) => version,
-			None => {
-				let current_version = self
-					.version
-					.get(&contract_address)
-					.map_err(Self::module_to_vm_error)?;
-				match current_version {
-					Some(current_version) => current_version,
-					None => return Ok(None),
-				}
-			}
+			None => return Ok(None),
 		};
 
 		let key = codec::encode(&(&contract_address, version))?;
-		let code = self.code.raw_get(&key).map_err(Self::module_to_vm_error)?;
+		let code = self.code.raw_get(&key).map_err(module_to_vm_error)?;
 		Ok(code)
 	}
 }
@@ -349,7 +363,7 @@ impl<M: Module> VMContext for DefaultVMContext<M> {
 		let result = self
 			.base_context
 			.payload_get(key)
-			.map_err(Self::module_to_vm_error)?;
+			.map_err(module_to_vm_error)?;
 		Ok(result)
 	}
 	fn payload_set(&self, key: &[u8], value: Option<DBValue>) -> VMResult<()> {
@@ -357,55 +371,51 @@ impl<M: Module> VMContext for DefaultVMContext<M> {
 		let result = self
 			.base_context
 			.payload_set(key, value)
-			.map_err(Self::module_to_vm_error)?;
+			.map_err(module_to_vm_error)?;
 		Ok(result)
 	}
 	fn payload_drain_buffer(&self) -> VMResult<Vec<(DBKey, Option<DBValue>)>> {
 		let result = self
 			.base_context
 			.payload_drain_tx_buffer()
-			.map_err(Self::module_to_vm_error)?;
+			.map_err(module_to_vm_error)?;
 		Ok(result)
 	}
 	fn payload_apply(&self, items: Vec<(DBKey, Option<DBValue>)>) -> VMResult<()> {
 		self.base_context
 			.payload_apply(items)
-			.map_err(Self::module_to_vm_error)?;
+			.map_err(module_to_vm_error)?;
 		Ok(())
 	}
 	fn emit_event(&self, event: Event) -> VMResult<()> {
 		self.base_context
 			.emit_event(event)
-			.map_err(Self::module_to_vm_error)?;
+			.map_err(module_to_vm_error)?;
 		Ok(())
 	}
 	fn drain_events(&self) -> VMResult<Vec<Event>> {
 		let result = self
 			.base_context
 			.drain_tx_events()
-			.map_err(Self::module_to_vm_error)?;
+			.map_err(module_to_vm_error)?;
 		Ok(result)
 	}
 	fn apply_events(&self, items: Vec<Event>) -> VMResult<()> {
 		self.base_context
 			.apply_events(items)
-			.map_err(Self::module_to_vm_error)?;
+			.map_err(module_to_vm_error)?;
 		Ok(())
 	}
 	fn hash(&self, data: &[u8]) -> VMResult<Hash> {
-		self.executor_util
-			.hash(data)
-			.map_err(Self::module_to_vm_error)
+		self.executor_util.hash(data).map_err(module_to_vm_error)
 	}
 	fn address(&self, data: &[u8]) -> VMResult<Address> {
-		self.executor_util
-			.address(data)
-			.map_err(Self::module_to_vm_error)
+		self.executor_util.address(data).map_err(module_to_vm_error)
 	}
 	fn validate_address(&self, address: &Address) -> VMResult<()> {
 		self.executor_util
 			.validate_address(address)
-			.map_err(Self::module_to_vm_error)
+			.map_err(module_to_vm_error)
 	}
 	fn module_balance_get(&self, address: &Address) -> VMResult<Balance> {
 		let balance_module =
@@ -413,7 +423,7 @@ impl<M: Module> VMContext for DefaultVMContext<M> {
 		let sender = Some(address);
 		balance_module
 			.get_balance(sender, EmptyParams)
-			.map_err(Self::module_to_vm_error)
+			.map_err(module_to_vm_error)
 	}
 	fn module_balance_transfer(
 		&self,
@@ -431,37 +441,37 @@ impl<M: Module> VMContext for DefaultVMContext<M> {
 
 		balance_module
 			.validate_transfer(sender, params.clone())
-			.map_err(Self::module_to_vm_error)?;
+			.map_err(module_to_vm_error)?;
 
 		balance_module
 			.transfer(sender, params)
-			.map_err(Self::module_to_vm_error)?;
+			.map_err(module_to_vm_error)?;
 		Ok(())
 	}
 	fn module_payload_drain_buffer(&self) -> VMResult<Vec<(DBKey, Option<DBValue>)>> {
 		let result = self
 			.module_context
 			.payload_drain_tx_buffer()
-			.map_err(Self::module_to_vm_error)?;
+			.map_err(module_to_vm_error)?;
 		Ok(result)
 	}
 	fn module_payload_apply(&self, items: Vec<(DBKey, Option<DBValue>)>) -> VMResult<()> {
 		self.base_context
 			.payload_apply(items)
-			.map_err(Self::module_to_vm_error)?;
+			.map_err(module_to_vm_error)?;
 		Ok(())
 	}
 	fn module_drain_events(&self) -> VMResult<Vec<Event>> {
 		let result = self
 			.module_context
 			.drain_tx_events()
-			.map_err(Self::module_to_vm_error)?;
+			.map_err(module_to_vm_error)?;
 		Ok(result)
 	}
 	fn module_apply_events(&self, items: Vec<Event>) -> VMResult<()> {
 		self.module_context
 			.apply_events(items)
-			.map_err(Self::module_to_vm_error)?;
+			.map_err(module_to_vm_error)?;
 		Ok(())
 	}
 	fn nested_vm_contract_execute(
@@ -497,16 +507,23 @@ impl<M: Module> VMContext for DefaultVMContext<M> {
 			self.nested_vm_context.borrow_mut().replace(vm_context);
 		}
 
+		let code_hash = self
+			.inner_get_code_hash(&contract_address, None)?
+			.ok_or(ContractError::NestedContractNotFound)?;
+
+		let code = LazyCodeProvider {
+			code_hash,
+			code: || {
+				let code = self.inner_get_code(&contract_address, None)?;
+				let code = code.ok_or(ContractError::NestedContractNotFound)?;
+				Ok(Cow::Owned(code))
+			},
+		};
+
 		let nested_vm_context = (*self.nested_vm_context.borrow().as_ref().expect("qed")).clone();
 
-		let code = self
-			.inner_get_code(&contract_address, None)?
-			.ok_or(ContractError::NestedContractNotFound)?;
-		let code_hash = self.hash(&code)?;
 		let vm = VM::new((*self.config).clone());
-
 		let result = vm.execute(
-			&code_hash,
 			&code,
 			&nested_vm_context,
 			Mode::Call,

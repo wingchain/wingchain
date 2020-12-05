@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
@@ -23,7 +24,9 @@ use crypto::address::{Address as AddressT, AddressImpl};
 use crypto::dsa::{DsaImpl, KeyPairImpl};
 use crypto::hash::{Hash as HashT, HashImpl};
 use node_vm::errors::{ContractError, VMResult};
-use node_vm::{Mode, VMCallEnv, VMConfig, VMContext, VMContextEnv, VMContractEnv, VM};
+use node_vm::{
+	LazyCodeProvider, Mode, VMCallEnv, VMConfig, VMContext, VMContextEnv, VMContractEnv, VM,
+};
 use primitives::codec::{Decode, Encode};
 use primitives::{codec, Address, Balance, DBKey, DBValue, Event, Hash, PublicKey, SecretKey};
 
@@ -55,8 +58,12 @@ pub fn vm_validate(
 		hash.hash(&mut out, &code);
 		Hash(out)
 	};
+	let code = LazyCodeProvider {
+		code_hash,
+		code: || Ok(Cow::Borrowed(code)),
+	};
 	let params = params.as_bytes();
-	let result = vm.validate(&code_hash, &code, context, mode, method, params, pay_value)?;
+	let result = vm.validate(&code, context, mode, method, params, pay_value)?;
 	Ok(result)
 }
 
@@ -78,9 +85,12 @@ pub fn vm_execute(
 		hash.hash(&mut out, &code);
 		Hash(out)
 	};
-
+	let code = LazyCodeProvider {
+		code_hash,
+		code: || Ok(Cow::Borrowed(code)),
+	};
 	let result = vm
-		.execute(&code_hash, &code, context, mode, method, params, pay_value)
+		.execute(&code, context, mode, method, params, pay_value)
 		.and_then(|result| {
 			let result: String =
 				String::from_utf8(result).map_err(|_| ContractError::Deserialize)?;
@@ -538,9 +548,11 @@ impl<EC: ExecutorContext> VMContext for TestVMContext<EC> {
 			.ok_or(ContractError::NestedContractNotFound)?;
 		let code_hash = self.hash(&code)?;
 		let vm = VM::new((*self.config).clone());
-
+		let code = LazyCodeProvider {
+			code_hash,
+			code: || Ok(Cow::Borrowed(&code)),
+		};
 		let result = vm.execute(
-			&code_hash,
 			&code,
 			&nested_vm_context,
 			Mode::Call,

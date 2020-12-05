@@ -14,6 +14,7 @@
 
 //! Virtual machine to execute contract
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -53,13 +54,32 @@ impl Default for VMConfig {
 	}
 }
 
-pub struct VM {
-	config: VMConfig,
-}
-
 pub enum Mode {
 	Init,
 	Call,
+}
+
+pub trait VMCodeProvider<'a> {
+	fn provide_code_hash(&self) -> VMResult<&Hash>;
+	fn provide_code(&self) -> VMResult<Cow<'a, [u8]>>;
+}
+
+pub struct LazyCodeProvider<'a, F: Fn() -> VMResult<Cow<'a, [u8]>>> {
+	pub code_hash: Hash,
+	pub code: F,
+}
+
+impl<'a, F: Fn() -> VMResult<Cow<'a, [u8]>>> VMCodeProvider<'a> for LazyCodeProvider<'a, F> {
+	fn provide_code_hash(&self) -> VMResult<&Hash> {
+		Ok(&self.code_hash)
+	}
+	fn provide_code(&self) -> VMResult<Cow<'a, [u8]>> {
+		(self.code)()
+	}
+}
+
+pub struct VM {
+	config: VMConfig,
 }
 
 impl VM {
@@ -70,8 +90,7 @@ impl VM {
 
 	pub fn validate(
 		&self,
-		code_hash: &Hash,
-		code: &[u8],
+		code: &dyn VMCodeProvider,
 		context: &dyn VMContext,
 		mode: Mode,
 		method: &str,
@@ -82,14 +101,13 @@ impl VM {
 			Mode::Init => "validate_init",
 			Mode::Call => "validate_call",
 		};
-		self.run(code_hash, code, context, func, method, params, pay_value)?;
+		self.run(code, context, func, method, params, pay_value)?;
 		Ok(())
 	}
 
 	pub fn execute(
 		&self,
-		code_hash: &Hash,
-		code: &[u8],
+		code: &dyn VMCodeProvider,
 		context: &dyn VMContext,
 		mode: Mode,
 		method: &str,
@@ -100,20 +118,19 @@ impl VM {
 			Mode::Init => "execute_init",
 			Mode::Call => "execute_call",
 		};
-		self.run(code_hash, code, context, func, method, params, pay_value)
+		self.run(code, context, func, method, params, pay_value)
 	}
 
 	fn run(
 		&self,
-		code_hash: &Hash,
-		code: &[u8],
+		code: &dyn VMCodeProvider,
 		context: &dyn VMContext,
 		func: &str,
 		method: &str,
 		params: &[u8],
 		pay_value: Balance,
 	) -> VMResult<Vec<u8>> {
-		let module = compile::compile(code_hash, code, &self.config)?;
+		let module = compile::compile(code, &self.config)?;
 
 		let desc = MemoryDescriptor::new(
 			Pages(self.config.initial_memory_pages),
