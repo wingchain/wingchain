@@ -66,7 +66,7 @@ where
 
 		let system_meta = get_system_meta(support.clone())?;
 
-		let tx_pool = Self {
+		let txpool = Self {
 			config,
 			system_meta,
 			support,
@@ -79,7 +79,7 @@ where
 
 		info!("Initializing txpool");
 
-		Ok(tx_pool)
+		Ok(txpool)
 	}
 
 	/// Get the queue of the pool

@@ -119,7 +119,7 @@ where
 		}
 	};
 
-	debug!("Txpool txs count: {}", txs.len());
+	debug!("TxPool txs count: {}", txs.len());
 
 	let mut invalid_txs = vec![];
 	let mut meta_txs = vec![];
