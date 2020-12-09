@@ -18,13 +18,7 @@ use std::fmt::Debug;
 use primitives::errors::{CommonError, CommonErrorKind, Display};
 
 #[derive(Debug, Display)]
-pub enum ErrorKind {
-	#[display(fmt = "Subscribe error")]
-	Subscribe,
-
-	#[display(fmt = "Send error: {}", _0)]
-	Send(String),
-}
+pub enum ErrorKind {}
 
 impl Error for ErrorKind {}
 

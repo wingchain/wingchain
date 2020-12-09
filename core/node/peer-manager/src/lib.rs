@@ -12,291 +12,396 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::HashSet;
+use std::collections::VecDeque;
+use std::pin::Pin;
 
+use futures::task::{Context, Poll};
+use futures::Stream;
 use libp2p::PeerId;
 use linked_hash_map::LinkedHashMap;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 
-use primitives::errors::CommonResult;
-
-use crate::errors::ErrorKind;
-
 mod errors;
 
 pub struct PeerManagerConfig {
-    pub max_in_peers: u32,
-    pub max_out_peers: u32,
-    pub bootnodes: HashSet<PeerId>,
-    pub reserved: HashSet<PeerId>,
-    pub reserved_only: bool,
+	pub max_in_peers: u32,
+	pub max_out_peers: u32,
+	pub bootnodes: LinkedHashMap<PeerId, ()>,
+	pub reserved: LinkedHashMap<PeerId, ()>,
+	pub reserved_only: bool,
 }
 
 #[derive(Clone, PartialEq)]
 pub enum PeerState {
-    In,
-    Out,
+	In,
+	Out,
 }
 
 #[derive(Clone, PartialEq)]
 pub enum PeerType {
-    Reserved,
-    Normal,
+	Reserved,
+	Normal,
 }
 
+#[derive(Clone, PartialEq)]
 pub struct PeerInfo {
-    peer_state: PeerState,
-    peer_type: PeerType,
+	peer_state: PeerState,
+	peer_type: PeerType,
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct IncomingId(pub u64);
 
-pub enum Message {
-    Connect(PeerId),
-    Drop(PeerId),
-    Accept(IncomingId),
-    Reject(IncomingId),
+#[derive(Debug, PartialEq)]
+pub enum OutMessage {
+	Connect(PeerId),
+	Drop(PeerId),
+	Accept(IncomingId),
+	Reject(IncomingId),
+}
+
+pub enum InMessage {
+	AddReservedPeer(PeerId),
+	RemoveReservedPeer(PeerId),
+	SetReservedOnly(bool),
 }
 
 pub struct PeerManager {
-    /// config
-    config: PeerManagerConfig,
-    /// maintain active peers
-    active: ActivePeers,
-    /// maintain inactive peers
-    inactive: InactivePeers,
-    /// out messages sender
-    tx: UnboundedSender<Message>,
-    /// out message receiver
-    rx: Option<UnboundedReceiver<Message>>,
+	/// config
+	config: PeerManagerConfig,
+	/// maintain active peers
+	active: ActivePeers,
+	/// maintain inactive peers
+	inactive: InactivePeers,
+	/// in messages sender
+	in_tx: UnboundedSender<InMessage>,
+	/// in message receiver
+	in_rx: UnboundedReceiver<InMessage>,
+	/// out messages
+	out_messages: VecDeque<OutMessage>,
 }
 
 impl PeerManager {
-    pub fn new(config: PeerManagerConfig) -> CommonResult<Self> {
-        let active = ActivePeers {
-            peers: Default::default(),
-            in_peers: 0,
-            out_peers: 0,
-        };
-        let inactive = InactivePeers {
-            reserved_peers: config.reserved.clone().into_iter().map(|x| (x, ())).collect(),
-            normal_peers: config.bootnodes.clone().into_iter().map(|x| (x, ())).collect(),
-        };
+	pub fn new(config: PeerManagerConfig) -> Self {
+		let active = ActivePeers {
+			peers: Default::default(),
+			in_peers: 0,
+			out_peers: 0,
+		};
 
-        let (tx, rx) = unbounded_channel();
+		let inactive_peers = config
+			.reserved
+			.clone()
+			.into_iter()
+			.chain(config.bootnodes.clone().into_iter())
+			.collect();
 
-        let mut peer_manager = Self {
-            config,
-            active,
-            inactive,
-            tx,
-            rx: Some(rx),
-        };
-        peer_manager.activate()?;
+		let inactive = InactivePeers {
+			peers: inactive_peers,
+		};
 
-        Ok(peer_manager)
-    }
+		let (in_tx, in_rx) = unbounded_channel();
 
-    pub fn subscribe(&mut self) -> CommonResult<UnboundedReceiver<Message>> {
-        let rx = self.rx.take().ok_or(ErrorKind::Subscribe)?;
-        Ok(rx)
-    }
+		let mut peer_manager = Self {
+			config,
+			active,
+			inactive,
+			in_tx,
+			in_rx,
+			out_messages: VecDeque::new(),
+		};
+		peer_manager.activate();
 
-    pub fn discovered(&mut self, peer_id: PeerId) -> CommonResult<()> {
-        if self.active.contains(&peer_id) {
-            return Ok(());
-        }
-        self.inactive.insert_peer(peer_id, &self.config);
-        self.activate()?;
-        Ok(())
-    }
+		peer_manager
+	}
 
-    pub fn dropped(&mut self, peer_id: PeerId) -> CommonResult<()> {
-        self.active.remove_peer(&peer_id);
-        self.inactive.insert_peer(peer_id, &self.config);
-        self.activate()?;
-        Ok(())
-    }
+	pub fn tx(&self) -> UnboundedSender<InMessage> {
+		self.in_tx.clone()
+	}
 
-    pub fn incoming(&mut self, peer_id: PeerId, incoming_id: IncomingId) -> CommonResult<()> {
-        if self.config.reserved_only {
-            if !self.config.reserved.contains(&peer_id) {
-                self.send(Message::Reject(incoming_id))?;
-                return Ok(());
-            }
-        }
+	pub fn discovered(&mut self, peer_id: PeerId) {
+		if self.active.contains(&peer_id) {
+			return;
+		}
+		self.inactive.insert_peer(peer_id);
+		self.activate();
+	}
 
-        let peer_type = match self.config.reserved.contains(&peer_id) {
-            true => PeerType::Reserved,
-            false => PeerType::Normal,
-        };
+	pub fn dropped(&mut self, peer_id: PeerId) {
+		self.active.remove_peer(&peer_id);
+		self.inactive.insert_peer(peer_id);
+		self.activate();
+	}
 
-        match self.active.insert_peer(peer_id, PeerState::In, peer_type, &self.config) {
-            InsertPeerResult::Inserted(peer_id) => {
-                self.inactive.remove_peer(peer_id, &self.config);
-                self.send(Message::Accept(incoming_id))?;
-            }
-            InsertPeerResult::Replaced {
-                inserted, removed
-            } => {
-                self.inactive.remove_peer(inserted, &self.config);
-                self.inactive.insert_peer(removed.clone(), &self.config);
-                self.send(Message::Accept(incoming_id))?;
-                self.send(Message::Drop(removed))?;
-            }
-            InsertPeerResult::Exist(_peer_id) => {}
-            InsertPeerResult::Full(peer_id) => {
-                self.inactive.insert_peer(peer_id, &self.config);
-                self.send(Message::Reject(incoming_id))?;
-            }
-        }
+	pub fn incoming(&mut self, peer_id: PeerId, incoming_id: IncomingId) {
+		if self.config.reserved_only {
+			if !self.config.reserved.contains_key(&peer_id) {
+				self.send(OutMessage::Reject(incoming_id));
+				return;
+			}
+		}
 
-        Ok(())
-    }
+		match self
+			.active
+			.insert_peer(peer_id, PeerState::In, &self.config)
+		{
+			InsertPeerResult::Inserted(peer_id) => {
+				self.inactive.remove_peer(peer_id);
+				self.send(OutMessage::Accept(incoming_id));
+			}
+			InsertPeerResult::Replaced { inserted, removed } => {
+				self.inactive.remove_peer(inserted);
+				self.inactive.insert_peer(removed.clone());
+				self.send(OutMessage::Accept(incoming_id));
+				self.send(OutMessage::Drop(removed));
+			}
+			InsertPeerResult::Exist(_peer_id) => {}
+			InsertPeerResult::Full(peer_id) => {
+				self.inactive.insert_peer(peer_id);
+				self.send(OutMessage::Reject(incoming_id));
+			}
+		}
+	}
 
-    fn activate(&mut self) -> CommonResult<()> {
-        while let Some((peer_id, peer_type)) = self.inactive.take_peer(&self.config) {
-            match self.active.insert_peer(peer_id, PeerState::Out, peer_type, &self.config) {
-                InsertPeerResult::Inserted(peer_id) => {
-                    self.send(Message::Connect(peer_id))?;
-                }
-                InsertPeerResult::Replaced {
-                    inserted, removed
-                } => {
-                    self.inactive.insert_peer(removed.clone(), &self.config);
-                    self.send(Message::Connect(inserted))?;
-                    self.send(Message::Drop(removed))?;
-                }
-                InsertPeerResult::Exist(_peer_id) => {}
-                InsertPeerResult::Full(peer_id) => {
-                    self.inactive.insert_peer(peer_id, &self.config);
-                    break;
-                }
-            }
-        }
-        Ok(())
-    }
+	fn activate(&mut self) {
+		while let Some(peer_id) = self.inactive.take_peer(&self.config) {
+			match self
+				.active
+				.insert_peer(peer_id, PeerState::Out, &self.config)
+			{
+				InsertPeerResult::Inserted(peer_id) => {
+					self.send(OutMessage::Connect(peer_id));
+				}
+				InsertPeerResult::Replaced { inserted, removed } => {
+					self.inactive.insert_peer(removed.clone());
+					self.send(OutMessage::Connect(inserted));
+					self.send(OutMessage::Drop(removed));
+				}
+				InsertPeerResult::Exist(_peer_id) => {}
+				InsertPeerResult::Full(peer_id) => {
+					self.inactive.insert_peer(peer_id);
+					break;
+				}
+			}
+		}
+	}
 
-    fn send(&self, message: Message) -> CommonResult<()> {
-        self.tx.send(message).map_err(|e| ErrorKind::Send(e.to_string()))?;
-        Ok(())
-    }
+	fn send(&mut self, message: OutMessage) {
+		self.out_messages.push_back(message);
+	}
+
+	fn on_add_reserved_peer(&mut self, peer_id: PeerId) {
+		self.config.reserved.insert(peer_id.clone(), ());
+		if self.active.contains(&peer_id) {
+			return;
+		}
+		self.inactive.insert_peer(peer_id);
+		self.activate();
+	}
+
+	fn on_remove_reserved_peer(&mut self, peer_id: PeerId) {
+		self.config.reserved.remove(&peer_id);
+		if self.config.reserved_only {
+			self.active.remove_peer(&peer_id);
+			self.inactive.insert_peer(peer_id.clone());
+			self.send(OutMessage::Drop(peer_id));
+		}
+		self.activate();
+	}
+
+	fn on_set_reserved_only(&mut self, reserved_only: bool) {
+		self.config.reserved_only = reserved_only;
+		if self.config.reserved_only {
+			let active_normal_peers = self
+				.active
+				.peers
+				.iter()
+				.filter_map(|(peer_id, _)| {
+					if !self.config.reserved.contains_key(peer_id) {
+						Some(peer_id.clone())
+					} else {
+						None
+					}
+				})
+				.collect::<Vec<_>>();
+			for peer_id in active_normal_peers {
+				self.active.remove_peer(&peer_id);
+				self.inactive.insert_peer(peer_id.clone());
+				self.send(OutMessage::Drop(peer_id));
+			}
+		}
+		self.activate();
+	}
+}
+
+impl Stream for PeerManager {
+	type Item = OutMessage;
+
+	fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+		loop {
+			if let Some(message) = self.out_messages.pop_front() {
+				return Poll::Ready(Some(message));
+			}
+
+			let in_message = match Stream::poll_next(Pin::new(&mut self.in_rx), cx) {
+				Poll::Pending => return Poll::Pending,
+				Poll::Ready(Some(in_message)) => in_message,
+				Poll::Ready(None) => return Poll::Pending,
+			};
+
+			match in_message {
+				InMessage::AddReservedPeer(peer_id) => self.on_add_reserved_peer(peer_id),
+				InMessage::RemoveReservedPeer(peer_id) => self.on_remove_reserved_peer(peer_id),
+				InMessage::SetReservedOnly(reserved) => self.on_set_reserved_only(reserved),
+			}
+		}
+	}
 }
 
 struct ActivePeers {
-    peers: LinkedHashMap<PeerId, PeerInfo>,
-    in_peers: u32,
-    out_peers: u32,
+	peers: LinkedHashMap<PeerId, PeerInfo>,
+	in_peers: u32,
+	out_peers: u32,
 }
 
 impl ActivePeers {
-    fn insert_peer(&mut self, peer_id: PeerId, peer_state: PeerState, peer_type: PeerType, config: &PeerManagerConfig) -> InsertPeerResult {
-        if let Some(_peer_info) = self.peers.get(&peer_id) {
-            return InsertPeerResult::Exist(peer_id);
-        }
-        let peers = match peer_state {
-            PeerState::In => self.in_peers,
-            PeerState::Out => self.out_peers,
-        };
-        if peers >= config.max_out_peers {
-            if peer_type == PeerType::Reserved {
-                let to_remove = self.peers.iter().find(|peer| {
-                    peer.1.peer_state == peer_state && peer.1.peer_type == PeerType::Normal
-                }).map(|(peer_id, peer_info)| (peer_id.clone(), peer_info.peer_state.clone()));
+	fn insert_peer(
+		&mut self,
+		peer_id: PeerId,
+		peer_state: PeerState,
+		config: &PeerManagerConfig,
+	) -> InsertPeerResult {
+		let peer_type = match config.reserved.contains_key(&peer_id) {
+			true => PeerType::Reserved,
+			false => PeerType::Normal,
+		};
 
-                if let Some((to_remove_peer_id, to_remove_peer_state)) = to_remove {
+		if let Some(_peer_info) = self.peers.get(&peer_id) {
+			return InsertPeerResult::Exist(peer_id);
+		}
+		let exceed_max_peers = match peer_state {
+			PeerState::In => self.in_peers >= config.max_in_peers,
+			PeerState::Out => self.out_peers >= config.max_out_peers,
+		};
+		if exceed_max_peers {
+			if peer_type == PeerType::Reserved {
+				let to_remove = self
+					.peers
+					.iter()
+					.find(|peer| {
+						peer.1.peer_state == peer_state && peer.1.peer_type == PeerType::Normal
+					})
+					.map(|(peer_id, peer_info)| (peer_id.clone(), peer_info.peer_state.clone()));
 
-                    // insert
-                    match peer_state {
-                        PeerState::In => self.in_peers += 1,
-                        PeerState::Out => self.out_peers += 1,
-                    };
-                    self.peers.insert(peer_id.clone(), PeerInfo {
-                        peer_type,
-                        peer_state,
-                    });
+				if let Some((to_remove_peer_id, to_remove_peer_state)) = to_remove {
+					// insert
+					match peer_state {
+						PeerState::In => self.in_peers += 1,
+						PeerState::Out => self.out_peers += 1,
+					};
+					self.peers.insert(
+						peer_id.clone(),
+						PeerInfo {
+							peer_type,
+							peer_state,
+						},
+					);
 
-                    // remove
-                    match to_remove_peer_state {
-                        PeerState::In => self.in_peers -= 1,
-                        PeerState::Out => self.out_peers -= 1,
-                    };
-                    self.peers.remove(&to_remove_peer_id);
+					// remove
+					match to_remove_peer_state {
+						PeerState::In => self.in_peers -= 1,
+						PeerState::Out => self.out_peers -= 1,
+					};
+					self.peers.remove(&to_remove_peer_id);
 
-                    return InsertPeerResult::Replaced { inserted: peer_id, removed: to_remove_peer_id };
-                }
-            }
-            return InsertPeerResult::Full(peer_id);
-        }
+					return InsertPeerResult::Replaced {
+						inserted: peer_id,
+						removed: to_remove_peer_id,
+					};
+				}
+			}
+			return InsertPeerResult::Full(peer_id);
+		}
 
-        //insert
-        match peer_state {
-            PeerState::In => self.in_peers += 1,
-            PeerState::Out => self.out_peers += 1,
-        };
-        self.peers.insert(peer_id.clone(), PeerInfo {
-            peer_type,
-            peer_state,
-        });
-        InsertPeerResult::Inserted(peer_id)
-    }
+		//insert
+		match peer_state {
+			PeerState::In => self.in_peers += 1,
+			PeerState::Out => self.out_peers += 1,
+		};
+		self.peers.insert(
+			peer_id.clone(),
+			PeerInfo {
+				peer_type,
+				peer_state,
+			},
+		);
+		InsertPeerResult::Inserted(peer_id)
+	}
 
-    fn remove_peer(&mut self, peer_id: &PeerId) {
-        let to_remove = self.peers.get(peer_id).map(|peer_info| peer_info.peer_state.clone());
-        if let Some(to_remove_peer_state) = to_remove {
-            match to_remove_peer_state {
-                PeerState::In => self.in_peers -= 1,
-                PeerState::Out => self.out_peers -= 1,
-            };
-            self.peers.remove(peer_id);
-        }
-    }
+	fn remove_peer(&mut self, peer_id: &PeerId) {
+		let to_remove = self
+			.peers
+			.get(peer_id)
+			.map(|peer_info| peer_info.peer_state.clone());
+		if let Some(to_remove_peer_state) = to_remove {
+			match to_remove_peer_state {
+				PeerState::In => self.in_peers -= 1,
+				PeerState::Out => self.out_peers -= 1,
+			};
+			self.peers.remove(peer_id);
+		}
+	}
 
-    fn contains(&self, peer_id: &PeerId) -> bool {
-        self.peers.contains_key(peer_id)
-    }
+	fn contains(&self, peer_id: &PeerId) -> bool {
+		self.peers.contains_key(peer_id)
+	}
 }
 
 enum InsertPeerResult {
-    Inserted(PeerId),
-    Replaced {
-        inserted: PeerId,
-        removed: PeerId,
-    },
-    Exist(PeerId),
-    Full(PeerId),
+	Inserted(PeerId),
+	Replaced { inserted: PeerId, removed: PeerId },
+	Exist(PeerId),
+	Full(PeerId),
 }
 
 struct InactivePeers {
-    reserved_peers: LinkedHashMap<PeerId, ()>,
-    normal_peers: LinkedHashMap<PeerId, ()>,
+	peers: LinkedHashMap<PeerId, ()>,
 }
 
 impl InactivePeers {
-    fn take_peer(&mut self, config: &PeerManagerConfig) -> Option<(PeerId, PeerType)> {
-        if let Some((peer_id, _)) = self.reserved_peers.pop_front() {
-            return Some((peer_id, PeerType::Reserved));
-        }
-        if config.reserved_only {
-            return None;
-        }
-        if let Some((peer_id, _)) = self.normal_peers.pop_front() {
-            return Some((peer_id, PeerType::Normal));
-        }
-        None
-    }
-    fn insert_peer(&mut self, peer_id: PeerId, config: &PeerManagerConfig) {
-        let is_reserved = config.reserved.contains(&peer_id);
-        match is_reserved {
-            false => self.normal_peers.insert(peer_id, ()),
-            true => self.reserved_peers.insert(peer_id, ()),
-        };
-    }
-    fn remove_peer(&mut self, peer_id: PeerId, config: &PeerManagerConfig) {
-        let is_reserved = config.reserved.contains(&peer_id);
-        match is_reserved {
-            false => self.normal_peers.remove(&peer_id),
-            true => self.reserved_peers.remove(&peer_id),
-        };
-    }
+	fn take_peer(&mut self, config: &PeerManagerConfig) -> Option<PeerId> {
+		// reserved first
+		if let Some(peer_id) = self.peers.iter().find_map(|(peer_id, ())| {
+			if config.reserved.contains_key(peer_id) {
+				Some(peer_id.clone())
+			} else {
+				None
+			}
+		}) {
+			self.peers.remove(&peer_id);
+			return Some(peer_id);
+		}
+		if config.reserved_only {
+			return None;
+		}
+
+		// normal second
+		if let Some(peer_id) = self.peers.iter().find_map(|(peer_id, ())| {
+			if !config.reserved.contains_key(peer_id) {
+				Some(peer_id.clone())
+			} else {
+				None
+			}
+		}) {
+			self.peers.remove(&peer_id);
+			return Some(peer_id);
+		}
+		None
+	}
+	fn insert_peer(&mut self, peer_id: PeerId) {
+		self.peers.insert(peer_id, ());
+	}
+	fn remove_peer(&mut self, peer_id: PeerId) {
+		self.peers.remove(&peer_id);
+	}
 }
