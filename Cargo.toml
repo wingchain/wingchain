@@ -27,6 +27,7 @@ members = [
 	"core/node/vm/contract-samples/hello-world",
 	"core/node/vm/contract-samples/token",
 	"core/node/vm/contract-samples/token-bank",
+	"core/node/peer-manager",
 	"core/module/system",
 	"core/module/balance",
 	"core/module/solo",

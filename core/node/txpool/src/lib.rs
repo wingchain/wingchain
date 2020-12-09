@@ -66,7 +66,7 @@ where
 
 		let system_meta = get_system_meta(support.clone())?;
 
-		let tx_pool = Self {
+		let txpool = Self {
 			config,
 			system_meta,
 			support,
@@ -79,7 +79,7 @@ where
 
 		info!("Initializing txpool");
 
-		Ok(tx_pool)
+		Ok(txpool)
 	}
 
 	/// Get the queue of the pool
@@ -205,10 +205,9 @@ async fn process_buffer(
 
 /// Get system meta by executing a call on the system module
 fn get_system_meta<S: TxPoolSupport>(support: Arc<S>) -> CommonResult<module::system::Meta> {
-	let block_number = support.get_confirmed_number()?.expect("qed");
 	support
 		.execute_call_with_block_number(
-			&block_number,
+			&0,
 			None,
 			"system".to_string(),
 			"get_meta".to_string(),
