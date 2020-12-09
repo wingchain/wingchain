@@ -205,10 +205,9 @@ async fn process_buffer(
 
 /// Get system meta by executing a call on the system module
 fn get_system_meta<S: TxPoolSupport>(support: Arc<S>) -> CommonResult<module::system::Meta> {
-	let block_number = support.get_confirmed_number()?.expect("qed");
 	support
 		.execute_call_with_block_number(
-			&block_number,
+			&0,
 			None,
 			"system".to_string(),
 			"get_meta".to_string(),

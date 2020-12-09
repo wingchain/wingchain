@@ -183,10 +183,9 @@ where
 }
 
 fn get_solo_meta<S: ConsensusSupport>(support: Arc<S>) -> CommonResult<module::solo::Meta> {
-	let block_number = support.get_confirmed_number()?.expect("qed");
 	support
 		.execute_call_with_block_number(
-			&block_number,
+			&0,
 			None,
 			"solo".to_string(),
 			"get_meta".to_string(),
