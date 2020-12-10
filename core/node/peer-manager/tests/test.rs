@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use futures::core_reexport::time::Duration;
+use std::time::Duration;
+
 use futures::future::{select, Either};
 use futures::StreamExt;
 use libp2p::PeerId;
