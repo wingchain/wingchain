@@ -6,4 +6,11 @@ edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[dependencies.libp2p]
+version = "0.31.1"
+default-features = false
+features = ["identify", "noise", "ping", "tcp-async-std", "yamux"]
+
 [dependencies]
+fnv = "1.0.6"
+derive_more = "0.99"

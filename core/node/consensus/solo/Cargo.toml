@@ -8,7 +8,7 @@ edition = "2018"
 
 [dependencies]
 tokio ={ version = "0.2.17", features = ["rt-core", "time", "sync", "stream", "macros"] }
-futures = "0.3"
+futures = "0.3.8"
 log = "0.4.8"
 
 node-consensus = { path = ".." }

@@ -12,7 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![allow(unused)]
+use libp2p::identify::{Identify, IdentifyEvent};
+use libp2p::ping::{Ping, PingEvent};
+use libp2p::swarm::NetworkBehaviourEventProcess;
+use libp2p::NetworkBehaviour;
 
-mod behaviour;
-mod protocol;
+pub enum BehaviourOut {}
+
+#[derive(NetworkBehaviour)]
+#[behaviour(out_event = "BehaviourOut", poll_method = "poll")]
+pub struct Behaviour {
+	ping: Ping,
+	identify: Identify,
+}
+
+impl NetworkBehaviourEventProcess<IdentifyEvent> for Behaviour {
+	fn inject_event(&mut self, event: IdentifyEvent) {}
+}
+
+impl NetworkBehaviourEventProcess<PingEvent> for Behaviour {
+	fn inject_event(&mut self, event: PingEvent) {}
+}
