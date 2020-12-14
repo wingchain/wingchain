@@ -21,9 +21,12 @@ use libp2p::swarm::{NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use libp2p::PeerId;
 
 use crate::protocol::handler::{Handler, HandlerIn, HandlerOut, HandlerProto};
+use std::borrow::Cow;
 
 mod handler;
 mod upgrade;
+
+const PROTOCOL_NAME: &'static [u8] = b"/wingchain/1";
 
 pub enum ProtocolOut {}
 
@@ -34,7 +37,7 @@ impl NetworkBehaviour for Protocol {
 	type OutEvent = ProtocolOut;
 
 	fn new_handler(&mut self) -> Self::ProtocolsHandler {
-		HandlerProto {}
+		HandlerProto::new(Cow::Borrowed(PROTOCOL_NAME))
 	}
 
 	fn addresses_of_peer(&mut self, _: &PeerId) -> Vec<Multiaddr> {
