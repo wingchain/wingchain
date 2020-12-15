@@ -19,6 +19,8 @@ use std::io;
 use std::iter;
 use std::pin::Pin;
 
+use futures::stream::Fuse;
+use futures::stream::StreamExt;
 use futures::task::{Context, Poll};
 use futures::{Sink, Stream};
 use futures_codec::{BytesMut, Framed};
@@ -35,7 +37,7 @@ pub struct InProtocol {
 #[pin_project::pin_project]
 pub struct InSubstream {
 	#[pin]
-	socket: Framed<NegotiatedSubstream, UviBytes<io::Cursor<Vec<u8>>>>,
+	socket: Fuse<Framed<NegotiatedSubstream, UviBytes<io::Cursor<Vec<u8>>>>>,
 }
 
 impl InProtocol {
@@ -61,7 +63,7 @@ impl InboundUpgradeSend for InProtocol {
 	fn upgrade_inbound(self, socket: NegotiatedSubstream, info: Self::Info) -> Self::Future {
 		Box::pin(async move {
 			let substream = InSubstream {
-				socket: Framed::new(socket, UviBytes::default()),
+				socket: Framed::new(socket, UviBytes::default()).fuse(),
 			};
 			Ok(substream)
 		})
@@ -119,9 +121,10 @@ impl OutboundUpgradeSend for OutProtocol {
 impl Stream for InSubstream {
 	type Item = Result<BytesMut, io::Error>;
 
-	fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-		let mut this = self.project();
-		Stream::poll_next(this.socket.as_mut(), cx)
+	fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+		// let mut this = self.project();
+		// Stream::poll_next(this.socket.as_mut(), cx)
+        self.socket.poll_next_unpin(cx)
 	}
 }
 
