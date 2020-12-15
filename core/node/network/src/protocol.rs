@@ -411,6 +411,12 @@ impl NetworkBehaviour for Protocol {
 							);
 							if should_disconnect {
 								debug!("Handler({}, {:?}) <= Close", source, conn);
+								self.events
+									.push_back(NetworkBehaviourAction::NotifyHandler {
+										peer_id: source.clone(),
+										handler: NotifyHandler::One(*conn),
+										event: HandlerIn::Close,
+									});
 							}
 						} else {
 							*entry = PeerState::Connected {
@@ -431,6 +437,12 @@ impl NetworkBehaviour for Protocol {
 							);
 							if should_disconnect {
 								debug!("Handler({}, {:?}) <= Close", source, conn);
+								self.events
+									.push_back(NetworkBehaviourAction::NotifyHandler {
+										peer_id: source.clone(),
+										handler: NotifyHandler::One(*conn),
+										event: HandlerIn::Close,
+									});
 							}
 						} else {
 							*entry = PeerState::ProtocolOpened {
