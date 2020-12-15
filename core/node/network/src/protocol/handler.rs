@@ -68,6 +68,7 @@ impl IntoProtocolsHandler for HandlerProto {
 pub enum HandlerIn {
 	Open,
 	Close,
+	SendMessage { message: Vec<u8> },
 }
 
 pub enum State {
@@ -155,10 +156,36 @@ impl Handler {
 		self.state = match std::mem::replace(&mut self.state, State::Locked) {
 			State::Init => State::Closed,
 			State::Opening { .. } => State::Closed,
-			State::Opened { .. } => State::Closed,
+			State::Opened { .. } => {
+				self.events_queue.push_back(ProtocolsHandlerEvent::Custom(
+					HandlerOut::ProtocolClose {
+						reason: "Closed by handler".into(),
+					},
+				));
+				State::Closed
+			}
 			State::Closed => State::Closed,
 			State::Locked => unreachable!(),
 		};
+	}
+
+	fn send_message(&mut self, message: Vec<u8>) {
+		match &mut self.state {
+			State::Opened {
+				in_substream,
+				out_substream,
+			} => {
+				out_substream.send_message(message);
+			}
+			_ => {
+				self.events_queue.push_back(ProtocolsHandlerEvent::Custom(
+					HandlerOut::ProtocolError {
+						should_disconnect: false,
+						error: "Send message when not opened".into(),
+					},
+				));
+			}
+		}
 	}
 }
 
@@ -264,6 +291,7 @@ impl ProtocolsHandler for Handler {
 		match event {
 			HandlerIn::Open => self.open(),
 			HandlerIn::Close => self.close(),
+			HandlerIn::SendMessage { message } => self.send_message(message),
 		}
 	}
 
