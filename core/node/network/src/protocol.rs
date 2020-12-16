@@ -19,14 +19,17 @@ use std::error;
 use std::task::{Context, Poll};
 
 use fnv::FnvHashMap;
+use futures::FutureExt;
 use futures::StreamExt;
 use futures_codec::BytesMut;
 use libp2p::core::connection::ConnectionId;
 use libp2p::core::{ConnectedPoint, Multiaddr};
-use libp2p::swarm::{NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters};
+use libp2p::swarm::{
+	DialPeerCondition, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
+};
 use libp2p::PeerId;
 use log::debug;
-use tokio::time::{Delay, Instant};
+use tokio::time::{delay_until, Delay, Duration, Instant};
 
 use node_peer_manager::{IncomingId, OutMessage, PeerManager};
 
@@ -36,6 +39,7 @@ mod handler;
 mod upgrade;
 
 const PROTOCOL_NAME: &'static [u8] = b"/wingchain/1";
+const DELAY: Duration = Duration::from_secs(5);
 
 pub enum ProtocolOut {
 	ProtocolOpen {
@@ -58,7 +62,6 @@ pub enum PeerState {
 	Connected {
 		connection_id: ConnectionId,
 		connected_point: ConnectedPoint,
-		pending_incoming: Option<Delay>,
 	},
 	ProtocolOpened {
 		connection_id: ConnectionId,
@@ -97,19 +100,216 @@ impl Protocol {
 	}
 
 	fn peer_manager_connect(&mut self, peer_id: PeerId) {
-		//TODO
+		let mut entry = self
+			.peers
+			.entry(peer_id.clone())
+			.or_insert(PeerState::Init { pending_dial: None });
+		match std::mem::replace(entry, PeerState::Locked) {
+			// Init => Init
+			PeerState::Init { pending_dial } => {
+				debug!("PeerManager => Connect({})", peer_id);
+				match self.delay_peers.remove(&peer_id) {
+					Some(instant) if instant > Instant::now() => {
+						debug!("Schedule pending dial({}) at {:?}", peer_id, instant);
+						*entry = PeerState::Init {
+							pending_dial: Some(delay_until(instant)),
+						};
+					}
+					_ => match pending_dial {
+						None => {
+							debug!("Libp2p <= Dial({})", peer_id);
+							self.events.push_back(NetworkBehaviourAction::DialPeer {
+								peer_id: peer_id.clone(),
+								condition: DialPeerCondition::Disconnected,
+							});
+							*entry = PeerState::Init { pending_dial };
+						}
+						Some(_) => {
+							debug!("Pending dial({})", peer_id);
+							*entry = PeerState::Init { pending_dial };
+						}
+					},
+				}
+			}
+			// Connected => Connected
+			PeerState::Connected {
+				connection_id,
+				connected_point,
+			} => {
+				*entry = PeerState::Connected {
+					connection_id,
+					connected_point,
+				};
+			}
+			// ProtocolOpened => ProtocolOpened
+			PeerState::ProtocolOpened {
+				connection_id,
+				connected_point,
+			} => {
+				*entry = PeerState::ProtocolOpened {
+					connection_id,
+					connected_point,
+				};
+			}
+			PeerState::Locked => unreachable!(),
+		}
 	}
 
 	fn peer_manager_drop(&mut self, peer_id: PeerId) {
-		//TODO
+		let mut entry = self
+			.peers
+			.entry(peer_id.clone())
+			.or_insert(PeerState::Init { pending_dial: None });
+		match std::mem::replace(entry, PeerState::Locked) {
+			// Init => Init
+			PeerState::Init { pending_dial } => {
+				*entry = PeerState::Init { pending_dial };
+			}
+			// Connected => Connected
+			PeerState::Connected {
+				connection_id,
+				connected_point,
+			} => {
+				debug!("PeerManager => Drop({})", peer_id);
+				debug!("Handler({}, {:?}) <= Close", peer_id, connection_id);
+				self.events
+					.push_back(NetworkBehaviourAction::NotifyHandler {
+						peer_id: peer_id.clone(),
+						handler: NotifyHandler::One(connection_id),
+						event: HandlerIn::Close,
+					});
+				*entry = PeerState::Connected {
+					connection_id,
+					connected_point,
+				};
+			}
+			// ProtocolOpened => ProtocolOpened
+			PeerState::ProtocolOpened {
+				connection_id,
+				connected_point,
+			} => {
+				debug!("PeerManager => Drop({})", peer_id);
+				debug!("Handler({}, {:?}) <= Close", peer_id, connection_id);
+				self.events
+					.push_back(NetworkBehaviourAction::NotifyHandler {
+						peer_id: peer_id.clone(),
+						handler: NotifyHandler::One(connection_id),
+						event: HandlerIn::Close,
+					});
+				*entry = PeerState::ProtocolOpened {
+					connection_id,
+					connected_point,
+				};
+			}
+			PeerState::Locked => unreachable!(),
+		}
 	}
 
 	fn peer_manager_accept(&mut self, incoming_id: IncomingId) {
-		//TODO
+		let peer_id = match self.incoming_peers.remove(&incoming_id) {
+			Some(peer_id) => peer_id,
+			None => return,
+		};
+
+		let mut entry = self
+			.peers
+			.entry(peer_id.clone())
+			.or_insert(PeerState::Init { pending_dial: None });
+
+		match std::mem::replace(entry, PeerState::Locked) {
+			// Init => Init
+			PeerState::Init { pending_dial } => {
+				debug!("PeerManager => Accept({})", peer_id);
+				debug!("PeerManager <= Dropped({})", peer_id);
+				self.peer_manager.dropped(peer_id.clone());
+				*entry = PeerState::Init { pending_dial };
+			}
+			// Connected => Connected
+			PeerState::Connected {
+				connection_id,
+				connected_point,
+			} => {
+				debug!("PeerManager => Accept({})", peer_id);
+				debug!("Handler({}, {:?}) <= Open", peer_id, connection_id);
+				self.events
+					.push_back(NetworkBehaviourAction::NotifyHandler {
+						peer_id: peer_id.clone(),
+						handler: NotifyHandler::One(connection_id),
+						event: HandlerIn::Open,
+					});
+				*entry = PeerState::Connected {
+					connection_id,
+					connected_point,
+				};
+			}
+			// ProtocolOpened => ProtocolOpened
+			PeerState::ProtocolOpened {
+				connection_id,
+				connected_point,
+			} => {
+				*entry = PeerState::ProtocolOpened {
+					connection_id,
+					connected_point,
+				};
+			}
+			PeerState::Locked => unreachable!(),
+		}
 	}
 
 	fn peer_manager_reject(&mut self, incoming_id: IncomingId) {
-		//TODO
+		let peer_id = match self.incoming_peers.remove(&incoming_id) {
+			Some(peer_id) => peer_id,
+			None => return,
+		};
+
+		let mut entry = self
+			.peers
+			.entry(peer_id.clone())
+			.or_insert(PeerState::Init { pending_dial: None });
+
+		match std::mem::replace(entry, PeerState::Locked) {
+			// Init => Init
+			PeerState::Init { pending_dial } => {
+				*entry = PeerState::Init { pending_dial };
+			}
+			// Connected => Connected
+			PeerState::Connected {
+				connection_id,
+				connected_point,
+			} => {
+				debug!("PeerManager => Reject({})", peer_id);
+				debug!("Handler({}, {:?}) <= Close", peer_id, connection_id);
+				self.events
+					.push_back(NetworkBehaviourAction::NotifyHandler {
+						peer_id: peer_id.clone(),
+						handler: NotifyHandler::One(connection_id),
+						event: HandlerIn::Close,
+					});
+				*entry = PeerState::Connected {
+					connection_id,
+					connected_point,
+				};
+			}
+			// ProtocolOpened => ProtocolOpened
+			PeerState::ProtocolOpened {
+				connection_id,
+				connected_point,
+			} => {
+				debug!("PeerManager => Reject({})", peer_id);
+				debug!("Handler({}, {:?}) <= Close", peer_id, connection_id);
+				self.events
+					.push_back(NetworkBehaviourAction::NotifyHandler {
+						peer_id: peer_id.clone(),
+						handler: NotifyHandler::One(connection_id),
+						event: HandlerIn::Close,
+					});
+				*entry = PeerState::ProtocolOpened {
+					connection_id,
+					connected_point,
+				};
+			}
+			PeerState::Locked => unreachable!(),
+		}
 	}
 }
 
@@ -140,56 +340,73 @@ impl NetworkBehaviour for Protocol {
 			.entry(peer_id.clone())
 			.or_insert(PeerState::Init { pending_dial: None });
 		match std::mem::replace(entry, PeerState::Locked) {
+			// Init => Connected
 			PeerState::Init { pending_dial } => {
 				match endpoint {
 					ConnectedPoint::Dialer { .. } => {
 						// open in handler
 						debug!("Libp2p => Connected({}): Through: {:?}", peer_id, endpoint);
-						debug!("Handler({}, {:?}) <= Open", peer_id, *conn);
+						debug!("Handler({}, {:?}) <= Open", peer_id, conn);
 						self.events
 							.push_back(NetworkBehaviourAction::NotifyHandler {
 								peer_id: peer_id.clone(),
-								handler: NotifyHandler::One(*conn),
+								handler: NotifyHandler::One(conn.clone()),
 								event: HandlerIn::Open,
 							});
 					}
 					ConnectedPoint::Listener { .. } => {
-						// determine by peer manager
-						let incoming_id = Self::next_incoming_id(&mut self.next_incoming_id);
-						debug!("Libp2p => Connected({}): Through: {:?}", peer_id, endpoint);
-						debug!(
-							"PeerManager <= Incoming({}, {:?}): Through: {:?}",
-							peer_id, incoming_id, endpoint
-						);
-						self.incoming_peers
-							.insert(incoming_id.clone(), peer_id.clone());
-						self.peer_manager.incoming(peer_id.clone(), incoming_id);
+						match self.delay_peers.remove(peer_id) {
+							Some(instant) if instant > Instant::now() => {
+								// close in handler
+								debug!("Libp2p => Connected({}): Through: {:?}", peer_id, endpoint);
+								debug!("Handler({}, {:?}) <= Close", peer_id, conn);
+								self.events
+									.push_back(NetworkBehaviourAction::NotifyHandler {
+										peer_id: peer_id.clone(),
+										handler: NotifyHandler::One(conn.clone()),
+										event: HandlerIn::Close,
+									});
+								self.delay_peers.insert(peer_id.clone(), instant);
+							}
+							_ => {
+								// determine by peer manager
+								let incoming_id =
+									Self::next_incoming_id(&mut self.next_incoming_id);
+								debug!("Libp2p => Connected({}): Through: {:?}", peer_id, endpoint);
+								debug!(
+									"PeerManager <= Incoming({}, {:?}): Through: {:?}",
+									peer_id, incoming_id, endpoint
+								);
+								self.incoming_peers
+									.insert(incoming_id.clone(), peer_id.clone());
+								self.peer_manager.incoming(peer_id.clone(), incoming_id);
+							}
+						}
 					}
 				}
 				*entry = PeerState::Connected {
 					connection_id: conn.clone(),
 					connected_point: endpoint.clone(),
-					pending_incoming: None,
 				}
 			}
+			// Connected => Connected
 			PeerState::Connected {
 				connection_id,
 				connected_point,
-				pending_incoming,
 			} => {
 				// keep only 1 connection
 				self.events
 					.push_back(NetworkBehaviourAction::NotifyHandler {
 						peer_id: peer_id.clone(),
-						handler: NotifyHandler::One(*conn),
+						handler: NotifyHandler::One(conn.clone()),
 						event: HandlerIn::Close,
 					});
 				*entry = PeerState::Connected {
 					connection_id,
 					connected_point,
-					pending_incoming,
 				};
 			}
+			// ProtocolOpened => ProtocolOpened
 			PeerState::ProtocolOpened {
 				connection_id,
 				connected_point,
@@ -198,7 +415,7 @@ impl NetworkBehaviour for Protocol {
 				self.events
 					.push_back(NetworkBehaviourAction::NotifyHandler {
 						peer_id: peer_id.clone(),
-						handler: NotifyHandler::One(*conn),
+						handler: NotifyHandler::One(conn.clone()),
 						event: HandlerIn::Close,
 					});
 				*entry = PeerState::ProtocolOpened {
@@ -221,13 +438,14 @@ impl NetworkBehaviour for Protocol {
 			.entry(peer_id.clone())
 			.or_insert(PeerState::Init { pending_dial: None });
 		match std::mem::replace(entry, PeerState::Locked) {
+			// Init => Init
 			PeerState::Init { pending_dial } => {
 				*entry = PeerState::Init { pending_dial };
 			}
+			// Connected => Init
 			PeerState::Connected {
 				connection_id,
 				connected_point,
-				pending_incoming,
 			} => {
 				if &connection_id == conn {
 					debug!(
@@ -244,10 +462,10 @@ impl NetworkBehaviour for Protocol {
 					*entry = PeerState::Connected {
 						connection_id,
 						connected_point,
-						pending_incoming,
 					};
 				}
 			}
+			// ProtocolOpened => Init
 			PeerState::ProtocolOpened {
 				connection_id,
 				connected_point,
@@ -292,13 +510,14 @@ impl NetworkBehaviour for Protocol {
 					.entry(source.clone())
 					.or_insert(PeerState::Init { pending_dial: None });
 				match std::mem::replace(entry, PeerState::Locked) {
+					// Init => Init
 					PeerState::Init { pending_dial } => {
 						*entry = PeerState::Init { pending_dial };
 					}
+					// Connected => ProtocolOpened
 					PeerState::Connected {
 						connection_id,
 						connected_point,
-						pending_incoming,
 					} => {
 						if conn == connection_id {
 							debug!("Handler({}, {:?}) => ProtocolOpen", source, conn);
@@ -320,10 +539,10 @@ impl NetworkBehaviour for Protocol {
 							*entry = PeerState::Connected {
 								connection_id,
 								connected_point,
-								pending_incoming,
 							};
 						}
 					}
+					// ProtocolOpened => ProtocolOpened
 					PeerState::ProtocolOpened {
 						connection_id,
 						connected_point,
@@ -342,20 +561,21 @@ impl NetworkBehaviour for Protocol {
 					.entry(source.clone())
 					.or_insert(PeerState::Init { pending_dial: None });
 				match std::mem::replace(entry, PeerState::Locked) {
+					// Init => Init
 					PeerState::Init { pending_dial } => {
 						*entry = PeerState::Init { pending_dial };
 					}
+					// Connected => Connected
 					PeerState::Connected {
 						connection_id,
 						connected_point,
-						pending_incoming,
 					} => {
 						*entry = PeerState::Connected {
 							connection_id,
 							connected_point,
-							pending_incoming,
 						};
 					}
+					// ProtocolOpened => Connected
 					PeerState::ProtocolOpened {
 						connection_id,
 						connected_point,
@@ -375,7 +595,6 @@ impl NetworkBehaviour for Protocol {
 							*entry = PeerState::Connected {
 								connection_id,
 								connected_point,
-								pending_incoming: None,
 							};
 						} else {
 							*entry = PeerState::ProtocolOpened {
@@ -396,13 +615,14 @@ impl NetworkBehaviour for Protocol {
 					.entry(source.clone())
 					.or_insert(PeerState::Init { pending_dial: None });
 				match std::mem::replace(entry, PeerState::Locked) {
+					// Init => Init
 					PeerState::Init { pending_dial } => {
 						*entry = PeerState::Init { pending_dial };
 					}
+					// Connected => Connected
 					PeerState::Connected {
 						connection_id,
 						connected_point,
-						pending_incoming,
 					} => {
 						if conn == connection_id {
 							debug!(
@@ -411,21 +631,22 @@ impl NetworkBehaviour for Protocol {
 							);
 							if should_disconnect {
 								debug!("Handler({}, {:?}) <= Close", source, conn);
+								self.delay_peers
+									.insert(source.clone(), Instant::now() + DELAY);
 								self.events
 									.push_back(NetworkBehaviourAction::NotifyHandler {
 										peer_id: source.clone(),
-										handler: NotifyHandler::One(*conn),
+										handler: NotifyHandler::One(conn),
 										event: HandlerIn::Close,
 									});
 							}
-						} else {
-							*entry = PeerState::Connected {
-								connection_id,
-								connected_point,
-								pending_incoming,
-							};
 						}
+						*entry = PeerState::Connected {
+							connection_id,
+							connected_point,
+						};
 					}
+					// ProtocolOpened => ProtocolOpened
 					PeerState::ProtocolOpened {
 						connection_id,
 						connected_point,
@@ -437,19 +658,20 @@ impl NetworkBehaviour for Protocol {
 							);
 							if should_disconnect {
 								debug!("Handler({}, {:?}) <= Close", source, conn);
+								self.delay_peers
+									.insert(source.clone(), Instant::now() + DELAY);
 								self.events
 									.push_back(NetworkBehaviourAction::NotifyHandler {
 										peer_id: source.clone(),
-										handler: NotifyHandler::One(*conn),
+										handler: NotifyHandler::One(conn),
 										event: HandlerIn::Close,
 									});
 							}
-						} else {
-							*entry = PeerState::ProtocolOpened {
-								connection_id,
-								connected_point,
-							};
 						}
+						*entry = PeerState::ProtocolOpened {
+							connection_id,
+							connected_point,
+						};
 					}
 					PeerState::Locked => unreachable!(),
 				}
@@ -482,23 +704,26 @@ impl NetworkBehaviour for Protocol {
 			.entry(peer_id.clone())
 			.or_insert(PeerState::Init { pending_dial: None });
 		match std::mem::replace(entry, PeerState::Locked) {
+			// Init => Init
 			PeerState::Init { pending_dial } => {
-				debug!("Libp2p => Dial failure for {:?}", peer_id);
-				debug!("PeerManager <= Dropped({:?})", peer_id);
+				debug!("Libp2p => Dial failure for {}", peer_id);
+				debug!("PeerManager <= Dropped({})", peer_id);
 				self.peer_manager.dropped(peer_id.clone());
+				self.delay_peers
+					.insert(peer_id.clone(), Instant::now() + DELAY);
 				*entry = PeerState::Init { pending_dial: None };
 			}
+			// Connected => Connected
 			PeerState::Connected {
 				connection_id,
 				connected_point,
-				pending_incoming,
 			} => {
 				*entry = PeerState::Connected {
 					connection_id,
 					connected_point,
-					pending_incoming,
 				};
 			}
+			// ProtocolOpened => ProtocolOpened
 			PeerState::ProtocolOpened {
 				connection_id,
 				connected_point,
@@ -541,6 +766,30 @@ impl NetworkBehaviour for Protocol {
 				},
 				Poll::Ready(None) => break,
 				Poll::Pending => break,
+			}
+		}
+
+		// pending dial
+		for (peer_id, peer_state) in self.peers.iter_mut() {
+			if let PeerState::Init { pending_dial } = peer_state {
+				match pending_dial {
+					Some(pd) => {
+						match pd.poll_unpin(cx) {
+							Poll::Ready(_) => {
+								// dial
+								debug!("Apply pending dial({})", peer_id);
+								debug!("Libp2p <= Dial({})", peer_id);
+								self.events.push_back(NetworkBehaviourAction::DialPeer {
+									peer_id: peer_id.clone(),
+									condition: DialPeerCondition::Disconnected,
+								});
+								std::mem::replace(pending_dial, None);
+							}
+							Poll::Pending => (),
+						}
+					}
+					_ => (),
+				}
 			}
 		}
 
