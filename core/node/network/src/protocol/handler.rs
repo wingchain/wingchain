@@ -15,20 +15,18 @@
 use std::borrow::Cow;
 use std::collections::VecDeque;
 use std::error;
-use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use futures::FutureExt;
-use futures::Stream;
 use futures::StreamExt;
 use futures_codec::BytesMut;
 use libp2p::core::ConnectedPoint;
 use libp2p::swarm::protocols_handler::{InboundUpgradeSend, OutboundUpgradeSend};
 use libp2p::swarm::{
-	IntoProtocolsHandler, KeepAlive, NegotiatedSubstream, ProtocolsHandler, ProtocolsHandlerEvent,
+	IntoProtocolsHandler, KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent,
 	ProtocolsHandlerUpgrErr, SubstreamProtocol,
 };
-use libp2p::{InboundUpgrade, OutboundUpgrade, PeerId};
+use libp2p::PeerId;
 use tokio::time::{delay_for, Delay, Duration, Instant};
 
 use crate::protocol::upgrade::{InProtocol, InSubstream, OutProtocol, OutSubstream};
@@ -50,8 +48,8 @@ impl IntoProtocolsHandler for HandlerProto {
 
 	fn into_handler(
 		self,
-		remote_peer_id: &PeerId,
-		connected_point: &ConnectedPoint,
+		_remote_peer_id: &PeerId,
+		_connected_point: &ConnectedPoint,
 	) -> Self::Handler {
 		Handler {
 			protocol_name: self.protocol_name,
@@ -127,7 +125,7 @@ impl Handler {
 			State::Opening {
 				in_substream,
 				out_substream,
-				deadline,
+				..
 			} => {
 				let upgrade = OutProtocol::new(self.protocol_name.clone());
 				self.events_queue
@@ -171,10 +169,7 @@ impl Handler {
 
 	fn send_message(&mut self, message: Vec<u8>) {
 		match &mut self.state {
-			State::Opened {
-				in_substream,
-				out_substream,
-			} => {
+			State::Opened { out_substream, .. } => {
 				out_substream.send_message(message);
 			}
 			_ => {
@@ -206,7 +201,7 @@ impl ProtocolsHandler for Handler {
 	fn inject_fully_negotiated_inbound(
 		&mut self,
 		protocol: <Self::InboundProtocol as InboundUpgradeSend>::Output,
-		info: Self::InboundOpenInfo,
+		_info: Self::InboundOpenInfo,
 	) {
 		self.state = match std::mem::replace(&mut self.state, State::Locked) {
 			State::Init => State::Opening {
@@ -215,9 +210,9 @@ impl ProtocolsHandler for Handler {
 				deadline: delay_for(OPEN_TIMEOUT),
 			},
 			State::Opening {
-				in_substream,
 				out_substream,
 				deadline,
+				..
 			} => match out_substream {
 				Some(out_substream) => {
 					self.events_queue
@@ -248,7 +243,7 @@ impl ProtocolsHandler for Handler {
 	fn inject_fully_negotiated_outbound(
 		&mut self,
 		protocol: <Self::OutboundProtocol as OutboundUpgradeSend>::Output,
-		info: Self::OutboundOpenInfo,
+		_info: Self::OutboundOpenInfo,
 	) {
 		self.state = match std::mem::replace(&mut self.state, State::Locked) {
 			State::Init => State::Opening {
@@ -258,8 +253,8 @@ impl ProtocolsHandler for Handler {
 			},
 			State::Opening {
 				in_substream,
-				out_substream,
 				deadline,
+				..
 			} => match in_substream {
 				Some(in_substream) => {
 					self.events_queue
@@ -297,7 +292,7 @@ impl ProtocolsHandler for Handler {
 
 	fn inject_dial_upgrade_error(
 		&mut self,
-		info: Self::OutboundOpenInfo,
+		_info: Self::OutboundOpenInfo,
 		error: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>,
 	) {
 		let should_disconnect = match error {

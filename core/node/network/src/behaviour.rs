@@ -66,12 +66,14 @@ pub struct Behaviour {
 }
 
 pub struct PeerInfo {
+	#[allow(dead_code)]
 	connected_point: ConnectedPoint,
 	agent_version: Option<String>,
 	latest_ping: Option<Duration>,
 }
 
 impl Behaviour {
+	#[allow(unused)]
 	pub fn new(config: BehaviourConfig, peer_manager: PeerManager) -> Self {
 		let ping = Ping::default();
 		let identify = Identify::new(
@@ -96,6 +98,11 @@ impl Behaviour {
 			peers: FnvHashMap::default(),
 			events: VecDeque::new(),
 		}
+	}
+
+	#[allow(unused)]
+	pub fn send_message(&mut self, peer_id: PeerId, message: Vec<u8>) {
+		self.protocol.send_message(peer_id, message);
 	}
 }
 
@@ -132,7 +139,6 @@ impl NetworkBehaviourEventProcess<ProtocolOut> for Behaviour {
 			ProtocolOut::Message { message } => {
 				self.events.push_back(BehaviourOut::Message { message });
 			}
-			_ => (),
 		}
 	}
 }
@@ -140,19 +146,13 @@ impl NetworkBehaviourEventProcess<ProtocolOut> for Behaviour {
 impl NetworkBehaviourEventProcess<IdentifyEvent> for Behaviour {
 	fn inject_event(&mut self, event: IdentifyEvent) {
 		match event {
-			IdentifyEvent::Received {
-				peer_id,
-				info,
-				observed_addr,
-			} => {
+			IdentifyEvent::Received { peer_id, info, .. } => {
 				trace!("Identified {}: {:?}", peer_id, info);
 
 				let IdentifyInfo {
-					public_key,
-					protocol_version,
 					agent_version,
 					mut listen_addrs,
-					protocols,
+					..
 				} = info;
 				if listen_addrs.len() > 32 {
 					listen_addrs.truncate(30);
@@ -201,7 +201,6 @@ impl NetworkBehaviourEventProcess<DiscoveryOut> for Behaviour {
 				self.protocol
 					.add_discovered_peers(std::iter::once(peer_id.clone()));
 			}
-			_ => (),
 		}
 	}
 }

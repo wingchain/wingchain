@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use std::borrow::Cow;
-use std::collections::hash_map::Entry;
 use std::collections::VecDeque;
 use std::error;
 use std::task::{Context, Poll};
@@ -28,12 +27,12 @@ use libp2p::swarm::{
 	DialPeerCondition, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
 };
 use libp2p::PeerId;
-use log::debug;
+use log::{debug, info};
 use tokio::time::{delay_until, Delay, Duration, Instant};
 
 use node_peer_manager::{IncomingId, OutMessage, PeerManager};
 
-use crate::protocol::handler::{Handler, HandlerIn, HandlerOut, HandlerProto};
+use crate::protocol::handler::{HandlerIn, HandlerOut, HandlerProto};
 
 mod handler;
 mod upgrade;
@@ -105,6 +104,22 @@ impl Protocol {
 		}
 	}
 
+	pub fn send_message(&mut self, peer_id: PeerId, message: Vec<u8>) {
+		let connection_id = match self.peers.get(&peer_id) {
+			Some(PeerState::ProtocolOpened { connection_id, .. }) => connection_id,
+			_ => {
+				info!("Send message to an unopened peer: {}", peer_id);
+				return;
+			}
+		};
+		self.events
+			.push_back(NetworkBehaviourAction::NotifyHandler {
+				peer_id: peer_id,
+				handler: NotifyHandler::One(connection_id.clone()),
+				event: HandlerIn::SendMessage { message },
+			});
+	}
+
 	fn next_incoming_id(incoming_id: &mut IncomingId) -> IncomingId {
 		let new = IncomingId(match incoming_id.0.checked_add(1) {
 			Some(v) => v,
@@ -114,7 +129,7 @@ impl Protocol {
 	}
 
 	fn peer_manager_connect(&mut self, peer_id: PeerId) {
-		let mut entry = self
+		let entry = self
 			.peers
 			.entry(peer_id.clone())
 			.or_insert(PeerState::Init { pending_dial: None });
@@ -170,7 +185,7 @@ impl Protocol {
 	}
 
 	fn peer_manager_drop(&mut self, peer_id: PeerId) {
-		let mut entry = self
+		let entry = self
 			.peers
 			.entry(peer_id.clone())
 			.or_insert(PeerState::Init { pending_dial: None });
@@ -225,7 +240,7 @@ impl Protocol {
 			None => return,
 		};
 
-		let mut entry = self
+		let entry = self
 			.peers
 			.entry(peer_id.clone())
 			.or_insert(PeerState::Init { pending_dial: None });
@@ -276,7 +291,7 @@ impl Protocol {
 			None => return,
 		};
 
-		let mut entry = self
+		let entry = self
 			.peers
 			.entry(peer_id.clone())
 			.or_insert(PeerState::Init { pending_dial: None });
@@ -349,13 +364,13 @@ impl NetworkBehaviour for Protocol {
 		conn: &ConnectionId,
 		endpoint: &ConnectedPoint,
 	) {
-		let mut entry = self
+		let entry = self
 			.peers
 			.entry(peer_id.clone())
 			.or_insert(PeerState::Init { pending_dial: None });
 		match std::mem::replace(entry, PeerState::Locked) {
 			// Init => Connected
-			PeerState::Init { pending_dial } => {
+			PeerState::Init { .. } => {
 				match endpoint {
 					ConnectedPoint::Dialer { .. } => {
 						// open in handler
@@ -445,9 +460,9 @@ impl NetworkBehaviour for Protocol {
 		&mut self,
 		peer_id: &PeerId,
 		conn: &ConnectionId,
-		endpoint: &ConnectedPoint,
+		_endpoint: &ConnectedPoint,
 	) {
-		let mut entry = self
+		let entry = self
 			.peers
 			.entry(peer_id.clone())
 			.or_insert(PeerState::Init { pending_dial: None });
@@ -519,7 +534,7 @@ impl NetworkBehaviour for Protocol {
 	fn inject_event(&mut self, source: PeerId, conn: ConnectionId, event: HandlerOut) {
 		match event {
 			HandlerOut::ProtocolOpen => {
-				let mut entry = self
+				let entry = self
 					.peers
 					.entry(source.clone())
 					.or_insert(PeerState::Init { pending_dial: None });
@@ -570,7 +585,7 @@ impl NetworkBehaviour for Protocol {
 				}
 			}
 			HandlerOut::ProtocolClose { reason } => {
-				let mut entry = self
+				let entry = self
 					.peers
 					.entry(source.clone())
 					.or_insert(PeerState::Init { pending_dial: None });
@@ -597,8 +612,8 @@ impl NetworkBehaviour for Protocol {
 						if conn == connection_id {
 							debug!("Handler({}, {:?}) => ProtocolClose", source, conn);
 							debug!(
-								"External <= ProtocolClose({}): Through: {:?}",
-								source, connected_point
+								"External <= ProtocolClose({}): Through: {:?}, Reason: {}",
+								source, connected_point, reason,
 							);
 							self.events.push_back(NetworkBehaviourAction::GenerateEvent(
 								ProtocolOut::ProtocolClose {
@@ -624,7 +639,7 @@ impl NetworkBehaviour for Protocol {
 				should_disconnect,
 				error,
 			} => {
-				let mut entry = self
+				let entry = self
 					.peers
 					.entry(source.clone())
 					.or_insert(PeerState::Init { pending_dial: None });
@@ -713,13 +728,13 @@ impl NetworkBehaviour for Protocol {
 	}
 
 	fn inject_dial_failure(&mut self, peer_id: &PeerId) {
-		let mut entry = self
+		let entry = self
 			.peers
 			.entry(peer_id.clone())
 			.or_insert(PeerState::Init { pending_dial: None });
 		match std::mem::replace(entry, PeerState::Locked) {
 			// Init => Init
-			PeerState::Init { pending_dial } => {
+			PeerState::Init { .. } => {
 				debug!("Libp2p => Dial failure for {}", peer_id);
 				debug!("PeerManager <= Dropped({})", peer_id);
 				self.peer_manager.dropped(peer_id.clone());
@@ -797,7 +812,7 @@ impl NetworkBehaviour for Protocol {
 									peer_id: peer_id.clone(),
 									condition: DialPeerCondition::Disconnected,
 								});
-								std::mem::replace(pending_dial, None);
+								*pending_dial = None;
 							}
 							Poll::Pending => (),
 						}

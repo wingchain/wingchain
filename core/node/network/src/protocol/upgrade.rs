@@ -27,7 +27,6 @@ use futures_codec::{BytesMut, Framed};
 use libp2p::core::UpgradeInfo;
 use libp2p::swarm::protocols_handler::{InboundUpgradeSend, OutboundUpgradeSend};
 use libp2p::swarm::NegotiatedSubstream;
-use libp2p::InboundUpgrade;
 use unsigned_varint::codec::UviBytes;
 
 pub struct InProtocol {
@@ -60,7 +59,7 @@ impl InboundUpgradeSend for InProtocol {
 	type Error = io::Error;
 	type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-	fn upgrade_inbound(self, socket: NegotiatedSubstream, info: Self::Info) -> Self::Future {
+	fn upgrade_inbound(self, socket: NegotiatedSubstream, _info: Self::Info) -> Self::Future {
 		Box::pin(async move {
 			let substream = InSubstream {
 				socket: Framed::new(socket, UviBytes::default()).fuse(),
@@ -107,7 +106,7 @@ impl OutboundUpgradeSend for OutProtocol {
 	type Error = io::Error;
 	type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-	fn upgrade_outbound(self, socket: NegotiatedSubstream, info: Self::Info) -> Self::Future {
+	fn upgrade_outbound(self, socket: NegotiatedSubstream, _info: Self::Info) -> Self::Future {
 		Box::pin(async move {
 			let substream = OutSubstream {
 				socket: Framed::new(socket, UviBytes::default()),
@@ -130,7 +129,7 @@ impl Stream for InSubstream {
 
 impl Stream for OutSubstream {
 	type Item = Result<(), io::Error>;
-	fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+	fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
 		let mut this = self.project();
 
 		if this.send_queue.is_empty() {
