@@ -38,7 +38,7 @@ use crate::protocol::handler::{Handler, HandlerIn, HandlerOut, HandlerProto};
 mod handler;
 mod upgrade;
 
-const PROTOCOL_NAME: &'static [u8] = b"/wingchain/1";
+const PROTOCOL_NAME: &'static [u8] = b"/wingchain/protocol/1.0.0";
 const DELAY: Duration = Duration::from_secs(5);
 
 pub enum ProtocolOut {
@@ -70,7 +70,12 @@ pub enum PeerState {
 	Locked,
 }
 
+pub struct ProtocolConfig {
+	pub local_peer_id: PeerId,
+}
+
 pub struct Protocol {
+	local_peer_id: PeerId,
 	peers: FnvHashMap<PeerId, PeerState>,
 	incoming_peers: FnvHashMap<IncomingId, PeerId>,
 	delay_peers: FnvHashMap<PeerId, Instant>,
@@ -80,14 +85,23 @@ pub struct Protocol {
 }
 
 impl Protocol {
-	pub fn new(peer_manager: PeerManager) -> Self {
+	pub fn new(config: ProtocolConfig, peer_manager: PeerManager) -> Self {
 		Self {
+			local_peer_id: config.local_peer_id,
 			peers: FnvHashMap::default(),
 			incoming_peers: FnvHashMap::default(),
 			delay_peers: FnvHashMap::default(),
 			peer_manager,
 			next_incoming_id: IncomingId(0),
 			events: VecDeque::with_capacity(16),
+		}
+	}
+
+	pub fn add_discovered_peers(&mut self, peer_ids: impl Iterator<Item = PeerId>) {
+		for peer_id in peer_ids {
+			if peer_id != self.local_peer_id {
+				self.peer_manager.discovered(peer_id);
+			}
 		}
 	}
 

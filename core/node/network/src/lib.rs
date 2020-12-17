@@ -15,4 +15,5 @@
 #![allow(unused)]
 
 mod behaviour;
+mod discovery;
 mod protocol;
