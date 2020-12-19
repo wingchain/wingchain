@@ -63,6 +63,7 @@ impl IntoProtocolsHandler for HandlerProto {
 	}
 }
 
+#[derive(Clone)]
 pub enum HandlerIn {
 	Open,
 	Close,

@@ -32,6 +32,7 @@ pub enum CommonErrorKind {
 	Consensus,
 	VM,
 	PeerManager,
+	Network,
 }
 
 #[derive(Debug, Display, Clone)]

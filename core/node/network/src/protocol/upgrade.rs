@@ -20,8 +20,8 @@ use std::iter;
 use std::pin::Pin;
 
 use futures::stream::Fuse;
-use futures::stream::StreamExt;
 use futures::task::{Context, Poll};
+use futures::StreamExt;
 use futures::{Sink, Stream};
 use futures_codec::{BytesMut, Framed};
 use libp2p::core::UpgradeInfo;

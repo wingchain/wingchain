@@ -34,6 +34,7 @@ use tokio::time::{delay_for, Delay, Duration};
 pub struct DiscoveryConfig {
 	pub local_peer_id: PeerId,
 	pub user_defined: Vec<(PeerId, Multiaddr)>,
+	pub max_connections: Option<u32>,
 }
 
 pub enum DiscoveryOut {
@@ -47,6 +48,8 @@ pub struct Discovery {
 	random_query_timer: Delay,
 	random_query_duration: Duration,
 	cached_external_addresses: LruCache<Multiaddr, ()>,
+	max_connections: Option<u32>,
+	num_connections: u32,
 }
 
 impl Discovery {
@@ -68,6 +71,8 @@ impl Discovery {
 			random_query_timer: delay_for(Duration::from_secs(0)),
 			random_query_duration: Duration::from_secs(1),
 			cached_external_addresses: LruCache::new(32),
+			max_connections: config.max_connections,
+			num_connections: 0,
 		}
 	}
 
@@ -108,6 +113,7 @@ impl NetworkBehaviour for Discovery {
 		conn: &ConnectionId,
 		endpoint: &ConnectedPoint,
 	) {
+		self.num_connections += 1;
 		NetworkBehaviour::inject_connection_established(
 			&mut self.kademlia,
 			peer_id,
@@ -122,6 +128,7 @@ impl NetworkBehaviour for Discovery {
 		conn: &ConnectionId,
 		endpoint: &ConnectedPoint,
 	) {
+		self.num_connections -= 1;
 		NetworkBehaviour::inject_connection_closed(&mut self.kademlia, peer_id, conn, endpoint);
 	}
 
@@ -182,13 +189,15 @@ impl NetworkBehaviour for Discovery {
 
 	fn poll(&mut self, cx: &mut Context<'_>, params: &mut impl PollParameters) -> Poll<NetworkBehaviourAction<<<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent, Self::OutEvent>>{
 		while let Poll::Ready(_) = self.random_query_timer.poll_unpin(cx) {
-			let random_peer_id = PeerId::random();
-			debug!("Libp2p <= Random query({:?})", random_peer_id);
-			self.kademlia.get_closest_peers(random_peer_id);
+			if self.num_connections <= self.max_connections.unwrap_or(u32::MAX) {
+				let random_peer_id = PeerId::random();
+				debug!("Libp2p <= Random query({:?})", random_peer_id);
+				self.kademlia.get_closest_peers(random_peer_id);
 
-			self.random_query_timer = delay_for(self.random_query_duration);
-			self.random_query_duration =
-				cmp::min(self.random_query_duration * 2, Duration::from_secs(60));
+				self.random_query_timer = delay_for(self.random_query_duration);
+				self.random_query_duration =
+					cmp::min(self.random_query_duration * 2, Duration::from_secs(60));
+			}
 		}
 
 		while let Poll::Ready(ev) = self.kademlia.poll(cx, params) {

@@ -36,8 +36,10 @@ pub struct BehaviourConfig {
 	pub agent_version: String,
 	pub local_public_key: PublicKey,
 	pub known_addresses: Vec<(PeerId, Multiaddr)>,
+	pub discovery_max_connections: Option<u32>,
 }
 
+#[derive(Debug)]
 pub enum BehaviourOut {
 	ProtocolOpen {
 		peer_id: PeerId,
@@ -73,7 +75,6 @@ pub struct PeerInfo {
 }
 
 impl Behaviour {
-	#[allow(unused)]
 	pub fn new(config: BehaviourConfig, peer_manager: PeerManager) -> Self {
 		let ping = Ping::default();
 		let identify = Identify::new(
@@ -85,6 +86,7 @@ impl Behaviour {
 		let discovery_config = DiscoveryConfig {
 			local_peer_id: local_peer_id.clone(),
 			user_defined: config.known_addresses,
+			max_connections: config.discovery_max_connections,
 		};
 		let discovery = Discovery::new(discovery_config);
 
@@ -100,7 +102,6 @@ impl Behaviour {
 		}
 	}
 
-	#[allow(unused)]
 	pub fn send_message(&mut self, peer_id: PeerId, message: Vec<u8>) {
 		self.protocol.send_message(peer_id, message);
 	}
