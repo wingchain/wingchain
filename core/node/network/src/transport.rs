@@ -24,7 +24,7 @@ use std::time::Duration;
 pub fn build_transport(
 	keypair: identity::Keypair,
 ) -> CommonResult<(Boxed<(PeerId, StreamMuxerBox)>, Arc<BandwidthSinks>)> {
-	let transport = tcp::TokioTcpConfig::new();
+	let transport = tcp::TcpConfig::new();
 	let transport = websocket::WsConfig::new(transport.clone()).or_transport(transport);
 	let transport = dns::DnsConfig::new(transport)
 		.map_err(|e| errors::ErrorKind::Transport(format!("{}", e)))?;

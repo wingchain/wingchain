@@ -16,13 +16,13 @@ use std::time::Duration;
 
 use futures::future::{select, Either};
 use futures::StreamExt;
+use futures_timer::Delay;
 use libp2p::PeerId;
 use linked_hash_map::LinkedHashMap;
-use tokio::time::delay_for;
 
 use node_peer_manager::{InMessage, IncomingId, OutMessage, PeerManager, PeerManagerConfig};
 
-#[tokio::test]
+#[async_std::test]
 async fn test_peer_manager_out_full() {
 	let config = PeerManagerConfig {
 		max_in_peers: 2,
@@ -51,14 +51,14 @@ async fn test_peer_manager_out_full() {
 	let peer_id_3 = PeerId::random();
 	peer_manager.discovered(peer_id_3.clone());
 
-	let message = select(peer_manager.next(), delay_for(Duration::from_millis(10))).await;
+	let message = select(peer_manager.next(), sleep(Duration::from_millis(10))).await;
 	match message {
 		Either::Left(_) => panic!("should not get message"),
 		Either::Right(_) => (),
 	}
 }
 
-#[tokio::test]
+#[async_std::test]
 async fn test_peer_manager_drop() {
 	let config = PeerManagerConfig {
 		max_in_peers: 2,
@@ -79,7 +79,7 @@ async fn test_peer_manager_drop() {
 	assert_eq!(message, Some(OutMessage::Connect(peer_id_0.clone())));
 }
 
-#[tokio::test]
+#[async_std::test]
 async fn test_peer_manager_contains() {
 	let config = PeerManagerConfig {
 		max_in_peers: 2,
@@ -96,14 +96,14 @@ async fn test_peer_manager_contains() {
 	assert_eq!(message, Some(OutMessage::Connect(peer_id_0.clone())));
 
 	peer_manager.discovered(peer_id_0.clone());
-	let message = select(peer_manager.next(), delay_for(Duration::from_millis(10))).await;
+	let message = select(peer_manager.next(), sleep(Duration::from_millis(10))).await;
 	match message {
 		Either::Left(_) => panic!("should not get message"),
 		Either::Right(_) => (),
 	}
 }
 
-#[tokio::test]
+#[async_std::test]
 async fn test_peer_manager_add_reserved() {
 	let peer_id_0 = PeerId::random();
 	let peer_id_1 = PeerId::random();
@@ -132,7 +132,7 @@ async fn test_peer_manager_add_reserved() {
 
 	let tx = peer_manager.tx();
 	let peer_id_3 = PeerId::random();
-	tx.send(InMessage::AddReservedPeer(peer_id_3.clone()))
+	tx.unbounded_send(InMessage::AddReservedPeer(peer_id_3.clone()))
 		.map_err(|_| ())
 		.unwrap();
 	let message = peer_manager.next().await;
@@ -142,7 +142,7 @@ async fn test_peer_manager_add_reserved() {
 	assert_eq!(message, Some(OutMessage::Drop(peer_id_0.clone())));
 }
 
-#[tokio::test]
+#[async_std::test]
 async fn test_peer_manager_remove_reserved() {
 	let peer_id_0 = PeerId::random();
 	let peer_id_1 = PeerId::random();
@@ -176,7 +176,7 @@ async fn test_peer_manager_remove_reserved() {
 	assert_eq!(message, Some(OutMessage::Connect(peer_id_2.clone())));
 
 	let tx = peer_manager.tx();
-	tx.send(InMessage::RemoveReservedPeer(peer_id_1.clone()))
+	tx.unbounded_send(InMessage::RemoveReservedPeer(peer_id_1.clone()))
 		.map_err(|_| ())
 		.unwrap();
 	let message = peer_manager.next().await;
@@ -185,7 +185,7 @@ async fn test_peer_manager_remove_reserved() {
 	assert_eq!(message, Some(OutMessage::Connect(peer_id_3.clone())));
 }
 
-#[tokio::test]
+#[async_std::test]
 async fn test_peer_manager_set_reserved() {
 	let peer_id_0 = PeerId::random();
 	let peer_id_1 = PeerId::random();
@@ -219,14 +219,14 @@ async fn test_peer_manager_set_reserved() {
 	assert_eq!(message, Some(OutMessage::Connect(peer_id_2.clone())));
 
 	let tx = peer_manager.tx();
-	tx.send(InMessage::SetReservedOnly(true))
+	tx.unbounded_send(InMessage::SetReservedOnly(true))
 		.map_err(|_| ())
 		.unwrap();
 	let message = peer_manager.next().await;
 	assert_eq!(message, Some(OutMessage::Drop(peer_id_2.clone())));
 }
 
-#[tokio::test]
+#[async_std::test]
 async fn test_peer_manager_in_full() {
 	let config = PeerManagerConfig {
 		max_in_peers: 2,
@@ -254,4 +254,8 @@ async fn test_peer_manager_in_full() {
 	peer_manager.incoming(peer_id_2.clone(), incoming_id_2.clone());
 	let message = peer_manager.next().await;
 	assert_eq!(message, Some(OutMessage::Reject(incoming_id_2.clone())));
+}
+
+fn sleep(duration: Duration) -> Delay {
+	Delay::new(duration)
 }

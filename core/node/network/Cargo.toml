@@ -9,7 +9,7 @@ edition = "2018"
 [dependencies.libp2p]
 version = "0.31.1"
 default-features = false
-features = ["identify", "noise", "ping", "tcp-tokio", "websocket", "yamux", "kad", "dns"]
+features = ["identify", "noise", "ping", "tcp-async-std", "websocket", "yamux", "kad", "dns"]
 
 [dependencies]
 fnv = "1.0.6"
@@ -18,10 +18,14 @@ futures_codec = "0.4.0"
 unsigned-varint = { version = "0.5.0", features = ["futures", "futures-codec"] }
 futures = "0.3.8"
 pin-project = "0.4.6"
-tokio = { version = "0.2.17", features = ["time"] }
+async-std = { version = "1.8.0", features = ["attributes"] }
 log = "0.4.8"
 lru = "0.6.1"
 linked-hash-map = "0.5.3"
+futures-timer = "3.0.2"
 
 primitives = { path = "../../primitives" }
 node-peer-manager = { path = "../peer-manager" }
+
+[dev-dependencies]
+env_logger = "0.7.1"

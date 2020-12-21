@@ -15,12 +15,12 @@
 use std::collections::VecDeque;
 use std::pin::Pin;
 
+use futures::channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
 use futures::task::{Context, Poll};
 use futures::Stream;
 use libp2p::PeerId;
 use linked_hash_map::LinkedHashMap;
 use log::trace;
-use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 
 mod errors;
 
@@ -101,7 +101,7 @@ impl PeerManager {
 			peers: inactive_peers,
 		};
 
-		let (in_tx, in_rx) = unbounded_channel();
+		let (in_tx, in_rx) = unbounded();
 
 		let mut peer_manager = Self {
 			config,

@@ -16,10 +16,13 @@ use std::borrow::Cow;
 use std::collections::VecDeque;
 use std::error;
 use std::task::{Context, Poll};
+use std::time::Duration;
 
+use async_std::sync::Arc;
 use futures::FutureExt;
 use futures::StreamExt;
 use futures_codec::BytesMut;
+use futures_timer::Delay;
 use libp2p::core::ConnectedPoint;
 use libp2p::swarm::protocols_handler::{InboundUpgradeSend, OutboundUpgradeSend};
 use libp2p::swarm::{
@@ -27,7 +30,6 @@ use libp2p::swarm::{
 	ProtocolsHandlerUpgrErr, SubstreamProtocol,
 };
 use libp2p::PeerId;
-use tokio::time::{delay_for, Delay, Duration, Instant};
 
 use crate::protocol::upgrade::{InProtocol, InSubstream, OutProtocol, OutSubstream};
 
@@ -35,11 +37,15 @@ const OPEN_TIMEOUT: Duration = Duration::from_secs(60);
 
 pub struct HandlerProto {
 	protocol_name: Cow<'static, [u8]>,
+	handshake: Arc<Vec<u8>>,
 }
 
 impl HandlerProto {
-	pub fn new(protocol_name: Cow<'static, [u8]>) -> Self {
-		Self { protocol_name }
+	pub fn new(protocol_name: Cow<'static, [u8]>, handshake: Arc<Vec<u8>>) -> Self {
+		Self {
+			protocol_name,
+			handshake,
+		}
 	}
 }
 
@@ -48,11 +54,13 @@ impl IntoProtocolsHandler for HandlerProto {
 
 	fn into_handler(
 		self,
-		_remote_peer_id: &PeerId,
+		remote_peer_id: &PeerId,
 		_connected_point: &ConnectedPoint,
 	) -> Self::Handler {
 		Handler {
+			remote_peer_id: remote_peer_id.clone(),
 			protocol_name: self.protocol_name,
+			handshake: self.handshake,
 			state: State::Init,
 			events_queue: VecDeque::with_capacity(16),
 		}
@@ -86,7 +94,9 @@ pub enum State {
 }
 
 pub enum HandlerOut {
-	ProtocolOpen,
+	ProtocolOpen {
+		handshake: Vec<u8>,
+	},
 	ProtocolClose {
 		reason: Cow<'static, str>,
 	},
@@ -103,7 +113,10 @@ pub enum HandlerOut {
 pub enum HandlerError {}
 
 pub struct Handler {
+	#[allow(dead_code)]
+	remote_peer_id: PeerId,
 	protocol_name: Cow<'static, [u8]>,
+	handshake: Arc<Vec<u8>>,
 	state: State,
 	events_queue: VecDeque<ProtocolsHandlerEvent<OutProtocol, (), HandlerOut, HandlerError>>,
 }
@@ -112,7 +125,7 @@ impl Handler {
 	fn open(&mut self) {
 		self.state = match std::mem::replace(&mut self.state, State::Locked) {
 			State::Init => {
-				let upgrade = OutProtocol::new(self.protocol_name.clone());
+				let upgrade = OutProtocol::new(self.protocol_name.clone(), self.handshake.clone());
 				self.events_queue
 					.push_back(ProtocolsHandlerEvent::OutboundSubstreamRequest {
 						protocol: SubstreamProtocol::new(upgrade, ()),
@@ -120,7 +133,7 @@ impl Handler {
 				State::Opening {
 					in_substream: None,
 					out_substream: None,
-					deadline: delay_for(OPEN_TIMEOUT),
+					deadline: Delay::new(OPEN_TIMEOUT),
 				}
 			}
 			State::Opening {
@@ -128,7 +141,7 @@ impl Handler {
 				out_substream,
 				..
 			} => {
-				let upgrade = OutProtocol::new(self.protocol_name.clone());
+				let upgrade = OutProtocol::new(self.protocol_name.clone(), self.handshake.clone());
 				self.events_queue
 					.push_back(ProtocolsHandlerEvent::OutboundSubstreamRequest {
 						protocol: SubstreamProtocol::new(upgrade, ()),
@@ -136,7 +149,7 @@ impl Handler {
 				State::Opening {
 					in_substream,
 					out_substream,
-					deadline: delay_for(OPEN_TIMEOUT),
+					deadline: Delay::new(OPEN_TIMEOUT),
 				}
 			}
 			State::Opened {
@@ -201,14 +214,14 @@ impl ProtocolsHandler for Handler {
 
 	fn inject_fully_negotiated_inbound(
 		&mut self,
-		protocol: <Self::InboundProtocol as InboundUpgradeSend>::Output,
+		mut protocol: <Self::InboundProtocol as InboundUpgradeSend>::Output,
 		_info: Self::InboundOpenInfo,
 	) {
 		self.state = match std::mem::replace(&mut self.state, State::Locked) {
 			State::Init => State::Opening {
 				in_substream: Some(protocol),
 				out_substream: None,
-				deadline: delay_for(OPEN_TIMEOUT),
+				deadline: Delay::new(OPEN_TIMEOUT),
 			},
 			State::Opening {
 				out_substream,
@@ -216,8 +229,10 @@ impl ProtocolsHandler for Handler {
 				..
 			} => match out_substream {
 				Some(out_substream) => {
-					self.events_queue
-						.push_back(ProtocolsHandlerEvent::Custom(HandlerOut::ProtocolOpen));
+					let handshake = protocol.take_received_handshake().expect("qed");
+					self.events_queue.push_back(ProtocolsHandlerEvent::Custom(
+						HandlerOut::ProtocolOpen { handshake },
+					));
 					State::Opened {
 						in_substream: protocol,
 						out_substream,
@@ -238,7 +253,7 @@ impl ProtocolsHandler for Handler {
 			},
 			State::Closed => State::Closed,
 			State::Locked => unreachable!(),
-		}
+		};
 	}
 
 	fn inject_fully_negotiated_outbound(
@@ -250,16 +265,18 @@ impl ProtocolsHandler for Handler {
 			State::Init => State::Opening {
 				in_substream: None,
 				out_substream: Some(protocol),
-				deadline: delay_for(OPEN_TIMEOUT),
+				deadline: Delay::new(OPEN_TIMEOUT),
 			},
 			State::Opening {
 				in_substream,
 				deadline,
 				..
 			} => match in_substream {
-				Some(in_substream) => {
-					self.events_queue
-						.push_back(ProtocolsHandlerEvent::Custom(HandlerOut::ProtocolOpen));
+				Some(mut in_substream) => {
+					let handshake = in_substream.take_received_handshake().expect("qed");
+					self.events_queue.push_back(ProtocolsHandlerEvent::Custom(
+						HandlerOut::ProtocolOpen { handshake },
+					));
 					State::Opened {
 						in_substream,
 						out_substream: protocol,
@@ -280,7 +297,7 @@ impl ProtocolsHandler for Handler {
 			},
 			State::Closed => State::Closed,
 			State::Locked => unreachable!(),
-		}
+		};
 	}
 
 	fn inject_event(&mut self, event: HandlerIn) {
@@ -336,21 +353,30 @@ impl ProtocolsHandler for Handler {
 				in_substream,
 				out_substream,
 				mut deadline,
-			} => match deadline.poll_unpin(cx) {
-				Poll::Ready(_) => {
-					deadline.reset(Instant::now() + OPEN_TIMEOUT);
-					self.state = State::Opening {
-						in_substream,
-						out_substream,
-						deadline,
-					};
-					return Poll::Ready(ProtocolsHandlerEvent::Custom(HandlerOut::ProtocolError {
-						should_disconnect: true,
-						error: "Timeout when opening protocol".to_string().into(),
-					}));
+			} => {
+				match deadline.poll_unpin(cx) {
+					Poll::Ready(_) => {
+						deadline.reset(OPEN_TIMEOUT);
+						self.state = State::Opening {
+							in_substream,
+							out_substream,
+							deadline,
+						};
+						return Poll::Ready(ProtocolsHandlerEvent::Custom(
+							HandlerOut::ProtocolError {
+								should_disconnect: true,
+								error: "Timeout when opening protocol".to_string().into(),
+							},
+						));
+					}
+					Poll::Pending => (),
 				}
-				Poll::Pending => (),
-			},
+				self.state = State::Opening {
+					in_substream,
+					out_substream,
+					deadline,
+				};
+			}
 			State::Opened {
 				mut in_substream,
 				mut out_substream,
@@ -394,7 +420,12 @@ impl ProtocolsHandler for Handler {
 							},
 						));
 					}
-					Poll::Pending => (),
+					Poll::Pending => {
+						self.state = State::Opened {
+							in_substream,
+							out_substream,
+						};
+					}
 					Poll::Ready(Some(Ok(message))) => {
 						self.state = State::Opened {
 							in_substream,

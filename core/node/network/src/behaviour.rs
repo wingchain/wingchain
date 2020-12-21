@@ -12,14 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::time::Duration;
 
+use fnv::FnvHashMap;
+use futures::task::{Context, Poll};
+use futures_codec::BytesMut;
 use libp2p::core::{ConnectedPoint, Multiaddr};
 use libp2p::identify::{Identify, IdentifyEvent, IdentifyInfo};
 use libp2p::identity::PublicKey;
 use libp2p::ping::{Ping, PingEvent, PingSuccess};
-use libp2p::swarm::NetworkBehaviourEventProcess;
+use libp2p::swarm::{
+	IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction, NetworkBehaviourEventProcess,
+	PollParameters, ProtocolsHandler,
+};
 use libp2p::{NetworkBehaviour, PeerId};
 use log::{debug, trace};
 
@@ -27,8 +33,6 @@ use node_peer_manager::PeerManager;
 
 use crate::discovery::{Discovery, DiscoveryConfig, DiscoveryOut};
 use crate::protocol::{Protocol, ProtocolConfig, ProtocolOut};
-use fnv::FnvHashMap;
-use futures_codec::BytesMut;
 
 const GLOBAL_PROTOCOL_VERSION: &str = "/wingchain/1.0.0";
 
@@ -37,6 +41,7 @@ pub struct BehaviourConfig {
 	pub local_public_key: PublicKey,
 	pub known_addresses: Vec<(PeerId, Multiaddr)>,
 	pub discovery_max_connections: Option<u32>,
+	pub handshake: Vec<u8>,
 }
 
 #[derive(Debug)]
@@ -44,6 +49,7 @@ pub enum BehaviourOut {
 	ProtocolOpen {
 		peer_id: PeerId,
 		connected_point: ConnectedPoint,
+		handshake: Vec<u8>,
 	},
 	ProtocolClose {
 		peer_id: PeerId,
@@ -67,11 +73,11 @@ pub struct Behaviour {
 	events: VecDeque<BehaviourOut>,
 }
 
+#[derive(Clone)]
 pub struct PeerInfo {
-	#[allow(dead_code)]
-	connected_point: ConnectedPoint,
-	agent_version: Option<String>,
-	latest_ping: Option<Duration>,
+	pub connected_point: ConnectedPoint,
+	pub agent_version: Option<String>,
+	pub latest_ping: Option<Duration>,
 }
 
 impl Behaviour {
@@ -90,7 +96,10 @@ impl Behaviour {
 		};
 		let discovery = Discovery::new(discovery_config);
 
-		let protocol_config = ProtocolConfig { local_peer_id };
+		let protocol_config = ProtocolConfig {
+			local_peer_id,
+			handshake: config.handshake,
+		};
 		let protocol = Protocol::new(protocol_config, peer_manager);
 		Self {
 			protocol,
@@ -105,6 +114,24 @@ impl Behaviour {
 	pub fn send_message(&mut self, peer_id: PeerId, message: Vec<u8>) {
 		self.protocol.send_message(peer_id, message);
 	}
+
+	pub fn peers(&self) -> &FnvHashMap<PeerId, PeerInfo> {
+		&self.peers
+	}
+
+	pub fn known_peers(&mut self) -> HashSet<PeerId> {
+		self.discovery.known_peers()
+	}
+
+    fn poll(&mut self, _: &mut Context, _: &mut impl PollParameters) ->
+    Poll<NetworkBehaviourAction<<<<Self as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent,
+	<Self as NetworkBehaviour>::OutEvent>>{
+		if let Some(event) = self.events.pop_front() {
+			return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
+		}
+
+		Poll::Pending
+	}
 }
 
 impl NetworkBehaviourEventProcess<ProtocolOut> for Behaviour {
@@ -113,6 +140,7 @@ impl NetworkBehaviourEventProcess<ProtocolOut> for Behaviour {
 			ProtocolOut::ProtocolOpen {
 				peer_id,
 				connected_point,
+				handshake,
 			} => {
 				self.peers.insert(
 					peer_id.clone(),
@@ -125,6 +153,7 @@ impl NetworkBehaviourEventProcess<ProtocolOut> for Behaviour {
 				self.events.push_back(BehaviourOut::ProtocolOpen {
 					peer_id,
 					connected_point,
+					handshake,
 				});
 			}
 			ProtocolOut::ProtocolClose {
@@ -198,7 +227,7 @@ impl NetworkBehaviourEventProcess<DiscoveryOut> for Behaviour {
 	fn inject_event(&mut self, event: DiscoveryOut) {
 		match event {
 			DiscoveryOut::Discovered { peer_id } => {
-				trace!("Discovered {}", peer_id);
+				trace!("{} Discovered {}", self.protocol.local_peer_id, peer_id);
 				self.protocol
 					.add_discovered_peers(std::iter::once(peer_id.clone()));
 			}

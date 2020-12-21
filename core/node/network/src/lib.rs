@@ -14,6 +14,9 @@
 
 use std::num::NonZeroUsize;
 
+use async_std::task;
+use futures::channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
+use futures::channel::oneshot;
 use futures_codec::BytesMut;
 use libp2p::core::connection::ConnectionLimits;
 use libp2p::core::transport::upgrade;
@@ -23,13 +26,12 @@ use libp2p::swarm::{AddressScore, SwarmBuilder};
 use libp2p::{PeerId, Swarm};
 use linked_hash_map::LinkedHashMap;
 use log::info;
-use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
-
 use node_peer_manager::{PeerManager, PeerManagerConfig};
 use primitives::errors::CommonResult;
 
 use crate::behaviour::{Behaviour, BehaviourConfig};
 
+pub use crate::stream::NetworkState;
 use crate::stream::{start, NetworkStream};
 pub use node_peer_manager::InMessage as PMInMessage;
 
@@ -39,6 +41,8 @@ mod errors;
 mod protocol;
 mod stream;
 mod transport;
+
+const MAX_ESTABLISHED_PER_PEER: u32 = 1u32;
 
 pub struct NetworkConfig {
 	pub max_in_peers: u32,
@@ -50,11 +54,13 @@ pub struct NetworkConfig {
 	pub reserved_only: bool,
 	pub agent_version: String,
 	pub local_key_pair: Keypair,
+	pub handshake: Vec<u8>,
 }
 
 #[allow(dead_code)]
 pub enum NetworkInMessage {
 	SendMessage { peer_id: PeerId, message: Vec<u8> },
+	GetNetworkState { tx: oneshot::Sender<NetworkState> },
 }
 
 #[allow(dead_code)]
@@ -62,6 +68,7 @@ pub enum NetWorkOutMessage {
 	ProtocolOpen {
 		peer_id: PeerId,
 		connected_point: ConnectedPoint,
+		handshake: Vec<u8>,
 	},
 	ProtocolClose {
 		peer_id: PeerId,
@@ -113,6 +120,7 @@ impl Network {
 			local_public_key,
 			known_addresses,
 			discovery_max_connections,
+			handshake: config.handshake,
 		};
 
 		let behaviour = Behaviour::new(behaviour_config, peer_manager);
@@ -121,8 +129,8 @@ impl Network {
 		let builder = SwarmBuilder::new(transport, behaviour, local_peer_id)
 			.connection_limits(
 				ConnectionLimits::default()
-					.with_max_established_per_peer(Some(1u32))
-					.with_max_established_incoming(Some(1u32)),
+					.with_max_established_per_peer(Some(MAX_ESTABLISHED_PER_PEER))
+					.with_max_established_incoming(Some(config.max_in_peers * 2)),
 			)
 			.substream_upgrade_protocol_override(upgrade::Version::V1Lazy)
 			.notify_handler_buffer_size(NonZeroUsize::new(32).expect("qed"))
@@ -139,8 +147,8 @@ impl Network {
 			Swarm::add_external_address(&mut swarm, address.clone(), AddressScore::Infinite);
 		}
 
-		let (in_tx, in_rx) = unbounded_channel();
-		let (out_tx, out_rx) = unbounded_channel();
+		let (in_tx, in_rx) = unbounded();
+		let (out_tx, out_rx) = unbounded();
 
 		let stream = NetworkStream {
 			swarm,
@@ -148,7 +156,7 @@ impl Network {
 			in_rx,
 			out_tx,
 		};
-		tokio::spawn(start(stream));
+		task::spawn(start(stream));
 
 		let network = Network {
 			peer_manager_tx,

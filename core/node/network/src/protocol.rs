@@ -21,6 +21,7 @@ use fnv::FnvHashMap;
 use futures::FutureExt;
 use futures::StreamExt;
 use futures_codec::BytesMut;
+use futures_timer::Delay;
 use libp2p::core::connection::ConnectionId;
 use libp2p::core::{ConnectedPoint, Multiaddr};
 use libp2p::swarm::{
@@ -28,11 +29,12 @@ use libp2p::swarm::{
 };
 use libp2p::PeerId;
 use log::{debug, info};
-use tokio::time::{delay_until, Delay, Duration, Instant};
+use std::time::{Duration, Instant};
 
 use node_peer_manager::{IncomingId, OutMessage, PeerManager};
 
 use crate::protocol::handler::{HandlerIn, HandlerOut, HandlerProto};
+use std::sync::Arc;
 
 mod handler;
 mod upgrade;
@@ -44,6 +46,7 @@ pub enum ProtocolOut {
 	ProtocolOpen {
 		peer_id: PeerId,
 		connected_point: ConnectedPoint,
+		handshake: Vec<u8>,
 	},
 	ProtocolClose {
 		peer_id: PeerId,
@@ -71,10 +74,12 @@ pub enum PeerState {
 
 pub struct ProtocolConfig {
 	pub local_peer_id: PeerId,
+	pub handshake: Vec<u8>,
 }
 
 pub struct Protocol {
-	local_peer_id: PeerId,
+	pub local_peer_id: PeerId,
+	handshake: Arc<Vec<u8>>,
 	peers: FnvHashMap<PeerId, PeerState>,
 	incoming_peers: FnvHashMap<IncomingId, PeerId>,
 	delay_peers: FnvHashMap<PeerId, Instant>,
@@ -87,6 +92,7 @@ impl Protocol {
 	pub fn new(config: ProtocolConfig, peer_manager: PeerManager) -> Self {
 		Self {
 			local_peer_id: config.local_peer_id,
+			handshake: Arc::new(config.handshake),
 			peers: FnvHashMap::default(),
 			incoming_peers: FnvHashMap::default(),
 			delay_peers: FnvHashMap::default(),
@@ -137,27 +143,38 @@ impl Protocol {
 			// Init => Init
 			PeerState::Init { pending_dial } => {
 				debug!("PeerManager => Connect({})", peer_id);
-				match self.delay_peers.remove(&peer_id) {
-					Some(instant) if instant > Instant::now() => {
-						debug!("Schedule pending dial({}) at {:?}", peer_id, instant);
-						*entry = PeerState::Init {
-							pending_dial: Some(delay_until(instant)),
-						};
+				if peer_id == self.local_peer_id {
+					// condition: connect to self
+					debug!("Ignore connecting to self: {}", peer_id);
+					*entry = PeerState::Init { pending_dial };
+				} else {
+					// condition: connect to other
+					match self.delay_peers.remove(&peer_id) {
+						Some(instant) if instant > Instant::now() => {
+							// condition: need schedule pending
+							debug!("Schedule pending dial({}) at {:?}", peer_id, instant);
+							*entry = PeerState::Init {
+								pending_dial: Some(Delay::new(instant - Instant::now())),
+							};
+						}
+						_ => match pending_dial {
+							// condition: not need schedule pending
+							None => {
+								// condition: connect immediately
+								debug!("Libp2p <= Dial({})", peer_id);
+								self.events.push_back(NetworkBehaviourAction::DialPeer {
+									peer_id: peer_id.clone(),
+									condition: DialPeerCondition::Disconnected,
+								});
+								*entry = PeerState::Init { pending_dial };
+							}
+							Some(_) => {
+								// condition: connect later
+								debug!("Pending dial({})", peer_id);
+								*entry = PeerState::Init { pending_dial };
+							}
+						},
 					}
-					_ => match pending_dial {
-						None => {
-							debug!("Libp2p <= Dial({})", peer_id);
-							self.events.push_back(NetworkBehaviourAction::DialPeer {
-								peer_id: peer_id.clone(),
-								condition: DialPeerCondition::Disconnected,
-							});
-							*entry = PeerState::Init { pending_dial };
-						}
-						Some(_) => {
-							debug!("Pending dial({})", peer_id);
-							*entry = PeerState::Init { pending_dial };
-						}
-					},
 				}
 			}
 			// Connected => Connected
@@ -347,7 +364,7 @@ impl NetworkBehaviour for Protocol {
 	type OutEvent = ProtocolOut;
 
 	fn new_handler(&mut self) -> Self::ProtocolsHandler {
-		HandlerProto::new(Cow::Borrowed(PROTOCOL_NAME))
+		HandlerProto::new(Cow::Borrowed(PROTOCOL_NAME), self.handshake.clone())
 	}
 
 	fn addresses_of_peer(&mut self, _: &PeerId) -> Vec<Multiaddr> {
@@ -533,7 +550,7 @@ impl NetworkBehaviour for Protocol {
 
 	fn inject_event(&mut self, source: PeerId, conn: ConnectionId, event: HandlerOut) {
 		match event {
-			HandlerOut::ProtocolOpen => {
+			HandlerOut::ProtocolOpen { handshake } => {
 				let entry = self
 					.peers
 					.entry(source.clone())
@@ -558,6 +575,7 @@ impl NetworkBehaviour for Protocol {
 								ProtocolOut::ProtocolOpen {
 									peer_id: source,
 									connected_point: connected_point.clone(),
+									handshake,
 								},
 							));
 							*entry = PeerState::ProtocolOpened {

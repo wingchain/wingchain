@@ -13,10 +13,13 @@
 // limitations under the License.
 
 use std::cmp;
+use std::collections::HashSet;
 use std::io;
+use std::time::Duration;
 
 use futures::task::{Context, Poll};
 use futures::FutureExt;
+use futures_timer::Delay;
 use libp2p::core::connection::{ConnectionId, ListenerId};
 use libp2p::core::{ConnectedPoint, Multiaddr};
 use libp2p::kad::store::MemoryStore;
@@ -29,7 +32,6 @@ use libp2p::swarm::{
 use libp2p::PeerId;
 use log::{debug, info, trace};
 use lru::LruCache;
-use tokio::time::{delay_for, Delay, Duration};
 
 pub struct DiscoveryConfig {
 	pub local_peer_id: PeerId,
@@ -68,7 +70,7 @@ impl Discovery {
 			local_peer_id: config.local_peer_id,
 			user_defined: config.user_defined,
 			kademlia,
-			random_query_timer: delay_for(Duration::from_secs(0)),
+			random_query_timer: Delay::new(Duration::from_secs(0)),
 			random_query_duration: Duration::from_secs(1),
 			cached_external_addresses: LruCache::new(32),
 			max_connections: config.max_connections,
@@ -78,6 +80,18 @@ impl Discovery {
 
 	pub fn add_address(&mut self, peer: &PeerId, address: Multiaddr) {
 		self.kademlia.add_address(peer, address);
+	}
+
+	pub fn known_peers(&mut self) -> HashSet<PeerId> {
+		let mut peers = HashSet::new();
+		for k in self.kademlia.kbuckets() {
+			for r in k.iter() {
+				if !peers.contains(r.node.key.preimage()) {
+					peers.insert(r.node.key.preimage().clone());
+				}
+			}
+		}
+		peers
 	}
 }
 
@@ -194,7 +208,7 @@ impl NetworkBehaviour for Discovery {
 				debug!("Libp2p <= Random query({:?})", random_peer_id);
 				self.kademlia.get_closest_peers(random_peer_id);
 
-				self.random_query_timer = delay_for(self.random_query_duration);
+				self.random_query_timer = Delay::new(self.random_query_duration);
 				self.random_query_duration =
 					cmp::min(self.random_query_duration * 2, Duration::from_secs(60));
 			}

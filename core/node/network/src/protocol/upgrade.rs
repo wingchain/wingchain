@@ -19,6 +19,7 @@ use std::io;
 use std::iter;
 use std::pin::Pin;
 
+use async_std::sync::Arc;
 use futures::stream::Fuse;
 use futures::task::{Context, Poll};
 use futures::StreamExt;
@@ -29,6 +30,8 @@ use libp2p::swarm::protocols_handler::{InboundUpgradeSend, OutboundUpgradeSend};
 use libp2p::swarm::NegotiatedSubstream;
 use unsigned_varint::codec::UviBytes;
 
+const MAX_HANDSHAKE_LEN: usize = 1024;
+
 pub struct InProtocol {
 	protocol_name: Cow<'static, [u8]>,
 }
@@ -37,6 +40,14 @@ pub struct InProtocol {
 pub struct InSubstream {
 	#[pin]
 	socket: Fuse<Framed<NegotiatedSubstream, UviBytes<io::Cursor<Vec<u8>>>>>,
+	/// received handshake, can be taken
+	received_handshake: Option<Vec<u8>>,
+}
+
+impl InSubstream {
+	pub fn take_received_handshake(&mut self) -> Option<Vec<u8>> {
+		self.received_handshake.take()
+	}
 }
 
 impl InProtocol {
@@ -56,13 +67,19 @@ impl UpgradeInfo for InProtocol {
 
 impl InboundUpgradeSend for InProtocol {
 	type Output = InSubstream;
-	type Error = io::Error;
+	type Error = libp2p::core::upgrade::ReadOneError;
 	type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-	fn upgrade_inbound(self, socket: NegotiatedSubstream, _info: Self::Info) -> Self::Future {
+	fn upgrade_inbound(self, mut socket: NegotiatedSubstream, _info: Self::Info) -> Self::Future {
 		Box::pin(async move {
+			let received_handshake =
+				match libp2p::core::upgrade::read_one(&mut socket, MAX_HANDSHAKE_LEN).await {
+					Ok(v) => v,
+					Err(e) => return Err(e),
+				};
 			let substream = InSubstream {
 				socket: Framed::new(socket, UviBytes::default()).fuse(),
+				received_handshake: Some(received_handshake),
 			};
 			Ok(substream)
 		})
@@ -71,6 +88,7 @@ impl InboundUpgradeSend for InProtocol {
 
 pub struct OutProtocol {
 	protocol_name: Cow<'static, [u8]>,
+	handshake: Arc<Vec<u8>>,
 }
 
 #[pin_project::pin_project]
@@ -87,8 +105,11 @@ impl OutSubstream {
 }
 
 impl OutProtocol {
-	pub fn new(protocol_name: Cow<'static, [u8]>) -> Self {
-		Self { protocol_name }
+	pub fn new(protocol_name: Cow<'static, [u8]>, handshake: Arc<Vec<u8>>) -> Self {
+		Self {
+			protocol_name,
+			handshake,
+		}
 	}
 }
 
@@ -106,8 +127,13 @@ impl OutboundUpgradeSend for OutProtocol {
 	type Error = io::Error;
 	type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-	fn upgrade_outbound(self, socket: NegotiatedSubstream, _info: Self::Info) -> Self::Future {
+	fn upgrade_outbound(self, mut socket: NegotiatedSubstream, _info: Self::Info) -> Self::Future {
 		Box::pin(async move {
+			match libp2p::core::upgrade::write_with_len_prefix(&mut socket, &*self.handshake).await
+			{
+				Ok(_v) => (),
+				Err(e) => return Err(e),
+			};
 			let substream = OutSubstream {
 				socket: Framed::new(socket, UviBytes::default()),
 				send_queue: VecDeque::with_capacity(16),
@@ -120,10 +146,9 @@ impl OutboundUpgradeSend for OutProtocol {
 impl Stream for InSubstream {
 	type Item = Result<BytesMut, io::Error>;
 
-	fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-		// let mut this = self.project();
-		// Stream::poll_next(this.socket.as_mut(), cx)
-		self.socket.poll_next_unpin(cx)
+	fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+		let mut this = self.project();
+		Stream::poll_next(this.socket.as_mut(), cx)
 	}
 }
 
