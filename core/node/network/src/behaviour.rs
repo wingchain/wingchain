@@ -115,6 +115,10 @@ impl Behaviour {
 		self.protocol.send_message(peer_id, message);
 	}
 
+	pub fn drop_peer(&mut self, peer_id: PeerId, delay: Option<Duration>) {
+		self.protocol.drop_peer(peer_id, delay);
+	}
+
 	pub fn peers(&self) -> &FnvHashMap<PeerId, PeerInfo> {
 		&self.peers
 	}
@@ -227,7 +231,7 @@ impl NetworkBehaviourEventProcess<DiscoveryOut> for Behaviour {
 	fn inject_event(&mut self, event: DiscoveryOut) {
 		match event {
 			DiscoveryOut::Discovered { peer_id } => {
-				trace!("{} Discovered {}", self.protocol.local_peer_id, peer_id);
+				trace!("Discovered {}", peer_id);
 				self.protocol
 					.add_discovered_peers(std::iter::once(peer_id.clone()));
 			}

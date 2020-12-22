@@ -20,65 +20,107 @@ use linked_hash_map::LinkedHashMap;
 
 use async_std::task;
 use futures::channel::oneshot;
+use futures::future::{join, join3, select, Either};
+use futures::StreamExt;
 use log::info;
 use node_network::{Network, NetworkConfig, NetworkInMessage, NetworkState};
 use std::time::Duration;
 
 #[async_std::test]
-async fn test_network() {
+async fn test_network_connect() {
 	let _ = env_logger::try_init();
 
-	let key_pair0 = Keypair::generate_ed25519();
-	let key_pair1 = Keypair::generate_ed25519();
-	let key_pair2 = Keypair::generate_ed25519();
+	let specs = vec![
+		(
+			Keypair::generate_ed25519(),
+			3209,
+			"wingchain/1.0.0".to_string(),
+		),
+		(
+			Keypair::generate_ed25519(),
+			3210,
+			"wingchain/1.0.0".to_string(),
+		),
+		(
+			Keypair::generate_ed25519(),
+			3211,
+			"wingchain/1.0.0".to_string(),
+		),
+	];
 
-	let port0 = 3209;
-	let port1 = 3210;
-	let port2 = 3211;
+	let bootnodes = {
+		let bootnodes_spec = &specs[0];
+		let bootnodes = (
+			bootnodes_spec.0.public().into_peer_id(),
+			Multiaddr::empty()
+				.with(Protocol::Ip4([127, 0, 0, 1].into()))
+				.with(Protocol::Tcp(bootnodes_spec.1)),
+		);
+		let bootnodes =
+			std::iter::once((bootnodes, ())).collect::<LinkedHashMap<(PeerId, Multiaddr), ()>>();
+		bootnodes
+	};
 
-	let agent_version0 = "wingchain/1.0.0".to_string();
-	let agent_version1 = "wingchain/1.0.0".to_string();
-	let agent_version2 = "wingchain/1.0.0".to_string();
+	for (key_pair, ..) in &specs {
+		info!("peer id: {}", key_pair.public().into_peer_id());
+	}
 
-	let bootnodes = (
-		key_pair0.public().into_peer_id(),
-		Multiaddr::empty()
-			.with(Protocol::Ip4([127, 0, 0, 1].into()))
-			.with(Protocol::Tcp(port0)),
+	let mut networks = specs
+		.iter()
+		.map(|x| start_network(x.0.clone(), x.1.clone(), bootnodes.clone(), x.2.clone()))
+		.collect::<Vec<_>>();
+
+	// out messages
+	for network in &mut networks {
+		let mut rx = network.network_rx().unwrap();
+		task::spawn(async move {
+			loop {
+				let message = rx.next().await;
+				match message {
+					Some(message) => {
+						info!("Network get message: {:?}", message);
+					}
+					None => break,
+				}
+			}
+		});
+	}
+
+	let wait_all = join3(
+		wait_connect(&networks[0], 2),
+		wait_connect(&networks[1], 2),
+		wait_connect(&networks[2], 2),
 	);
-	let bootnodes =
-		std::iter::once((bootnodes, ())).collect::<LinkedHashMap<(PeerId, Multiaddr), ()>>();
+	futures::pin_mut!(wait_all);
+	let wait_all = select(wait_all, futures_timer::Delay::new(Duration::from_secs(60))).await;
+	match wait_all {
+		Either::Left(_) => (),
+		Either::Right(_) => panic!("wait connect timeout"),
+	}
 
-	let network0 = generate_network(key_pair0, port0, bootnodes.clone(), agent_version0);
-	let network1 = generate_network(key_pair1, port1, bootnodes.clone(), agent_version1);
-	let network2 = generate_network(key_pair2, port2, bootnodes.clone(), agent_version2);
+	for network in &networks {
+		let network_state = get_network_state(network).await;
+		info!("Network state: {:?}", network_state);
+	}
 
-	task::sleep(Duration::from_secs(70)).await;
+	// drop peer
+	let tx = networks[0].network_tx();
+	tx.unbounded_send(NetworkInMessage::DropPeer {
+		peer_id: specs[1].0.public().into_peer_id(),
+		delay: Some(Duration::from_secs(30)),
+	})
+	.unwrap();
 
-	let network_state0 = get_network_state(&network0).await;
-	info!("network_state0: {:?}", network_state0);
-	assert_eq!(network_state0.opened_peers.len(), 2);
-
-	let network_state1 = get_network_state(&network1).await;
-	info!("network_state1: {:?}", network_state1);
-	assert_eq!(network_state1.opened_peers.len(), 2);
-
-	let network_state2 = get_network_state(&network2).await;
-	info!("network_state2: {:?}", network_state2);
-	assert_eq!(network_state2.opened_peers.len(), 2);
+	let wait_all = join(wait_connect(&networks[0], 1), wait_connect(&networks[1], 1));
+	futures::pin_mut!(wait_all);
+	let wait_all = select(wait_all, futures_timer::Delay::new(Duration::from_secs(60))).await;
+	match wait_all {
+		Either::Left(_) => (),
+		Either::Right(_) => panic!("wait connect timeout"),
+	}
 }
 
-async fn get_network_state(network: &Network) -> NetworkState {
-	let network_tx = network.network_tx();
-	let (tx, rx) = oneshot::channel();
-	network_tx
-		.unbounded_send(NetworkInMessage::GetNetworkState { tx })
-		.unwrap();
-	let network_state = rx.await.unwrap();
-	network_state
-}
-
-fn generate_network(
+fn start_network(
 	local_key_pair: Keypair,
 	port: u16,
 	bootnodes: LinkedHashMap<(PeerId, Multiaddr), ()>,
@@ -102,6 +144,25 @@ fn generate_network(
 	};
 
 	let network = Network::new(network_config).unwrap();
-
 	network
+}
+
+async fn wait_connect(network: &Network, expected_opened_count: usize) {
+	loop {
+		let network_state = get_network_state(network).await;
+		if network_state.opened_peers.len() >= expected_opened_count {
+			break;
+		}
+		task::sleep(Duration::from_millis(1000)).await;
+	}
+}
+
+async fn get_network_state(network: &Network) -> NetworkState {
+	let network_tx = network.network_tx();
+	let (tx, rx) = oneshot::channel();
+	network_tx
+		.unbounded_send(NetworkInMessage::GetNetworkState { tx })
+		.unwrap();
+	let network_state = rx.await.unwrap();
+	network_state
 }

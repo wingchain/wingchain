@@ -15,7 +15,9 @@
 use std::borrow::Cow;
 use std::collections::VecDeque;
 use std::error;
+use std::sync::Arc;
 use std::task::{Context, Poll};
+use std::time::{Duration, Instant};
 
 use fnv::FnvHashMap;
 use futures::FutureExt;
@@ -29,12 +31,10 @@ use libp2p::swarm::{
 };
 use libp2p::PeerId;
 use log::{debug, info};
-use std::time::{Duration, Instant};
 
 use node_peer_manager::{IncomingId, OutMessage, PeerManager};
 
 use crate::protocol::handler::{HandlerIn, HandlerOut, HandlerProto};
-use std::sync::Arc;
 
 mod handler;
 mod upgrade;
@@ -57,17 +57,25 @@ pub enum ProtocolOut {
 	},
 }
 
+#[derive(Clone)]
+pub struct Connection {
+	connected_point: ConnectedPoint,
+	incoming_id: Option<IncomingId>,
+}
+
 pub enum PeerState {
 	Init {
 		pending_dial: Option<Delay>,
 	},
 	Connected {
-		connection_id: ConnectionId,
-		connected_point: ConnectedPoint,
+		/// we should maintain all the connections when at `Connected` state
+		/// otherwise, if the outgoing connection comes before the incoming connection
+		/// we cannot reach ProtocolOpened
+		connected_list: FnvHashMap<ConnectionId, Connection>,
 	},
 	ProtocolOpened {
-		connection_id: ConnectionId,
-		connected_point: ConnectedPoint,
+		connected_list: FnvHashMap<ConnectionId, Connection>,
+		opened_list: FnvHashMap<ConnectionId, Connection>,
 	},
 	Locked,
 }
@@ -78,7 +86,7 @@ pub struct ProtocolConfig {
 }
 
 pub struct Protocol {
-	pub local_peer_id: PeerId,
+	local_peer_id: PeerId,
 	handshake: Arc<Vec<u8>>,
 	peers: FnvHashMap<PeerId, PeerState>,
 	incoming_peers: FnvHashMap<IncomingId, PeerId>,
@@ -111,19 +119,70 @@ impl Protocol {
 	}
 
 	pub fn send_message(&mut self, peer_id: PeerId, message: Vec<u8>) {
-		let connection_id = match self.peers.get(&peer_id) {
-			Some(PeerState::ProtocolOpened { connection_id, .. }) => connection_id,
+		let opened_list = match self.peers.get(&peer_id) {
+			Some(PeerState::ProtocolOpened { opened_list, .. }) => opened_list,
 			_ => {
 				info!("Send message to an unopened peer: {}", peer_id);
 				return;
 			}
 		};
-		self.events
-			.push_back(NetworkBehaviourAction::NotifyHandler {
-				peer_id: peer_id,
-				handler: NotifyHandler::One(connection_id.clone()),
-				event: HandlerIn::SendMessage { message },
-			});
+		let connection_id = opened_list.iter().next().map(|(k, _v)| k);
+		if let Some(connection_id) = connection_id {
+			self.events
+				.push_back(NetworkBehaviourAction::NotifyHandler {
+					peer_id: peer_id,
+					handler: NotifyHandler::One(connection_id.clone()),
+					event: HandlerIn::SendMessage { message },
+				});
+		}
+	}
+
+	pub fn drop_peer(&mut self, peer_id: PeerId, delay: Option<Duration>) {
+		if let Some(delay) = delay {
+			self.delay_peers
+				.insert(peer_id.clone(), Instant::now() + delay);
+		}
+		let entry = self
+			.peers
+			.entry(peer_id.clone())
+			.or_insert(PeerState::Init { pending_dial: None });
+		match std::mem::replace(entry, PeerState::Locked) {
+			// Init => Init
+			PeerState::Init { pending_dial } => {
+				*entry = PeerState::Init { pending_dial };
+			}
+			// Connected => Connected
+			PeerState::Connected { connected_list } => {
+				debug!("External => Drop({})", peer_id);
+				debug!("Handler({}, All) <= Close", peer_id);
+				self.events
+					.push_back(NetworkBehaviourAction::NotifyHandler {
+						peer_id: peer_id.clone(),
+						handler: NotifyHandler::All,
+						event: HandlerIn::Close,
+					});
+				*entry = PeerState::Connected { connected_list };
+			}
+			// ProtocolOpened => ProtocolOpened
+			PeerState::ProtocolOpened {
+				connected_list,
+				opened_list,
+			} => {
+				debug!("External => Drop({})", peer_id);
+				debug!("Handler({}, All) <= Close", peer_id);
+				self.events
+					.push_back(NetworkBehaviourAction::NotifyHandler {
+						peer_id: peer_id.clone(),
+						handler: NotifyHandler::All,
+						event: HandlerIn::Close,
+					});
+				*entry = PeerState::ProtocolOpened {
+					connected_list,
+					opened_list,
+				};
+			}
+			PeerState::Locked => unreachable!(),
+		}
 	}
 
 	fn next_incoming_id(incoming_id: &mut IncomingId) -> IncomingId {
@@ -178,23 +237,17 @@ impl Protocol {
 				}
 			}
 			// Connected => Connected
-			PeerState::Connected {
-				connection_id,
-				connected_point,
-			} => {
-				*entry = PeerState::Connected {
-					connection_id,
-					connected_point,
-				};
+			PeerState::Connected { connected_list } => {
+				*entry = PeerState::Connected { connected_list };
 			}
 			// ProtocolOpened => ProtocolOpened
 			PeerState::ProtocolOpened {
-				connection_id,
-				connected_point,
+				connected_list,
+				opened_list,
 			} => {
 				*entry = PeerState::ProtocolOpened {
-					connection_id,
-					connected_point,
+					connected_list,
+					opened_list,
 				};
 			}
 			PeerState::Locked => unreachable!(),
@@ -212,39 +265,33 @@ impl Protocol {
 				*entry = PeerState::Init { pending_dial };
 			}
 			// Connected => Connected
-			PeerState::Connected {
-				connection_id,
-				connected_point,
-			} => {
+			PeerState::Connected { connected_list } => {
 				debug!("PeerManager => Drop({})", peer_id);
-				debug!("Handler({}, {:?}) <= Close", peer_id, connection_id);
+				debug!("Handler({}, All) <= Close", peer_id);
 				self.events
 					.push_back(NetworkBehaviourAction::NotifyHandler {
 						peer_id: peer_id.clone(),
-						handler: NotifyHandler::One(connection_id),
+						handler: NotifyHandler::All,
 						event: HandlerIn::Close,
 					});
-				*entry = PeerState::Connected {
-					connection_id,
-					connected_point,
-				};
+				*entry = PeerState::Connected { connected_list };
 			}
 			// ProtocolOpened => ProtocolOpened
 			PeerState::ProtocolOpened {
-				connection_id,
-				connected_point,
+				connected_list,
+				opened_list,
 			} => {
 				debug!("PeerManager => Drop({})", peer_id);
-				debug!("Handler({}, {:?}) <= Close", peer_id, connection_id);
+				debug!("Handler({}, All) <= Close", peer_id);
 				self.events
 					.push_back(NetworkBehaviourAction::NotifyHandler {
 						peer_id: peer_id.clone(),
-						handler: NotifyHandler::One(connection_id),
+						handler: NotifyHandler::All,
 						event: HandlerIn::Close,
 					});
 				*entry = PeerState::ProtocolOpened {
-					connection_id,
-					connected_point,
+					connected_list,
+					opened_list,
 				};
 			}
 			PeerState::Locked => unreachable!(),
@@ -271,31 +318,51 @@ impl Protocol {
 				*entry = PeerState::Init { pending_dial };
 			}
 			// Connected => Connected
-			PeerState::Connected {
-				connection_id,
-				connected_point,
-			} => {
-				debug!("PeerManager => Accept({})", peer_id);
-				debug!("Handler({}, {:?}) <= Open", peer_id, connection_id);
-				self.events
-					.push_back(NetworkBehaviourAction::NotifyHandler {
-						peer_id: peer_id.clone(),
-						handler: NotifyHandler::One(connection_id),
-						event: HandlerIn::Open,
-					});
-				*entry = PeerState::Connected {
-					connection_id,
-					connected_point,
-				};
+			PeerState::Connected { connected_list } => {
+				let connection_id = connected_list.iter().find_map(|(k, v)| {
+					if v.incoming_id.as_ref() == Some(&incoming_id) {
+						Some(k)
+					} else {
+						None
+					}
+				});
+				if let Some(connection_id) = connection_id {
+					debug!("PeerManager => Accept({})", peer_id);
+					debug!("Handler({}, {:?}) <= Open", peer_id, connection_id);
+					self.events
+						.push_back(NetworkBehaviourAction::NotifyHandler {
+							peer_id: peer_id.clone(),
+							handler: NotifyHandler::One(connection_id.clone()),
+							event: HandlerIn::Open,
+						});
+				}
+				*entry = PeerState::Connected { connected_list };
 			}
 			// ProtocolOpened => ProtocolOpened
 			PeerState::ProtocolOpened {
-				connection_id,
-				connected_point,
+				connected_list,
+				opened_list,
 			} => {
+				let connection_id = connected_list.iter().find_map(|(k, v)| {
+					if v.incoming_id.as_ref() == Some(&incoming_id) {
+						Some(k)
+					} else {
+						None
+					}
+				});
+				if let Some(connection_id) = connection_id {
+					debug!("PeerManager => Accept({})", peer_id);
+					debug!("Handler({}, {:?}) <= Open", peer_id, connection_id);
+					self.events
+						.push_back(NetworkBehaviourAction::NotifyHandler {
+							peer_id: peer_id.clone(),
+							handler: NotifyHandler::One(connection_id.clone()),
+							event: HandlerIn::Open,
+						});
+				}
 				*entry = PeerState::ProtocolOpened {
-					connection_id,
-					connected_point,
+					connected_list,
+					opened_list,
 				};
 			}
 			PeerState::Locked => unreachable!(),
@@ -319,39 +386,33 @@ impl Protocol {
 				*entry = PeerState::Init { pending_dial };
 			}
 			// Connected => Connected
-			PeerState::Connected {
-				connection_id,
-				connected_point,
-			} => {
+			PeerState::Connected { connected_list } => {
 				debug!("PeerManager => Reject({})", peer_id);
-				debug!("Handler({}, {:?}) <= Close", peer_id, connection_id);
+				debug!("Handler({}, All) <= Close", peer_id);
 				self.events
 					.push_back(NetworkBehaviourAction::NotifyHandler {
 						peer_id: peer_id.clone(),
-						handler: NotifyHandler::One(connection_id),
+						handler: NotifyHandler::All,
 						event: HandlerIn::Close,
 					});
-				*entry = PeerState::Connected {
-					connection_id,
-					connected_point,
-				};
+				*entry = PeerState::Connected { connected_list };
 			}
 			// ProtocolOpened => ProtocolOpened
 			PeerState::ProtocolOpened {
-				connection_id,
-				connected_point,
+				connected_list,
+				opened_list,
 			} => {
 				debug!("PeerManager => Reject({})", peer_id);
-				debug!("Handler({}, {:?}) <= Close", peer_id, connection_id);
+				debug!("Handler({}, All) <= Close", peer_id);
 				self.events
 					.push_back(NetworkBehaviourAction::NotifyHandler {
 						peer_id: peer_id.clone(),
-						handler: NotifyHandler::One(connection_id),
+						handler: NotifyHandler::All,
 						event: HandlerIn::Close,
 					});
 				*entry = PeerState::ProtocolOpened {
-					connection_id,
-					connected_point,
+					connected_list,
+					opened_list,
 				};
 			}
 			PeerState::Locked => unreachable!(),
@@ -364,7 +425,11 @@ impl NetworkBehaviour for Protocol {
 	type OutEvent = ProtocolOut;
 
 	fn new_handler(&mut self) -> Self::ProtocolsHandler {
-		HandlerProto::new(Cow::Borrowed(PROTOCOL_NAME), self.handshake.clone())
+		HandlerProto::new(
+			self.local_peer_id.clone(),
+			Cow::Borrowed(PROTOCOL_NAME),
+			self.handshake.clone(),
+		)
 	}
 
 	fn addresses_of_peer(&mut self, _: &PeerId) -> Vec<Multiaddr> {
@@ -388,6 +453,10 @@ impl NetworkBehaviour for Protocol {
 		match std::mem::replace(entry, PeerState::Locked) {
 			// Init => Connected
 			PeerState::Init { .. } => {
+				let mut connection = Connection {
+					connected_point: endpoint.clone(),
+					incoming_id: None,
+				};
 				match endpoint {
 					ConnectedPoint::Dialer { .. } => {
 						// open in handler
@@ -425,48 +494,115 @@ impl NetworkBehaviour for Protocol {
 								);
 								self.incoming_peers
 									.insert(incoming_id.clone(), peer_id.clone());
-								self.peer_manager.incoming(peer_id.clone(), incoming_id);
+								self.peer_manager
+									.incoming(peer_id.clone(), incoming_id.clone());
+								connection.incoming_id = Some(incoming_id)
 							}
 						}
 					}
 				}
+				debug!(
+					"StateChange: Init -> Connected: local: {}, remote: {}",
+					self.local_peer_id, peer_id
+				);
 				*entry = PeerState::Connected {
-					connection_id: conn.clone(),
-					connected_point: endpoint.clone(),
+					connected_list: std::iter::once((conn.clone(), connection)).collect(),
 				}
 			}
 			// Connected => Connected
-			PeerState::Connected {
-				connection_id,
-				connected_point,
-			} => {
-				// keep only 1 connection
-				self.events
-					.push_back(NetworkBehaviourAction::NotifyHandler {
-						peer_id: peer_id.clone(),
-						handler: NotifyHandler::One(conn.clone()),
-						event: HandlerIn::Close,
-					});
-				*entry = PeerState::Connected {
-					connection_id,
-					connected_point,
+			PeerState::Connected { mut connected_list } => {
+				let should_open = match endpoint {
+					ConnectedPoint::Dialer { .. } => true,
+					ConnectedPoint::Listener { .. } => {
+						let dialer_connection_exist = connected_list
+							.iter()
+							.find(
+								|(_k, v)| matches!(v.connected_point, ConnectedPoint::Dialer {..}),
+							)
+							.is_some();
+						dialer_connection_exist
+					}
 				};
+
+				if should_open {
+					// open in handler
+					debug!("Libp2p => Connected({}): Through: {:?}", peer_id, endpoint);
+					debug!("Handler({}, {:?}) <= Open", peer_id, conn);
+					self.events
+						.push_back(NetworkBehaviourAction::NotifyHandler {
+							peer_id: peer_id.clone(),
+							handler: NotifyHandler::One(conn.clone()),
+							event: HandlerIn::Open,
+						});
+					connected_list.insert(
+						conn.clone(),
+						Connection {
+							connected_point: endpoint.clone(),
+							incoming_id: None,
+						},
+					);
+					debug!(
+						"StateChange: Connected -> Connected ({}): local: {}, remote: {}",
+						connected_list.len(),
+						self.local_peer_id,
+						peer_id
+					);
+				} else {
+					self.events
+						.push_back(NetworkBehaviourAction::NotifyHandler {
+							peer_id: peer_id.clone(),
+							handler: NotifyHandler::One(conn.clone()),
+							event: HandlerIn::Close,
+						});
+				}
+				*entry = PeerState::Connected { connected_list };
 			}
 			// ProtocolOpened => ProtocolOpened
 			PeerState::ProtocolOpened {
-				connection_id,
-				connected_point,
+				mut connected_list,
+				opened_list,
 			} => {
-				// keep only 1 connection
-				self.events
-					.push_back(NetworkBehaviourAction::NotifyHandler {
-						peer_id: peer_id.clone(),
-						handler: NotifyHandler::One(conn.clone()),
-						event: HandlerIn::Close,
-					});
+				let should_open = match endpoint {
+					ConnectedPoint::Dialer { .. } => true,
+					ConnectedPoint::Listener { .. } => {
+						let dialer_connection_exist = connected_list
+							.iter()
+							.find(
+								|(_k, v)| matches!(v.connected_point, ConnectedPoint::Dialer {..}),
+							)
+							.is_some();
+						dialer_connection_exist
+					}
+				};
+
+				if should_open {
+					// open in handler
+					debug!("Libp2p => Connected({}): Through: {:?}", peer_id, endpoint);
+					debug!("Handler({}, {:?}) <= Open", peer_id, conn);
+					self.events
+						.push_back(NetworkBehaviourAction::NotifyHandler {
+							peer_id: peer_id.clone(),
+							handler: NotifyHandler::One(conn.clone()),
+							event: HandlerIn::Open,
+						});
+					connected_list.insert(
+						conn.clone(),
+						Connection {
+							connected_point: endpoint.clone(),
+							incoming_id: None,
+						},
+					);
+				} else {
+					self.events
+						.push_back(NetworkBehaviourAction::NotifyHandler {
+							peer_id: peer_id.clone(),
+							handler: NotifyHandler::One(conn.clone()),
+							event: HandlerIn::Close,
+						});
+				}
 				*entry = PeerState::ProtocolOpened {
-					connection_id,
-					connected_point,
+					connected_list,
+					opened_list,
 				};
 			}
 			PeerState::Locked => unreachable!(),
@@ -489,58 +625,68 @@ impl NetworkBehaviour for Protocol {
 				*entry = PeerState::Init { pending_dial };
 			}
 			// Connected => Init
-			PeerState::Connected {
-				connection_id,
-				connected_point,
-			} => {
-				if &connection_id == conn {
-					debug!(
-						"Libp2p => Disconnected({}): Through: {:?}",
-						peer_id, connected_point
-					);
-					debug!(
-						"PeerManager <= Dropped({}): Through: {:?}",
-						peer_id, connected_point
-					);
+			PeerState::Connected { mut connected_list } => {
+				connected_list.remove(conn);
+				if connected_list.is_empty() {
+					debug!("Libp2p => Disconnected({})", peer_id);
+					debug!("PeerManager <= Dropped({})", peer_id);
 					self.peer_manager.dropped(peer_id.clone());
+					debug!(
+						"StateChange: Connected -> Init: local: {}, remote: {}",
+						self.local_peer_id, peer_id
+					);
 					*entry = PeerState::Init { pending_dial: None };
 				} else {
-					*entry = PeerState::Connected {
-						connection_id,
-						connected_point,
-					};
+					*entry = PeerState::Connected { connected_list };
 				}
 			}
 			// ProtocolOpened => Init
 			PeerState::ProtocolOpened {
-				connection_id,
-				connected_point,
+				mut connected_list,
+				mut opened_list,
 			} => {
-				if &connection_id == conn {
+				let mut closed_connection = None;
+				if let Some(connection) = connected_list.remove(conn) {
+					closed_connection = Some(connection);
+				}
+				if let Some(connection) = opened_list.remove(conn) {
+					closed_connection = Some(connection);
+				}
+				if closed_connection.is_some() && opened_list.is_empty() {
+					let closed_connection = closed_connection.unwrap();
 					debug!(
 						"Libp2p => Disconnected({}): Through: {:?}",
-						peer_id, connected_point
+						peer_id, closed_connection.connected_point
 					);
 					debug!(
 						"External <= ProtocolClose({}): Through: {:?}",
-						peer_id, connected_point
-					);
-					debug!(
-						"PeerManager <= Dropped({}): Through: {:?}",
-						peer_id, connected_point
+						peer_id, closed_connection.connected_point
 					);
 					self.events.push_back(NetworkBehaviourAction::GenerateEvent(
 						ProtocolOut::ProtocolClose {
 							peer_id: peer_id.clone(),
-							connected_point,
+							connected_point: closed_connection.connected_point,
 						},
 					));
-					self.peer_manager.dropped(peer_id.clone());
-					*entry = PeerState::Init { pending_dial: None };
+
+					if connected_list.is_empty() {
+						self.peer_manager.dropped(peer_id.clone());
+						debug!(
+							"StateChange: ProtocolOpened -> Init: local: {}, remote: {}",
+							self.local_peer_id, peer_id
+						);
+						*entry = PeerState::Init { pending_dial: None };
+					} else {
+						debug!(
+							"StateChange: ProtocolOpened -> Connected: local: {}, remote: {}",
+							self.local_peer_id, peer_id
+						);
+						*entry = PeerState::Connected { connected_list };
+					}
 				} else {
 					*entry = PeerState::ProtocolOpened {
-						connection_id,
-						connected_point,
+						connected_list,
+						opened_list,
 					};
 				}
 			}
@@ -561,42 +707,49 @@ impl NetworkBehaviour for Protocol {
 						*entry = PeerState::Init { pending_dial };
 					}
 					// Connected => ProtocolOpened
-					PeerState::Connected {
-						connection_id,
-						connected_point,
-					} => {
-						if conn == connection_id {
+					PeerState::Connected { mut connected_list } => {
+						if let Some(connection) = connected_list.remove(&conn) {
 							debug!("Handler({}, {:?}) => ProtocolOpen", source, conn);
 							debug!(
 								"External <= ProtocolOpen({}): Through: {:?}",
-								source, connected_point
+								source, connection.connected_point
+							);
+							debug!(
+								"StateChange: Connected -> ProtocolOpened: local: {}, remote: {}",
+								self.local_peer_id, source
 							);
 							self.events.push_back(NetworkBehaviourAction::GenerateEvent(
 								ProtocolOut::ProtocolOpen {
 									peer_id: source,
-									connected_point: connected_point.clone(),
+									connected_point: connection.connected_point.clone(),
 									handshake,
 								},
 							));
 							*entry = PeerState::ProtocolOpened {
-								connection_id,
-								connected_point,
+								connected_list,
+								opened_list: std::iter::once((conn, connection)).collect(),
 							};
 						} else {
-							*entry = PeerState::Connected {
-								connection_id,
-								connected_point,
-							};
+							*entry = PeerState::Connected { connected_list };
 						}
 					}
 					// ProtocolOpened => ProtocolOpened
 					PeerState::ProtocolOpened {
-						connection_id,
-						connected_point,
+						mut connected_list,
+						mut opened_list,
 					} => {
+						if let Some(connection) = connected_list.remove(&conn) {
+							debug!("Handler({}, {:?}) => ProtocolOpen", source, conn);
+							debug!(
+								"External <= ProtocolOpen({}): Through: {:?}",
+								source, connection.connected_point
+							);
+							opened_list.insert(conn, connection);
+							debug!("StateChange: ProtocolOpened -> ProtocolOpened ({}): local: {}, remote: {}", opened_list.len(), self.local_peer_id, source);
+						}
 						*entry = PeerState::ProtocolOpened {
-							connection_id,
-							connected_point,
+							connected_list,
+							opened_list,
 						};
 					}
 					PeerState::Locked => unreachable!(),
@@ -613,40 +766,43 @@ impl NetworkBehaviour for Protocol {
 						*entry = PeerState::Init { pending_dial };
 					}
 					// Connected => Connected
-					PeerState::Connected {
-						connection_id,
-						connected_point,
-					} => {
-						*entry = PeerState::Connected {
-							connection_id,
-							connected_point,
-						};
+					PeerState::Connected { connected_list } => {
+						*entry = PeerState::Connected { connected_list };
 					}
 					// ProtocolOpened => Connected
 					PeerState::ProtocolOpened {
-						connection_id,
-						connected_point,
+						mut connected_list,
+						mut opened_list,
 					} => {
-						if conn == connection_id {
+						// move from opened to connected
+						let mut closed_connection = None;
+						if let Some(connection) = opened_list.remove(&conn) {
+							closed_connection = Some(connection);
+						}
+						if closed_connection.is_some() && opened_list.is_empty() {
+							let closed_connection = closed_connection.unwrap();
 							debug!("Handler({}, {:?}) => ProtocolClose", source, conn);
 							debug!(
-								"External <= ProtocolClose({}): Through: {:?}, Reason: {}",
-								source, connected_point, reason,
+								"External <= ProtocolClose({}): Through: {:?} Reason: {}",
+								source, closed_connection.connected_point, reason,
 							);
+							debug!(
+								"StateChange: ProtocolOpened -> Connected: local: {}, remote: {}",
+								self.local_peer_id, source
+							);
+
 							self.events.push_back(NetworkBehaviourAction::GenerateEvent(
 								ProtocolOut::ProtocolClose {
 									peer_id: source,
-									connected_point: connected_point.clone(),
+									connected_point: closed_connection.connected_point.clone(),
 								},
 							));
-							*entry = PeerState::Connected {
-								connection_id,
-								connected_point,
-							};
+							connected_list.insert(conn, closed_connection);
+							*entry = PeerState::Connected { connected_list };
 						} else {
 							*entry = PeerState::ProtocolOpened {
-								connection_id,
-								connected_point,
+								connected_list,
+								opened_list,
 							};
 						}
 					}
@@ -667,11 +823,8 @@ impl NetworkBehaviour for Protocol {
 						*entry = PeerState::Init { pending_dial };
 					}
 					// Connected => Connected
-					PeerState::Connected {
-						connection_id,
-						connected_point,
-					} => {
-						if conn == connection_id {
+					PeerState::Connected { connected_list } => {
+						if let Some(_connection) = connected_list.get(&conn) {
 							debug!(
 								"Handler({}, {:?}) => ProtocolError({}, {})",
 								source, conn, should_disconnect, error
@@ -688,17 +841,14 @@ impl NetworkBehaviour for Protocol {
 									});
 							}
 						}
-						*entry = PeerState::Connected {
-							connection_id,
-							connected_point,
-						};
+						*entry = PeerState::Connected { connected_list };
 					}
 					// ProtocolOpened => ProtocolOpened
 					PeerState::ProtocolOpened {
-						connection_id,
-						connected_point,
+						connected_list,
+						opened_list,
 					} => {
-						if conn == connection_id {
+						if connected_list.contains_key(&conn) || opened_list.contains_key(&conn) {
 							debug!(
 								"Handler({}, {:?}) => ProtocolError({}, {})",
 								source, conn, should_disconnect, error
@@ -716,8 +866,8 @@ impl NetworkBehaviour for Protocol {
 							}
 						}
 						*entry = PeerState::ProtocolOpened {
-							connection_id,
-							connected_point,
+							connected_list,
+							opened_list,
 						};
 					}
 					PeerState::Locked => unreachable!(),
@@ -761,23 +911,17 @@ impl NetworkBehaviour for Protocol {
 				*entry = PeerState::Init { pending_dial: None };
 			}
 			// Connected => Connected
-			PeerState::Connected {
-				connection_id,
-				connected_point,
-			} => {
-				*entry = PeerState::Connected {
-					connection_id,
-					connected_point,
-				};
+			PeerState::Connected { connected_list } => {
+				*entry = PeerState::Connected { connected_list };
 			}
 			// ProtocolOpened => ProtocolOpened
 			PeerState::ProtocolOpened {
-				connection_id,
-				connected_point,
+				connected_list,
+				opened_list,
 			} => {
 				*entry = PeerState::ProtocolOpened {
-					connection_id,
-					connected_point,
+					connected_list,
+					opened_list,
 				};
 			}
 			PeerState::Locked => unreachable!(),

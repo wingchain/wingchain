@@ -34,6 +34,7 @@ use crate::behaviour::{Behaviour, BehaviourConfig};
 pub use crate::stream::NetworkState;
 use crate::stream::{start, NetworkStream};
 pub use node_peer_manager::InMessage as PMInMessage;
+use std::time::Duration;
 
 mod behaviour;
 mod discovery;
@@ -42,7 +43,7 @@ mod protocol;
 mod stream;
 mod transport;
 
-const MAX_ESTABLISHED_PER_PEER: u32 = 1u32;
+const MAX_ESTABLISHED_PER_PEER: u32 = 2u32;
 
 pub struct NetworkConfig {
 	pub max_in_peers: u32,
@@ -57,13 +58,21 @@ pub struct NetworkConfig {
 	pub handshake: Vec<u8>,
 }
 
-#[allow(dead_code)]
 pub enum NetworkInMessage {
-	SendMessage { peer_id: PeerId, message: Vec<u8> },
-	GetNetworkState { tx: oneshot::Sender<NetworkState> },
+	SendMessage {
+		peer_id: PeerId,
+		message: Vec<u8>,
+	},
+	DropPeer {
+		peer_id: PeerId,
+		delay: Option<Duration>,
+	},
+	GetNetworkState {
+		tx: oneshot::Sender<NetworkState>,
+	},
 }
 
-#[allow(dead_code)]
+#[derive(Debug)]
 pub enum NetWorkOutMessage {
 	ProtocolOpen {
 		peer_id: PeerId,

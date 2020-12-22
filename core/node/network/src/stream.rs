@@ -143,6 +143,9 @@ impl Stream for NetworkStream {
 					NetworkInMessage::SendMessage { peer_id, message } => {
 						self.swarm.send_message(peer_id, message);
 					}
+					NetworkInMessage::DropPeer { peer_id, delay } => {
+						self.swarm.drop_peer(peer_id, delay);
+					}
 					NetworkInMessage::GetNetworkState { tx } => {
 						let _ = tx.send(self.network_state());
 					}
@@ -160,7 +163,6 @@ impl Stream for NetworkStream {
 			match next_event.poll_unpin(cx) {
 				Poll::Ready(event) => match event {
 					SwarmEvent::Behaviour(behaviour_out) => {
-						println!("behaviour_out: {:?}", behaviour_out);
 						let network_out_message = behaviour_out.into();
 						out_tx
 							.unbounded_send(network_out_message)

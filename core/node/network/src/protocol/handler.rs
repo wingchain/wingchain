@@ -12,9 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use log::trace;
 use std::borrow::Cow;
 use std::collections::VecDeque;
 use std::error;
+use std::fmt;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
@@ -32,17 +34,24 @@ use libp2p::swarm::{
 use libp2p::PeerId;
 
 use crate::protocol::upgrade::{InProtocol, InSubstream, OutProtocol, OutSubstream};
+use std::fmt::Formatter;
 
-const OPEN_TIMEOUT: Duration = Duration::from_secs(60);
+const OPEN_TIMEOUT: Duration = Duration::from_secs(20);
 
 pub struct HandlerProto {
+	local_peer_id: PeerId,
 	protocol_name: Cow<'static, [u8]>,
 	handshake: Arc<Vec<u8>>,
 }
 
 impl HandlerProto {
-	pub fn new(protocol_name: Cow<'static, [u8]>, handshake: Arc<Vec<u8>>) -> Self {
+	pub fn new(
+		local_peer_id: PeerId,
+		protocol_name: Cow<'static, [u8]>,
+		handshake: Arc<Vec<u8>>,
+	) -> Self {
 		Self {
+			local_peer_id,
 			protocol_name,
 			handshake,
 		}
@@ -55,10 +64,12 @@ impl IntoProtocolsHandler for HandlerProto {
 	fn into_handler(
 		self,
 		remote_peer_id: &PeerId,
-		_connected_point: &ConnectedPoint,
+		connected_point: &ConnectedPoint,
 	) -> Self::Handler {
 		Handler {
+			local_peer_id: self.local_peer_id.clone(),
 			remote_peer_id: remote_peer_id.clone(),
+			connected_point: connected_point.clone(),
 			protocol_name: self.protocol_name,
 			handshake: self.handshake,
 			state: State::Init,
@@ -113,8 +124,10 @@ pub enum HandlerOut {
 pub enum HandlerError {}
 
 pub struct Handler {
+	local_peer_id: PeerId,
 	#[allow(dead_code)]
 	remote_peer_id: PeerId,
+	connected_point: ConnectedPoint,
 	protocol_name: Cow<'static, [u8]>,
 	handshake: Arc<Vec<u8>>,
 	state: State,
@@ -217,6 +230,17 @@ impl ProtocolsHandler for Handler {
 		mut protocol: <Self::InboundProtocol as InboundUpgradeSend>::Output,
 		_info: Self::InboundOpenInfo,
 	) {
+		trace!(
+			"inject_fully_negotiated_inbound: \
+		state: {:?}, \
+		local_peer_id: {}, \
+		remote_peer_id: {}, \
+		connected_point: {:?}",
+			self.state,
+			self.local_peer_id,
+			self.remote_peer_id,
+			self.connected_point
+		);
 		self.state = match std::mem::replace(&mut self.state, State::Locked) {
 			State::Init => State::Opening {
 				in_substream: Some(protocol),
@@ -261,6 +285,17 @@ impl ProtocolsHandler for Handler {
 		protocol: <Self::OutboundProtocol as OutboundUpgradeSend>::Output,
 		_info: Self::OutboundOpenInfo,
 	) {
+		trace!(
+			"inject_fully_negotiated_outbound: \
+		state: {:?}, \
+		local_peer_id: {}, \
+		remote_peer_id: {}, \
+		connected_point: {:?}",
+			self.state,
+			self.local_peer_id,
+			self.remote_peer_id,
+			self.connected_point
+		);
 		self.state = match std::mem::replace(&mut self.state, State::Locked) {
 			State::Init => State::Opening {
 				in_substream: None,
@@ -444,5 +479,17 @@ impl ProtocolsHandler for Handler {
 		};
 
 		Poll::Pending
+	}
+}
+
+impl fmt::Debug for State {
+	fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+		match &self {
+			State::Init => write!(f, "Init"),
+			State::Opening { .. } => write!(f, "Opening"),
+			State::Opened { .. } => write!(f, "Opened"),
+			State::Closed => write!(f, "Closed"),
+			State::Locked => write!(f, "Locked"),
+		}
 	}
 }
