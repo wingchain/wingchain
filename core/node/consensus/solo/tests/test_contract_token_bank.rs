@@ -23,7 +23,7 @@ use utils_test::test_accounts;
 
 mod base;
 
-#[tokio::test]
+#[async_std::test]
 async fn test_solo_contract_tb_success() {
 	let _ = env_logger::try_init();
 
@@ -347,9 +347,11 @@ async fn test_solo_contract_tb_success() {
 	let result = String::from_utf8(result).unwrap();
 	log::info!("result: {}", result);
 	assert_eq!(result, r#"40"#.to_string(),);
+
+	base::safe_close(chain, txpool, solo).await;
 }
 
-#[tokio::test]
+#[async_std::test]
 async fn test_solo_contract_tb_failed() {
 	let _ = env_logger::try_init();
 
@@ -510,9 +512,11 @@ async fn test_solo_contract_tb_failed() {
 	let result = String::from_utf8(result).unwrap();
 	log::info!("result: {}", result);
 	assert_eq!(result, r#"0"#.to_string(),);
+
+	base::safe_close(chain, txpool, solo).await;
 }
 
-#[tokio::test]
+#[async_std::test]
 async fn test_solo_contract_tb_ea() {
 	let _ = env_logger::try_init();
 
@@ -675,6 +679,8 @@ async fn test_solo_contract_tb_ea() {
 	let result = String::from_utf8(result).unwrap();
 	log::info!("result: {}", result);
 	assert_eq!(result, r#"0"#.to_string(),);
+
+	base::safe_close(chain, txpool, solo).await;
 }
 
 fn get_token_bank_code() -> &'static [u8] {

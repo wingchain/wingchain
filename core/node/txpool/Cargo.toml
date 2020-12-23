@@ -8,9 +8,10 @@ edition = "2018"
 
 [dependencies]
 chashmap = "2.2.2"
-tokio ={ version = "0.2.17", features = ["rt-core", "time", "sync", "stream", "macros"] }
 parking_lot = "0.10"
 log = "0.4.8"
+async-std = { version = "1.8.0", features = ["attributes"] }
+futures = "0.3.8"
 
 primitives = { path = "../../primitives" }
 node-chain = { path = "../chain" }

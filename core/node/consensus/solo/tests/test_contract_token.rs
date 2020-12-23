@@ -23,7 +23,7 @@ use utils_test::test_accounts;
 
 mod base;
 
-#[tokio::test]
+#[async_std::test]
 async fn test_solo_contract_token_read() {
 	let _ = env_logger::try_init();
 
@@ -166,9 +166,11 @@ async fn test_solo_contract_token_read() {
 	let result = String::from_utf8(result).unwrap();
 	log::info!("result: {}", result);
 	assert_eq!(result, r#"2100000000000000"#.to_string(),);
+
+	base::safe_close(chain, txpool, solo).await;
 }
 
-#[tokio::test]
+#[async_std::test]
 async fn test_solo_contract_token_transfer() {
 	let _ = env_logger::try_init();
 
@@ -282,9 +284,11 @@ async fn test_solo_contract_token_transfer() {
 	let result = String::from_utf8(result).unwrap();
 	log::info!("result: {}", result);
 	assert_eq!(result, r#"100000000000000"#.to_string(),);
+
+	base::safe_close(chain, txpool, solo).await;
 }
 
-#[tokio::test]
+#[async_std::test]
 async fn test_solo_contract_token_transfer_from() {
 	let _ = env_logger::try_init();
 
@@ -480,6 +484,8 @@ async fn test_solo_contract_token_transfer_from() {
 	let result = String::from_utf8(result).unwrap();
 	log::info!("result: {}", result);
 	assert_eq!(result, r#"100000000"#.to_string(),);
+
+	base::safe_close(chain, txpool, solo).await;
 }
 
 fn get_code() -> &'static [u8] {

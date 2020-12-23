@@ -16,8 +16,8 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use std::time::Duration;
 use tempfile::tempdir;
-use tokio::time::Duration;
 
 use node_chain::{Chain, ChainConfig};
 use node_consensus::support::DefaultConsensusSupport;
@@ -62,7 +62,7 @@ pub async fn wait_txpool(txpool: &Arc<TxPool<Chain>>, count: usize) {
 				break;
 			}
 		}
-		tokio::time::delay_for(Duration::from_millis(10)).await;
+		futures_timer::Delay::new(Duration::from_millis(10)).await;
 	}
 }
 
@@ -76,8 +76,21 @@ pub async fn wait_block_execution(chain: &Arc<Chain>) {
 				break;
 			}
 		}
-		tokio::time::delay_for(Duration::from_millis(10)).await;
+		futures_timer::Delay::new(Duration::from_millis(10)).await;
 	}
+}
+
+/// safe close,
+/// to avoid rocksdb `libc++abi.dylib: Pure virtual function called!`
+pub async fn safe_close(
+	chain: Arc<Chain>,
+	txpool: Arc<TxPool<Chain>>,
+	solo: Solo<DefaultConsensusSupport<Chain>>,
+) {
+	drop(chain);
+	drop(txpool);
+	drop(solo);
+	async_std::task::sleep(Duration::from_millis(50)).await;
 }
 
 fn get_chain(address: &Address) -> Arc<Chain> {

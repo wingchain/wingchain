@@ -33,7 +33,10 @@ use crate::{NetWorkOutMessage, NetworkInMessage};
 
 pub async fn start(mut stream: NetworkStream) {
 	loop {
-		stream.next().await;
+		match stream.next().await {
+			Some(_) => (),
+			None => break,
+		}
 	}
 }
 

@@ -17,10 +17,12 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
+use async_std::task;
 use chashmap::CHashMap;
+use futures::channel::mpsc::{channel, Receiver, Sender};
+use futures::{SinkExt, StreamExt};
 use log::info;
 use parking_lot::RwLock;
-use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 use node_executor::module;
 use node_executor_primitives::EmptyParams;
@@ -75,7 +77,7 @@ where
 			buffer_tx,
 		};
 
-		tokio::spawn(process_buffer(buffer_rx, queue));
+		task::spawn(process_buffer(buffer_rx, queue));
 
 		info!("Initializing txpool");
 
@@ -196,9 +198,10 @@ async fn process_buffer(
 ) {
 	let mut buffer_rx = buffer_rx;
 	loop {
-		let tx = buffer_rx.recv().await;
-		if let Some(tx) = tx {
-			queue.write().push(tx);
+		let tx = buffer_rx.next().await;
+		match tx {
+			Some(tx) => queue.write().push(tx),
+			None => break,
 		}
 	}
 }

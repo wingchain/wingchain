@@ -16,8 +16,9 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use async_std::task;
+use std::time::Duration;
 use tempfile::tempdir;
-use tokio::time::Duration;
 
 use crypto::address::AddressImpl;
 use crypto::dsa::DsaImpl;
@@ -26,7 +27,7 @@ use node_txpool::{TxPool, TxPoolConfig};
 use primitives::{Address, FullTransaction};
 use utils_test::test_accounts;
 
-#[tokio::test]
+#[async_std::test]
 async fn test_txpool() {
 	let dsa = Arc::new(DsaImpl::Ed25519);
 	let address = Arc::new(AddressImpl::Blake2b160);
@@ -72,11 +73,13 @@ async fn test_txpool() {
 				break;
 			}
 		}
-		tokio::time::delay_for(Duration::from_millis(10)).await;
+		task::sleep(Duration::from_millis(10)).await;
 	}
+
+	safe_close(chain, txpool).await;
 }
 
-#[tokio::test]
+#[async_std::test]
 async fn test_txpool_dup() {
 	let dsa = Arc::new(DsaImpl::Ed25519);
 	let address = Arc::new(AddressImpl::Blake2b160);
@@ -111,9 +114,11 @@ async fn test_txpool_dup() {
 
 	let result = txpool.insert(tx).await;
 	assert!(format!("{}", result.unwrap_err()).contains("Error: Duplicated tx"));
+
+	safe_close(chain, txpool).await;
 }
 
-#[tokio::test]
+#[async_std::test]
 async fn test_txpool_validate() {
 	let dsa = Arc::new(DsaImpl::Ed25519);
 	let address = Arc::new(AddressImpl::Blake2b160);
@@ -175,9 +180,11 @@ async fn test_txpool_validate() {
 		.unwrap();
 	let result = txpool.insert(tx).await;
 	assert!(format!("{}", result.unwrap_err()).contains("Error: Exceed until"));
+
+	safe_close(chain, txpool).await;
 }
 
-#[tokio::test]
+#[async_std::test]
 async fn test_txpool_capacity() {
 	let dsa = Arc::new(DsaImpl::Ed25519);
 	let address = Arc::new(AddressImpl::Blake2b160);
@@ -236,6 +243,16 @@ async fn test_txpool_capacity() {
 	txpool.insert(tx2).await.unwrap();
 	let result = txpool.insert(tx3).await;
 	assert!(format!("{}", result.unwrap_err()).contains("Error: Exceed capacity"));
+
+	safe_close(chain, txpool).await;
+}
+
+/// safe close,
+/// to avoid rocksdb `libc++abi.dylib: Pure virtual function called!`
+async fn safe_close(chain: Arc<Chain>, txpool: TxPool<Chain>) {
+	drop(chain);
+	drop(txpool);
+	async_std::task::sleep(Duration::from_millis(50)).await;
 }
 
 fn get_chain(address: &Address) -> Arc<Chain> {

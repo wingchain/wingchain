@@ -24,7 +24,7 @@ use utils_test::test_accounts;
 
 mod base;
 
-#[tokio::test]
+#[async_std::test]
 async fn test_solo_contract_create() {
 	let _ = env_logger::try_init();
 
@@ -118,9 +118,10 @@ async fn test_solo_contract_create() {
 			members: vec![(account1.3.clone(), 1)],
 		})
 	);
+	base::safe_close(chain, txpool, solo).await;
 }
 
-#[tokio::test]
+#[async_std::test]
 async fn test_solo_contract_create_fail() {
 	let _ = env_logger::try_init();
 
@@ -129,7 +130,7 @@ async fn test_solo_contract_create_fail() {
 
 	let (account1, _account2) = test_accounts(dsa, address);
 
-	let (chain, _txpool, _solo) = base::get_service(&account1.3);
+	let (chain, txpool, solo) = base::get_service(&account1.3);
 
 	let ori_code = get_code().to_vec();
 
@@ -169,9 +170,11 @@ async fn test_solo_contract_create_fail() {
 	let tx1_error = chain.validate_transaction(&tx1, true).unwrap_err();
 
 	assert_eq!(tx1_error.to_string(), "[CommonError] Kind: Executor, Error: PreCompileError: ValidationError: Bad magic number (at offset 0)".to_string());
+
+	base::safe_close(chain, txpool, solo).await;
 }
 
-#[tokio::test]
+#[async_std::test]
 async fn test_solo_contract_update_admin() {
 	let _ = env_logger::try_init();
 
@@ -383,9 +386,11 @@ async fn test_solo_contract_update_admin() {
 			members: vec![(account2.3.clone(), 1)],
 		})
 	);
+
+	base::safe_close(chain, txpool, solo).await;
 }
 
-#[tokio::test]
+#[async_std::test]
 async fn test_solo_contract_update_code() {
 	let _ = env_logger::try_init();
 
@@ -626,6 +631,8 @@ async fn test_solo_contract_update_code() {
 	};
 	log::info!("code_hash: {:?}", code_hash);
 	assert_eq!(code_hash, Some(expect_code_hash),);
+
+	base::safe_close(chain, txpool, solo).await;
 }
 
 fn get_code() -> &'static [u8] {
