@@ -19,7 +19,7 @@ use std::io;
 use std::iter;
 use std::pin::Pin;
 
-use async_std::sync::Arc;
+use std::sync::Arc;
 use futures::stream::Fuse;
 use futures::task::{Context, Poll};
 use futures::StreamExt;

@@ -22,7 +22,7 @@ use linked_hash_map::LinkedHashMap;
 
 use node_peer_manager::{InMessage, IncomingId, OutMessage, PeerManager, PeerManagerConfig};
 
-#[async_std::test]
+#[tokio::test]
 async fn test_peer_manager_out_full() {
 	let config = PeerManagerConfig {
 		max_in_peers: 2,
@@ -58,7 +58,7 @@ async fn test_peer_manager_out_full() {
 	}
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn test_peer_manager_drop() {
 	let config = PeerManagerConfig {
 		max_in_peers: 2,
@@ -79,7 +79,7 @@ async fn test_peer_manager_drop() {
 	assert_eq!(message, Some(OutMessage::Connect(peer_id_0.clone())));
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn test_peer_manager_contains() {
 	let config = PeerManagerConfig {
 		max_in_peers: 2,
@@ -103,7 +103,7 @@ async fn test_peer_manager_contains() {
 	}
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn test_peer_manager_add_reserved() {
 	let peer_id_0 = PeerId::random();
 	let peer_id_1 = PeerId::random();
@@ -142,7 +142,7 @@ async fn test_peer_manager_add_reserved() {
 	assert_eq!(message, Some(OutMessage::Drop(peer_id_0.clone())));
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn test_peer_manager_remove_reserved() {
 	let peer_id_0 = PeerId::random();
 	let peer_id_1 = PeerId::random();
@@ -185,7 +185,7 @@ async fn test_peer_manager_remove_reserved() {
 	assert_eq!(message, Some(OutMessage::Connect(peer_id_3.clone())));
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn test_peer_manager_set_reserved() {
 	let peer_id_0 = PeerId::random();
 	let peer_id_1 = PeerId::random();
@@ -226,7 +226,7 @@ async fn test_peer_manager_set_reserved() {
 	assert_eq!(message, Some(OutMessage::Drop(peer_id_2.clone())));
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn test_peer_manager_in_full() {
 	let config = PeerManagerConfig {
 		max_in_peers: 2,

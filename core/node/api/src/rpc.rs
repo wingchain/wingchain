@@ -17,7 +17,6 @@ use std::sync::Arc;
 use std::thread;
 
 use jsonrpc_v2::{Data, Server};
-use tokio::runtime::Runtime;
 
 use primitives::errors::CommonResult;
 
@@ -33,18 +32,20 @@ where
 	S: ApiSupport + Send + Sync + 'static,
 {
 	let config = config.clone();
-	thread::spawn(move || {
-		let mut runtime = Runtime::new().expect("create http runtime");
 
-		let local = tokio::task::LocalSet::new();
+	thread::spawn(move || {
+		let mut runtime = node_api_rt::tokio::runtime::Runtime::new().expect("create http runtime");
+
+		let local = node_api_rt::tokio::task::LocalSet::new();
 
 		local.block_on(&mut runtime, async {
-			let local = tokio::task::LocalSet::new();
+			let local = node_api_rt::tokio::task::LocalSet::new();
 
 			let actix_rt = actix_rt::System::run_in_tokio("actix-web", &local);
-			tokio::task::spawn_local(actix_rt);
+			node_api_rt::tokio::task::spawn_local(actix_rt);
 
 			start_rpc_app(&config, support).await.expect("start api");
+
 		});
 	});
 }

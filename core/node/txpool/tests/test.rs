@@ -16,7 +16,6 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use async_std::task;
 use std::time::Duration;
 use tempfile::tempdir;
 
@@ -27,7 +26,7 @@ use node_txpool::{TxPool, TxPoolConfig};
 use primitives::{Address, FullTransaction};
 use utils_test::test_accounts;
 
-#[async_std::test]
+#[tokio::test]
 async fn test_txpool() {
 	let dsa = Arc::new(DsaImpl::Ed25519);
 	let address = Arc::new(AddressImpl::Blake2b160);
@@ -73,13 +72,13 @@ async fn test_txpool() {
 				break;
 			}
 		}
-		task::sleep(Duration::from_millis(10)).await;
+		tokio::time::sleep(Duration::from_millis(10)).await;
 	}
 
 	safe_close(chain, txpool).await;
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn test_txpool_dup() {
 	let dsa = Arc::new(DsaImpl::Ed25519);
 	let address = Arc::new(AddressImpl::Blake2b160);
@@ -118,7 +117,7 @@ async fn test_txpool_dup() {
 	safe_close(chain, txpool).await;
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn test_txpool_validate() {
 	let dsa = Arc::new(DsaImpl::Ed25519);
 	let address = Arc::new(AddressImpl::Blake2b160);
@@ -184,7 +183,7 @@ async fn test_txpool_validate() {
 	safe_close(chain, txpool).await;
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn test_txpool_capacity() {
 	let dsa = Arc::new(DsaImpl::Ed25519);
 	let address = Arc::new(AddressImpl::Blake2b160);
@@ -252,7 +251,7 @@ async fn test_txpool_capacity() {
 async fn safe_close(chain: Arc<Chain>, txpool: TxPool<Chain>) {
 	drop(chain);
 	drop(txpool);
-	async_std::task::sleep(Duration::from_millis(50)).await;
+	tokio::time::sleep(Duration::from_millis(50)).await;
 }
 
 fn get_chain(address: &Address) -> Arc<Chain> {

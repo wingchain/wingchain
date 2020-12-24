@@ -24,7 +24,7 @@ use utils_test::test_accounts;
 
 mod base;
 
-#[async_std::test]
+#[tokio::test]
 async fn test_poa_contract_hw_read() {
 	let _ = env_logger::try_init();
 
@@ -308,7 +308,7 @@ async fn test_poa_contract_hw_read() {
 	base::safe_close(chain, txpool, poa).await;
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn test_poa_contract_hw_write() {
 	let _ = env_logger::try_init();
 
@@ -465,7 +465,7 @@ async fn test_poa_contract_hw_write() {
 	base::safe_close(chain, txpool, poa).await;
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn test_poa_contract_hw_transfer_success() {
 	let _ = env_logger::try_init();
 
@@ -602,7 +602,7 @@ async fn test_poa_contract_hw_transfer_success() {
 	base::safe_close(chain, txpool, poa).await;
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn test_poa_contract_hw_transfer_failed() {
 	let _ = env_logger::try_init();
 
@@ -725,7 +725,7 @@ async fn test_poa_contract_hw_transfer_failed() {
 	base::safe_close(chain, txpool, poa).await;
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn test_poa_contract_hw_transfer_partial_failed() {
 	let _ = env_logger::try_init();
 
@@ -855,7 +855,7 @@ async fn test_poa_contract_hw_transfer_partial_failed() {
 	base::safe_close(chain, txpool, poa).await;
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn test_poa_contract_hw_nested_contract() {
 	let _ = env_logger::try_init();
 

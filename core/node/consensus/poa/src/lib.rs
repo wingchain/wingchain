@@ -21,7 +21,6 @@ use std::sync::Arc;
 use std::task::Context;
 use std::time::{Duration, SystemTime};
 
-use async_std::task;
 use futures::prelude::*;
 use futures::task::Poll;
 use futures::{Future, Stream, TryStreamExt};
@@ -55,7 +54,7 @@ where
 		let meta = get_poa_meta(support.clone())?;
 
 		if meta.block_interval.is_some() {
-			task::spawn(start(meta, support.clone()));
+			tokio::spawn(start(meta, support.clone()));
 		}
 
 		info!("Initializing consensus poa");

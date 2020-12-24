@@ -17,7 +17,6 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use async_std::task;
 use chashmap::CHashMap;
 use futures::channel::mpsc::{channel, Receiver, Sender};
 use futures::{SinkExt, StreamExt};
@@ -77,7 +76,7 @@ where
 			buffer_tx,
 		};
 
-		task::spawn(process_buffer(buffer_rx, queue));
+		tokio::spawn(process_buffer(buffer_rx, queue));
 
 		info!("Initializing txpool");
 

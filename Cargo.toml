@@ -18,6 +18,7 @@ members = [
 	"core/node/txpool",
 	"core/node/chain",
 	"core/node/api",
+    "core/node/api/rt",
 	"core/node/consensus",
 	"core/node/consensus/poa",
 	"core/node/vm",

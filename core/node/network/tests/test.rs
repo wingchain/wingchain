@@ -18,7 +18,6 @@ use libp2p::multiaddr::Protocol;
 use libp2p::PeerId;
 use linked_hash_map::LinkedHashMap;
 
-use async_std::task;
 use futures::channel::oneshot;
 use futures::future::{join, join3, select, Either};
 use futures::StreamExt;
@@ -26,7 +25,7 @@ use log::info;
 use node_network::{Network, NetworkConfig, NetworkInMessage, NetworkOutMessage, NetworkState};
 use std::time::Duration;
 
-#[async_std::test]
+#[tokio::test]
 async fn test_network_connect() {
 	let _ = env_logger::try_init();
 
@@ -73,7 +72,7 @@ async fn test_network_connect() {
 	// out messages
 	for network in &mut networks {
 		let mut rx = network.network_rx().unwrap();
-		task::spawn(async move {
+		tokio::spawn(async move {
 			loop {
 				let message = rx.next().await;
 				match message {
@@ -120,7 +119,7 @@ async fn test_network_connect() {
 	}
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn test_network_message() {
 	let _ = env_logger::try_init();
 
@@ -224,7 +223,7 @@ async fn wait_connect(network: &Network, expected_opened_count: usize) {
 		if network_state.opened_peers.len() >= expected_opened_count {
 			break;
 		}
-		task::sleep(Duration::from_millis(1000)).await;
+		tokio::time::sleep(Duration::from_millis(1000)).await;
 	}
 }
 
@@ -241,7 +240,7 @@ async fn wait_message(network: &mut Network, expected_message: &[u8]) {
 			},
 			None => break,
 		}
-		task::sleep(Duration::from_millis(1000)).await;
+		tokio::time::sleep(Duration::from_millis(1000)).await;
 	}
 }
 

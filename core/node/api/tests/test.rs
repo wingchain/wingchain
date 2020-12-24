@@ -27,7 +27,7 @@ use node_txpool::{TxPool, TxPoolConfig};
 use primitives::{codec, Address, Transaction};
 use utils_test::test_accounts;
 
-#[async_std::test]
+#[tokio::test]
 async fn test_api() {
 	let config = ApiConfig {
 		rpc_addr: "0.0.0.0:3109".to_string(),
