@@ -29,7 +29,7 @@ use libp2p::{PeerId, Swarm};
 use log::{debug, error};
 
 use crate::behaviour::{Behaviour, BehaviourOut};
-use crate::{NetWorkOutMessage, NetworkInMessage};
+use crate::{NetworkInMessage, NetworkOutMessage};
 
 pub async fn start(mut stream: NetworkStream) {
 	loop {
@@ -45,7 +45,7 @@ pub struct NetworkStream {
 	#[allow(dead_code)]
 	pub bandwidth: Arc<BandwidthSinks>,
 	pub in_rx: UnboundedReceiver<NetworkInMessage>,
-	pub out_tx: UnboundedSender<NetWorkOutMessage>,
+	pub out_tx: UnboundedSender<NetworkOutMessage>,
 }
 
 #[derive(Debug)]
@@ -183,14 +183,14 @@ impl Stream for NetworkStream {
 	}
 }
 
-impl From<BehaviourOut> for NetWorkOutMessage {
+impl From<BehaviourOut> for NetworkOutMessage {
 	fn from(v: BehaviourOut) -> Self {
 		match v {
 			BehaviourOut::ProtocolOpen {
 				peer_id,
 				connected_point,
 				handshake,
-			} => NetWorkOutMessage::ProtocolOpen {
+			} => NetworkOutMessage::ProtocolOpen {
 				peer_id,
 				connected_point,
 				handshake,
@@ -198,11 +198,11 @@ impl From<BehaviourOut> for NetWorkOutMessage {
 			BehaviourOut::ProtocolClose {
 				peer_id,
 				connected_point,
-			} => NetWorkOutMessage::ProtocolClose {
+			} => NetworkOutMessage::ProtocolClose {
 				peer_id,
 				connected_point,
 			},
-			BehaviourOut::Message { message } => NetWorkOutMessage::Message { message },
+			BehaviourOut::Message { message } => NetworkOutMessage::Message { message },
 		}
 	}
 }

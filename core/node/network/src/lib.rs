@@ -73,7 +73,7 @@ pub enum NetworkInMessage {
 }
 
 #[derive(Debug)]
-pub enum NetWorkOutMessage {
+pub enum NetworkOutMessage {
 	ProtocolOpen {
 		peer_id: PeerId,
 		connected_point: ConnectedPoint,
@@ -92,7 +92,7 @@ pub enum NetWorkOutMessage {
 pub struct Network {
 	peer_manager_tx: UnboundedSender<PMInMessage>,
 	network_tx: UnboundedSender<NetworkInMessage>,
-	network_rx: Option<UnboundedReceiver<NetWorkOutMessage>>,
+	network_rx: Option<UnboundedReceiver<NetworkOutMessage>>,
 }
 
 impl Network {
@@ -185,7 +185,7 @@ impl Network {
 		self.network_tx.clone()
 	}
 
-	pub fn network_rx(&mut self) -> Option<UnboundedReceiver<NetWorkOutMessage>> {
+	pub fn network_rx(&mut self) -> Option<UnboundedReceiver<NetworkOutMessage>> {
 		self.network_rx.take()
 	}
 }
