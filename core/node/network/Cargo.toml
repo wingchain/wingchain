@@ -1,0 +1,31 @@
+[package]
+name = "node-network"
+version = "0.1.0"
+authors = ["guoxbin <guoxbin@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies.libp2p]
+version = "0.31.1"
+default-features = false
+features = ["identify", "noise", "ping", "tcp-async-std", "websocket", "yamux", "kad", "dns"]
+
+[dependencies]
+fnv = "1.0.6"
+derive_more = "0.99"
+futures_codec = "0.4.0"
+unsigned-varint = { version = "0.5.0", features = ["futures", "futures-codec"] }
+futures = "0.3.8"
+pin-project = "0.4.6"
+async-std = { version = "1.8.0", features = ["attributes"] }
+log = "0.4.8"
+lru = "0.6.1"
+linked-hash-map = "0.5.3"
+futures-timer = "3.0.2"
+
+primitives = { path = "../../primitives" }
+node-peer-manager = { path = "../peer-manager" }
+
+[dev-dependencies]
+env_logger = "0.7.1"

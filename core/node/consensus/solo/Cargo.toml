@@ -7,9 +7,10 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tokio ={ version = "0.2.17", features = ["rt-core", "time", "sync", "stream", "macros"] }
-futures = "0.3"
+futures = "0.3.8"
 log = "0.4.8"
+async-std = { version = "1.8.0", features = ["attributes"] }
+futures-timer = "3.0.2"
 
 node-consensus = { path = ".." }
 primitives = { path = "../../../primitives" }

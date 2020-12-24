@@ -31,10 +31,11 @@ use primitives::{
 	codec, Address, Balance, Block, Body, DBKey, Execution, FullTransaction, Hash, Header, Receipt,
 	TransactionForHash,
 };
+use std::time::Duration;
 use utils_test::test_accounts;
 
-#[tokio::test]
-async fn test_chain() {
+#[async_std::test]
+async fn test_chain_normal() {
 	let _ = env_logger::try_init();
 
 	use tempfile::tempdir;
@@ -137,9 +138,11 @@ async fn test_chain() {
 		vec![Arc::new(payload_tx_receipt)],
 		expected_payload_receipts
 	);
+
+	safe_close(chain).await;
 }
 
-#[tokio::test]
+#[async_std::test]
 async fn test_chain_execute_call() {
 	use tempfile::tempdir;
 
@@ -176,10 +179,12 @@ async fn test_chain_execute_call() {
 		.unwrap();
 	let result: Balance = codec::decode(&result).unwrap();
 	assert_eq!(10, result);
+
+	safe_close(chain).await
 }
 
-#[test]
-fn test_chain_invalid_spec() {
+#[async_std::test]
+async fn test_chain_invalid_spec() {
 	use tempfile::tempdir;
 
 	let path = tempdir().expect("could not create a temp dir");
@@ -302,6 +307,13 @@ fn expected_data(
 		meta_receipts,
 		payload_receipts,
 	)
+}
+
+/// safe close,
+/// to avoid rocksdb `libc++abi.dylib: Pure virtual function called!`
+async fn safe_close(chain: Chain) {
+	drop(chain);
+	async_std::task::sleep(Duration::from_millis(50)).await;
 }
 
 fn hash<E: Encode>(data: E) -> Hash {

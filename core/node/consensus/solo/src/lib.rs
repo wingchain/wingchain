@@ -21,11 +21,12 @@ use std::sync::Arc;
 use std::task::Context;
 use std::time::{Duration, SystemTime};
 
+use async_std::task;
 use futures::prelude::*;
 use futures::task::Poll;
 use futures::{Future, Stream, TryStreamExt};
+use futures_timer::Delay;
 use log::{debug, info, warn};
-use tokio::time::{delay_for, Delay};
 
 use node_consensus::errors::ErrorKind;
 use node_consensus::{errors, support::ConsensusSupport};
@@ -54,7 +55,7 @@ where
 		let meta = get_solo_meta(support.clone())?;
 
 		if meta.block_interval.is_some() {
-			tokio::spawn(start(meta, support.clone()));
+			task::spawn(start(meta, support.clone()));
 		}
 
 		info!("Initializing consensus solo");
@@ -220,7 +221,7 @@ impl Stream for Scheduler {
 			None => {
 				// schedule wait.
 				let wait_duration = time_until_next(duration_now(), self.duration);
-				Some(delay_for(wait_duration))
+				Some(Delay::new(wait_duration))
 			}
 			Some(d) => Some(d),
 		};

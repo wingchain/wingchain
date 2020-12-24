@@ -22,7 +22,7 @@ use utils_test::test_accounts;
 
 mod base;
 
-#[tokio::test]
+#[async_std::test]
 async fn test_solo_balance() {
 	let _ = env_logger::try_init();
 
@@ -172,4 +172,6 @@ async fn test_solo_balance() {
 			result: Ok(codec::encode(&()).unwrap()),
 		}
 	);
+
+	base::safe_close(chain, txpool, solo).await;
 }

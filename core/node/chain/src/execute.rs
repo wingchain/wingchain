@@ -17,14 +17,15 @@
 
 use std::sync::Arc;
 
+use futures::channel::mpsc::{channel, Receiver, Sender};
 use log::{debug, warn};
-use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 use primitives::errors::CommonResult;
 use primitives::{BlockNumber, BuildExecutionParams, FullTransaction, Hash};
 
 use crate::backend::Backend;
 use crate::errors;
+use futures::{SinkExt, StreamExt};
 
 #[derive(Debug)]
 pub struct ExecuteTask {
@@ -51,7 +52,7 @@ impl ExecuteQueue {
 			task_tx,
 		};
 
-		tokio::spawn(process_tasks(task_rx, backend));
+		async_std::task::spawn(process_tasks(task_rx, backend));
 
 		execute_queue
 	}
@@ -68,14 +69,15 @@ impl ExecuteQueue {
 /// A loop to process execute tasks
 async fn process_tasks(mut task_rx: Receiver<ExecuteTask>, backend: Arc<Backend>) {
 	loop {
-		let task = task_rx.recv().await;
-		if let Some(task) = task {
-			match process_task(task, &backend) {
+		let task = task_rx.next().await;
+		match task {
+			Some(task) => match process_task(task, &backend) {
 				Ok(_) => {}
 				Err(e) => {
 					warn!("Process task error: {}", e);
 				}
-			}
+			},
+			None => break,
 		}
 	}
 }

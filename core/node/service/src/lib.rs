@@ -44,9 +44,13 @@
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::thread;
 
+use async_std::task;
 use tokio::runtime::Runtime;
 
+use crate::errors::ErrorKind;
+use futures::channel::oneshot;
 use main_base::config::Config;
 use node_api::support::DefaultApiSupport;
 use node_api::{Api, ApiConfig};
@@ -119,22 +123,32 @@ impl Service {
 
 /// Start service daemon
 pub fn start(config: ServiceConfig) -> CommonResult<()> {
-	let mut rt = Runtime::new().map_err(|e| errors::ErrorKind::Runtime(e))?;
-
-	rt.block_on(start_service(config))?;
-
+	let shutdown_rx = shutdown()?;
+	task::block_on(start_service(config, shutdown_rx))?;
 	Ok(())
 }
 
-async fn start_service(config: ServiceConfig) -> CommonResult<()> {
+async fn start_service(
+	config: ServiceConfig,
+	shutdown_rx: oneshot::Receiver<()>,
+) -> CommonResult<()> {
 	Service::new(config)?;
-
-	wait_shutdown().await;
-
+	let _ = shutdown_rx.await;
 	Ok(())
 }
 
-async fn wait_shutdown() {
+fn shutdown() -> CommonResult<oneshot::Receiver<()>> {
+	let (tx, rx) = oneshot::channel();
+
+	let mut rt = Runtime::new().map_err(|e| ErrorKind::Runtime(e))?;
+	thread::spawn(move || {
+		rt.block_on(wait_shutdown(tx));
+	});
+
+	Ok(rx)
+}
+
+async fn wait_shutdown(tx: oneshot::Sender<()>) {
 	#[cfg(windows)]
 	let _ = tokio::signal::ctrl_c().await;
 	#[cfg(unix)]
@@ -147,6 +161,7 @@ async fn wait_shutdown() {
 			_ = sigtun_term.recv() => {}
 		}
 	}
+	let _ = tx.send(());
 }
 
 fn get_config(home: &PathBuf) -> CommonResult<Config> {

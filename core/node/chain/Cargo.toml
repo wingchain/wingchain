@@ -7,7 +7,6 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tokio ={ version = "0.2.17", features = ["rt-core", "time", "sync", "stream", "macros"] }
 serde = { version = "1.0", features = ["derive"] }
 toml = "0.5.6"
 serde_json = "1.0"
@@ -15,6 +14,8 @@ chrono = "0.4.11"
 log = "0.4.8"
 hex = "0.4.2"
 atomic_refcell = "0.1.6"
+async-std = { version = "1.8.0", features = ["attributes"] }
+futures = "0.3.8"
 
 primitives = { path = "../../primitives" }
 crypto = { path = "../../crypto" }

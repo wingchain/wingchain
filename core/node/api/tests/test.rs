@@ -27,7 +27,7 @@ use node_txpool::{TxPool, TxPoolConfig};
 use primitives::{codec, Address, Transaction};
 use utils_test::test_accounts;
 
-#[tokio::test]
+#[async_std::test]
 async fn test_api() {
 	let config = ApiConfig {
 		rpc_addr: "0.0.0.0:3109".to_string(),
@@ -53,16 +53,13 @@ async fn test_api() {
 
 	let _api = Api::new(config, support);
 
-	let client = reqwest::Client::new();
-
 	for (request, expected_response) in get_cases(&chain) {
-		let res = client
-			.post("http://127.0.0.1:3109")
+		let mut res = surf::post("http://127.0.0.1:3109")
 			.body(request)
 			.send()
 			.await
 			.unwrap();
-		let response = res.text().await.unwrap();
+		let response = res.body_string().await.unwrap();
 		assert_eq!(response, expected_response);
 	}
 }

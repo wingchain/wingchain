@@ -23,8 +23,8 @@ use test::{black_box, Bencher};
 
 use futures::future::join_all;
 use tempfile::tempdir;
-use tokio::runtime::Runtime;
 
+use async_std::task;
 use crypto::address::AddressImpl;
 use crypto::dsa::{DsaImpl, KeyPairImpl};
 use node_chain::{module, Chain, ChainConfig};
@@ -41,8 +41,7 @@ fn bench_txpool_insert_transfer(b: &mut Bencher) {
 
 	let (account1, account2) = test_accounts(dsa, address);
 
-	let mut rt = Runtime::new().unwrap();
-	let chain = rt.block_on(async {
+	let chain = task::block_on(async {
 		let chain = get_chain(&account1.3);
 		chain
 	});
@@ -58,8 +57,7 @@ fn bench_txpool_insert_txs(b: &mut Bencher, address: &Address, txs: Vec<Transact
 				buffer_capacity: 10240,
 			};
 
-			let mut rt = Runtime::new().unwrap();
-			rt.block_on(async {
+			task::block_on(async {
 				let chain = get_chain(address);
 				let txpool = TxPool::new(config, chain.clone()).unwrap();
 				let futures = txs

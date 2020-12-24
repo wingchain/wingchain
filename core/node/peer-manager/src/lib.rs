@@ -15,11 +15,12 @@
 use std::collections::VecDeque;
 use std::pin::Pin;
 
+use futures::channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
 use futures::task::{Context, Poll};
 use futures::Stream;
 use libp2p::PeerId;
 use linked_hash_map::LinkedHashMap;
-use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
+use log::trace;
 
 mod errors;
 
@@ -49,7 +50,7 @@ pub struct PeerInfo {
 	peer_type: PeerType,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct IncomingId(pub u64);
 
 #[derive(Debug, PartialEq)]
@@ -100,7 +101,7 @@ impl PeerManager {
 			peers: inactive_peers,
 		};
 
-		let (in_tx, in_rx) = unbounded_channel();
+		let (in_tx, in_rx) = unbounded();
 
 		let mut peer_manager = Self {
 			config,
@@ -146,10 +147,16 @@ impl PeerManager {
 			.insert_peer(peer_id, PeerState::In, &self.config)
 		{
 			InsertPeerResult::Inserted(peer_id) => {
+				trace!("Incoming peer inserted: {}", peer_id);
 				self.inactive.remove_peer(peer_id);
 				self.send(OutMessage::Accept(incoming_id));
 			}
 			InsertPeerResult::Replaced { inserted, removed } => {
+				trace!(
+					"Incoming peer replaced: {}, dropping: {}",
+					inserted,
+					removed
+				);
 				self.inactive.remove_peer(inserted);
 				self.inactive.insert_peer(removed.clone());
 				self.send(OutMessage::Accept(incoming_id));
@@ -170,9 +177,11 @@ impl PeerManager {
 				.insert_peer(peer_id, PeerState::Out, &self.config)
 			{
 				InsertPeerResult::Inserted(peer_id) => {
+					trace!("New peer inserted: {}", peer_id);
 					self.send(OutMessage::Connect(peer_id));
 				}
 				InsertPeerResult::Replaced { inserted, removed } => {
+					trace!("New peer replaced: {}, dropping: {}", inserted, removed);
 					self.inactive.insert_peer(removed.clone());
 					self.send(OutMessage::Connect(inserted));
 					self.send(OutMessage::Drop(removed));
