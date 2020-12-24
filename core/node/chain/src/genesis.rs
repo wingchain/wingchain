@@ -77,8 +77,8 @@ fn build_tx(
 			let params: module::balance::InitParams = JsonParams(params).try_into()?;
 			executor.build_tx(None, module.clone(), method.clone(), params)
 		}
-		("solo", "init") => {
-			let params: module::solo::InitParams = JsonParams(params).try_into()?;
+		("poa", "init") => {
+			let params: module::poa::InitParams = JsonParams(params).try_into()?;
 			executor.build_tx(None, module.clone(), method.clone(), params)
 		}
 		("contract", "init") => {
@@ -143,9 +143,9 @@ impl<'a> TryInto<module::balance::InitParams> for JsonParams<'a> {
 	}
 }
 
-impl<'a> TryInto<module::solo::InitParams> for JsonParams<'a> {
+impl<'a> TryInto<module::poa::InitParams> for JsonParams<'a> {
 	type Error = CommonError;
-	fn try_into(self) -> Result<module::solo::InitParams, Self::Error> {
+	fn try_into(self) -> Result<module::poa::InitParams, Self::Error> {
 		#[derive(Deserialize)]
 		pub struct InitParams {
 			pub block_interval: Option<u64>,
@@ -154,7 +154,7 @@ impl<'a> TryInto<module::solo::InitParams> for JsonParams<'a> {
 			.map_err(|e| errors::ErrorKind::Spec(format!("invalid json: {:?}", e)))?;
 		let block_interval = params.block_interval;
 
-		Ok(module::solo::InitParams { block_interval })
+		Ok(module::poa::InitParams { block_interval })
 	}
 }
 
@@ -253,7 +253,7 @@ mod tests {
 	}
 
 	#[test]
-	fn test_into_solo_init_params() {
+	fn test_into_poa_init_params() {
 		let str = r#"
 		{
 			"block_interval": 1000
@@ -262,11 +262,11 @@ mod tests {
 
 		let json_params = JsonParams(&str);
 
-		let param: module::solo::InitParams = json_params.try_into().unwrap();
+		let param: module::poa::InitParams = json_params.try_into().unwrap();
 
 		assert_eq!(
 			param,
-			module::solo::InitParams {
+			module::poa::InitParams {
 				block_interval: Some(1000),
 			}
 		)
@@ -337,7 +337,7 @@ mod tests {
 						.to_string(),
 					},
 					Tx {
-						module: "solo".to_string(),
+						module: "poa".to_string(),
 						method: "init".to_string(),
 						params: r#"
 							{

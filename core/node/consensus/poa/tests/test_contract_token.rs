@@ -24,7 +24,7 @@ use utils_test::test_accounts;
 mod base;
 
 #[async_std::test]
-async fn test_solo_contract_token_read() {
+async fn test_poa_contract_token_read() {
 	let _ = env_logger::try_init();
 
 	let dsa = Arc::new(DsaImpl::Ed25519);
@@ -32,7 +32,7 @@ async fn test_solo_contract_token_read() {
 
 	let (account1, _account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, solo) = base::get_service(&account1.3);
+	let (chain, txpool, poa) = base::get_service(&account1.3);
 
 	let ori_code = get_code().to_vec();
 
@@ -57,7 +57,7 @@ async fn test_solo_contract_token_read() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 1
-	solo.generate_block().await.unwrap();
+	poa.generate_block().await.unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -167,11 +167,11 @@ async fn test_solo_contract_token_read() {
 	log::info!("result: {}", result);
 	assert_eq!(result, r#"2100000000000000"#.to_string(),);
 
-	base::safe_close(chain, txpool, solo).await;
+	base::safe_close(chain, txpool, poa).await;
 }
 
 #[async_std::test]
-async fn test_solo_contract_token_transfer() {
+async fn test_poa_contract_token_transfer() {
 	let _ = env_logger::try_init();
 
 	let dsa = Arc::new(DsaImpl::Ed25519);
@@ -179,7 +179,7 @@ async fn test_solo_contract_token_transfer() {
 
 	let (account1, account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, solo) = base::get_service(&account1.3);
+	let (chain, txpool, poa) = base::get_service(&account1.3);
 
 	let ori_code = get_code().to_vec();
 
@@ -204,7 +204,7 @@ async fn test_solo_contract_token_transfer() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 1
-	solo.generate_block().await.unwrap();
+	poa.generate_block().await.unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -238,7 +238,7 @@ async fn test_solo_contract_token_transfer() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 2
-	solo.generate_block().await.unwrap();
+	poa.generate_block().await.unwrap();
 	base::wait_block_execution(&chain).await;
 
 	// sender balance
@@ -285,11 +285,11 @@ async fn test_solo_contract_token_transfer() {
 	log::info!("result: {}", result);
 	assert_eq!(result, r#"100000000000000"#.to_string(),);
 
-	base::safe_close(chain, txpool, solo).await;
+	base::safe_close(chain, txpool, poa).await;
 }
 
 #[async_std::test]
-async fn test_solo_contract_token_transfer_from() {
+async fn test_poa_contract_token_transfer_from() {
 	let _ = env_logger::try_init();
 
 	let dsa = Arc::new(DsaImpl::Ed25519);
@@ -297,7 +297,7 @@ async fn test_solo_contract_token_transfer_from() {
 
 	let (account1, account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, solo) = base::get_service(&account1.3);
+	let (chain, txpool, poa) = base::get_service(&account1.3);
 
 	let ori_code = get_code().to_vec();
 
@@ -322,7 +322,7 @@ async fn test_solo_contract_token_transfer_from() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 1
-	solo.generate_block().await.unwrap();
+	poa.generate_block().await.unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -356,7 +356,7 @@ async fn test_solo_contract_token_transfer_from() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 2
-	solo.generate_block().await.unwrap();
+	poa.generate_block().await.unwrap();
 	base::wait_block_execution(&chain).await;
 
 	// check allowance after approving
@@ -412,7 +412,7 @@ async fn test_solo_contract_token_transfer_from() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 3
-	solo.generate_block().await.unwrap();
+	poa.generate_block().await.unwrap();
 	base::wait_block_execution(&chain).await;
 
 	// allowance after transferring from
@@ -485,7 +485,7 @@ async fn test_solo_contract_token_transfer_from() {
 	log::info!("result: {}", result);
 	assert_eq!(result, r#"100000000"#.to_string(),);
 
-	base::safe_close(chain, txpool, solo).await;
+	base::safe_close(chain, txpool, poa).await;
 }
 
 fn get_code() -> &'static [u8] {

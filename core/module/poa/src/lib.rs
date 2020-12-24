@@ -36,7 +36,7 @@ where
 #[module]
 impl<C: Context, U: Util> Module<C, U> {
 	const META_MODULE: bool = true;
-	const STORAGE_KEY: &'static [u8] = b"solo";
+	const STORAGE_KEY: &'static [u8] = b"poa";
 
 	fn new(context: C, util: U) -> Self {
 		Self {

@@ -656,7 +656,7 @@ impl Executor {
 enum Dispatcher {
 	system,
 	balance,
-	solo,
+	poa,
 	contract,
 }
 
@@ -664,6 +664,6 @@ enum Dispatcher {
 pub mod module {
 	pub use module_balance as balance;
 	pub use module_contract as contract;
-	pub use module_solo as solo;
+	pub use module_poa as poa;
 	pub use module_system as system;
 }

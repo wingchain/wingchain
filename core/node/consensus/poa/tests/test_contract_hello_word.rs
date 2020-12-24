@@ -25,7 +25,7 @@ use utils_test::test_accounts;
 mod base;
 
 #[async_std::test]
-async fn test_solo_contract_hw_read() {
+async fn test_poa_contract_hw_read() {
 	let _ = env_logger::try_init();
 
 	let dsa = Arc::new(DsaImpl::Ed25519);
@@ -33,7 +33,7 @@ async fn test_solo_contract_hw_read() {
 
 	let (account1, _account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, solo) = base::get_service(&account1.3);
+	let (chain, txpool, poa) = base::get_service(&account1.3);
 
 	let ori_code = get_code().to_vec();
 
@@ -58,7 +58,7 @@ async fn test_solo_contract_hw_read() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 1
-	solo.generate_block().await.unwrap();
+	poa.generate_block().await.unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -305,11 +305,11 @@ async fn test_solo_contract_hw_read() {
 	log::info!("result: {}", result);
 	assert_eq!(result, r#"10"#,);
 
-	base::safe_close(chain, txpool, solo).await;
+	base::safe_close(chain, txpool, poa).await;
 }
 
 #[async_std::test]
-async fn test_solo_contract_hw_write() {
+async fn test_poa_contract_hw_write() {
 	let _ = env_logger::try_init();
 
 	let dsa = Arc::new(DsaImpl::Ed25519);
@@ -317,7 +317,7 @@ async fn test_solo_contract_hw_write() {
 
 	let (account1, _account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, solo) = base::get_service(&account1.3);
+	let (chain, txpool, poa) = base::get_service(&account1.3);
 
 	let ori_code = get_code().to_vec();
 
@@ -342,7 +342,7 @@ async fn test_solo_contract_hw_write() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 1
-	solo.generate_block().await.unwrap();
+	poa.generate_block().await.unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -407,7 +407,7 @@ async fn test_solo_contract_hw_write() {
 	base::wait_txpool(&txpool, 3).await;
 
 	// generate block 2
-	solo.generate_block().await.unwrap();
+	poa.generate_block().await.unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -462,11 +462,11 @@ async fn test_solo_contract_hw_write() {
 	log::info!("result: {}", result);
 	assert_eq!(result, r#"{"value":"abc"}"#.to_string(),);
 
-	base::safe_close(chain, txpool, solo).await;
+	base::safe_close(chain, txpool, poa).await;
 }
 
 #[async_std::test]
-async fn test_solo_contract_hw_transfer_success() {
+async fn test_poa_contract_hw_transfer_success() {
 	let _ = env_logger::try_init();
 
 	let dsa = Arc::new(DsaImpl::Ed25519);
@@ -474,7 +474,7 @@ async fn test_solo_contract_hw_transfer_success() {
 
 	let (account1, account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, solo) = base::get_service(&account1.3);
+	let (chain, txpool, poa) = base::get_service(&account1.3);
 
 	let ori_code = get_code().to_vec();
 
@@ -499,7 +499,7 @@ async fn test_solo_contract_hw_transfer_success() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 1
-	solo.generate_block().await.unwrap();
+	poa.generate_block().await.unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -533,7 +533,7 @@ async fn test_solo_contract_hw_transfer_success() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 2
-	solo.generate_block().await.unwrap();
+	poa.generate_block().await.unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -599,11 +599,11 @@ async fn test_solo_contract_hw_transfer_success() {
 	log::info!("result: {}", result);
 	assert_eq!(result, 1);
 
-	base::safe_close(chain, txpool, solo).await;
+	base::safe_close(chain, txpool, poa).await;
 }
 
 #[async_std::test]
-async fn test_solo_contract_hw_transfer_failed() {
+async fn test_poa_contract_hw_transfer_failed() {
 	let _ = env_logger::try_init();
 
 	let dsa = Arc::new(DsaImpl::Ed25519);
@@ -611,7 +611,7 @@ async fn test_solo_contract_hw_transfer_failed() {
 
 	let (account1, account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, solo) = base::get_service(&account1.3);
+	let (chain, txpool, poa) = base::get_service(&account1.3);
 
 	let ori_code = get_code().to_vec();
 
@@ -636,7 +636,7 @@ async fn test_solo_contract_hw_transfer_failed() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 1
-	solo.generate_block().await.unwrap();
+	poa.generate_block().await.unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -670,7 +670,7 @@ async fn test_solo_contract_hw_transfer_failed() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 2
-	solo.generate_block().await.unwrap();
+	poa.generate_block().await.unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -722,11 +722,11 @@ async fn test_solo_contract_hw_transfer_failed() {
 	log::info!("result: {}", result);
 	assert_eq!(result, 0);
 
-	base::safe_close(chain, txpool, solo).await;
+	base::safe_close(chain, txpool, poa).await;
 }
 
 #[async_std::test]
-async fn test_solo_contract_hw_transfer_partial_failed() {
+async fn test_poa_contract_hw_transfer_partial_failed() {
 	let _ = env_logger::try_init();
 
 	let dsa = Arc::new(DsaImpl::Ed25519);
@@ -734,7 +734,7 @@ async fn test_solo_contract_hw_transfer_partial_failed() {
 
 	let (account1, account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, solo) = base::get_service(&account1.3);
+	let (chain, txpool, poa) = base::get_service(&account1.3);
 
 	let ori_code = get_code().to_vec();
 
@@ -759,7 +759,7 @@ async fn test_solo_contract_hw_transfer_partial_failed() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 1
-	solo.generate_block().await.unwrap();
+	poa.generate_block().await.unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -793,7 +793,7 @@ async fn test_solo_contract_hw_transfer_partial_failed() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 2
-	solo.generate_block().await.unwrap();
+	poa.generate_block().await.unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -852,11 +852,11 @@ async fn test_solo_contract_hw_transfer_partial_failed() {
 	log::info!("result: {}", result);
 	assert_eq!(result, 0);
 
-	base::safe_close(chain, txpool, solo).await;
+	base::safe_close(chain, txpool, poa).await;
 }
 
 #[async_std::test]
-async fn test_solo_contract_hw_nested_contract() {
+async fn test_poa_contract_hw_nested_contract() {
 	let _ = env_logger::try_init();
 
 	let dsa = Arc::new(DsaImpl::Ed25519);
@@ -864,7 +864,7 @@ async fn test_solo_contract_hw_nested_contract() {
 
 	let (account1, _account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, solo) = base::get_service(&account1.3);
+	let (chain, txpool, poa) = base::get_service(&account1.3);
 
 	let ori_code = get_code().to_vec();
 
@@ -889,7 +889,7 @@ async fn test_solo_contract_hw_nested_contract() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 1
-	solo.generate_block().await.unwrap();
+	poa.generate_block().await.unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -918,7 +918,7 @@ async fn test_solo_contract_hw_nested_contract() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 2
-	solo.generate_block().await.unwrap();
+	poa.generate_block().await.unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -926,7 +926,7 @@ async fn test_solo_contract_hw_nested_contract() {
 	log::info!("tx1_error: {:?}", tx1_error);
 	assert_eq!(tx1_error, "ContractError: NestDepthExceeded".to_string());
 
-	base::safe_close(chain, txpool, solo).await;
+	base::safe_close(chain, txpool, poa).await;
 }
 
 fn get_code() -> &'static [u8] {
