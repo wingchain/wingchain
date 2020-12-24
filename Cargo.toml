@@ -19,7 +19,7 @@ members = [
 	"core/node/chain",
 	"core/node/api",
 	"core/node/consensus",
-	"core/node/consensus/solo",
+	"core/node/consensus/poa",
 	"core/node/vm",
 	"core/node/vm/contract-sdk",
 	"core/node/vm/contract-sdk-primitives",
@@ -31,7 +31,7 @@ members = [
 	"core/node/network",
 	"core/module/system",
 	"core/module/balance",
-	"core/module/solo",
+	"core/module/poa",
 	"core/module/contract",
 ]
 

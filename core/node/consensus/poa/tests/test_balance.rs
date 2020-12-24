@@ -23,7 +23,7 @@ use utils_test::test_accounts;
 mod base;
 
 #[async_std::test]
-async fn test_solo_balance() {
+async fn test_poa_balance() {
 	let _ = env_logger::try_init();
 
 	let dsa = Arc::new(DsaImpl::Ed25519);
@@ -31,7 +31,7 @@ async fn test_solo_balance() {
 
 	let (account1, account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, solo) = base::get_service(&account1.3);
+	let (chain, txpool, poa) = base::get_service(&account1.3);
 
 	let tx1_hash = base::insert_tx(
 		&chain,
@@ -52,7 +52,7 @@ async fn test_solo_balance() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 1
-	solo.generate_block().await.unwrap();
+	poa.generate_block().await.unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx2_hash = base::insert_tx(
@@ -74,7 +74,7 @@ async fn test_solo_balance() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 2
-	solo.generate_block().await.unwrap();
+	poa.generate_block().await.unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx3_hash = base::insert_tx(
@@ -96,7 +96,7 @@ async fn test_solo_balance() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 3
-	solo.generate_block().await.unwrap();
+	poa.generate_block().await.unwrap();
 	base::wait_block_execution(&chain).await;
 
 	// check block 1
@@ -173,5 +173,5 @@ async fn test_solo_balance() {
 		}
 	);
 
-	base::safe_close(chain, txpool, solo).await;
+	base::safe_close(chain, txpool, poa).await;
 }

@@ -24,7 +24,7 @@ use utils_test::test_accounts;
 mod base;
 
 #[async_std::test]
-async fn test_solo_contract_tb_success() {
+async fn test_poa_contract_tb_success() {
 	let _ = env_logger::try_init();
 
 	let dsa = Arc::new(DsaImpl::Ed25519);
@@ -32,7 +32,7 @@ async fn test_solo_contract_tb_success() {
 
 	let (account1, _account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, solo) = base::get_service(&account1.3);
+	let (chain, txpool, poa) = base::get_service(&account1.3);
 
 	// create token contract
 	let token_code = get_token_code().to_vec();
@@ -58,7 +58,7 @@ async fn test_solo_contract_tb_success() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 1
-	solo.generate_block().await.unwrap();
+	poa.generate_block().await.unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -95,7 +95,7 @@ async fn test_solo_contract_tb_success() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 2
-	solo.generate_block().await.unwrap();
+	poa.generate_block().await.unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -133,7 +133,7 @@ async fn test_solo_contract_tb_success() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 3
-	solo.generate_block().await.unwrap();
+	poa.generate_block().await.unwrap();
 	base::wait_block_execution(&chain).await;
 
 	// deposit
@@ -158,7 +158,7 @@ async fn test_solo_contract_tb_success() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 4
-	solo.generate_block().await.unwrap();
+	poa.generate_block().await.unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -267,7 +267,7 @@ async fn test_solo_contract_tb_success() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 5
-	solo.generate_block().await.unwrap();
+	poa.generate_block().await.unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -348,11 +348,11 @@ async fn test_solo_contract_tb_success() {
 	log::info!("result: {}", result);
 	assert_eq!(result, r#"40"#.to_string(),);
 
-	base::safe_close(chain, txpool, solo).await;
+	base::safe_close(chain, txpool, poa).await;
 }
 
 #[async_std::test]
-async fn test_solo_contract_tb_failed() {
+async fn test_poa_contract_tb_failed() {
 	let _ = env_logger::try_init();
 
 	let dsa = Arc::new(DsaImpl::Ed25519);
@@ -360,7 +360,7 @@ async fn test_solo_contract_tb_failed() {
 
 	let (account1, _account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, solo) = base::get_service(&account1.3);
+	let (chain, txpool, poa) = base::get_service(&account1.3);
 
 	// create token contract
 	let token_code = get_token_code().to_vec();
@@ -386,7 +386,7 @@ async fn test_solo_contract_tb_failed() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 1
-	solo.generate_block().await.unwrap();
+	poa.generate_block().await.unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -423,7 +423,7 @@ async fn test_solo_contract_tb_failed() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 2
-	solo.generate_block().await.unwrap();
+	poa.generate_block().await.unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -461,7 +461,7 @@ async fn test_solo_contract_tb_failed() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 3
-	solo.generate_block().await.unwrap();
+	poa.generate_block().await.unwrap();
 	base::wait_block_execution(&chain).await;
 
 	// deposit
@@ -486,7 +486,7 @@ async fn test_solo_contract_tb_failed() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 4
-	solo.generate_block().await.unwrap();
+	poa.generate_block().await.unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -513,11 +513,11 @@ async fn test_solo_contract_tb_failed() {
 	log::info!("result: {}", result);
 	assert_eq!(result, r#"0"#.to_string(),);
 
-	base::safe_close(chain, txpool, solo).await;
+	base::safe_close(chain, txpool, poa).await;
 }
 
 #[async_std::test]
-async fn test_solo_contract_tb_ea() {
+async fn test_poa_contract_tb_ea() {
 	let _ = env_logger::try_init();
 
 	let dsa = Arc::new(DsaImpl::Ed25519);
@@ -525,7 +525,7 @@ async fn test_solo_contract_tb_ea() {
 
 	let (account1, _account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, solo) = base::get_service(&account1.3);
+	let (chain, txpool, poa) = base::get_service(&account1.3);
 
 	// create token contract
 	let token_code = get_token_code().to_vec();
@@ -551,7 +551,7 @@ async fn test_solo_contract_tb_ea() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 1
-	solo.generate_block().await.unwrap();
+	poa.generate_block().await.unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -588,7 +588,7 @@ async fn test_solo_contract_tb_ea() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 2
-	solo.generate_block().await.unwrap();
+	poa.generate_block().await.unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -626,7 +626,7 @@ async fn test_solo_contract_tb_ea() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 3
-	solo.generate_block().await.unwrap();
+	poa.generate_block().await.unwrap();
 	base::wait_block_execution(&chain).await;
 
 	// deposit
@@ -651,7 +651,7 @@ async fn test_solo_contract_tb_ea() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 4
-	solo.generate_block().await.unwrap();
+	poa.generate_block().await.unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -680,7 +680,7 @@ async fn test_solo_contract_tb_ea() {
 	log::info!("result: {}", result);
 	assert_eq!(result, r#"0"#.to_string(),);
 
-	base::safe_close(chain, txpool, solo).await;
+	base::safe_close(chain, txpool, poa).await;
 }
 
 fn get_token_bank_code() -> &'static [u8] {

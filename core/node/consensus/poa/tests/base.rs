@@ -21,7 +21,7 @@ use tempfile::tempdir;
 
 use node_chain::{Chain, ChainConfig};
 use node_consensus::support::DefaultConsensusSupport;
-use node_consensus_solo::Solo;
+use node_consensus_poa::Poa;
 use node_txpool::{TxPool, TxPoolConfig};
 use primitives::{Address, Hash, Transaction};
 
@@ -30,7 +30,7 @@ pub fn get_service(
 ) -> (
 	Arc<Chain>,
 	Arc<TxPool<Chain>>,
-	Solo<DefaultConsensusSupport<Chain>>,
+	Poa<DefaultConsensusSupport<Chain>>,
 ) {
 	let chain = get_chain(address);
 
@@ -43,9 +43,9 @@ pub fn get_service(
 
 	let support = Arc::new(DefaultConsensusSupport::new(chain.clone(), txpool.clone()));
 
-	let solo = Solo::new(support).unwrap();
+	let poa = Poa::new(support).unwrap();
 
-	(chain, txpool, solo)
+	(chain, txpool, poa)
 }
 
 pub async fn insert_tx(chain: &Arc<Chain>, txpool: &Arc<TxPool<Chain>>, tx: Transaction) -> Hash {
@@ -85,11 +85,11 @@ pub async fn wait_block_execution(chain: &Arc<Chain>) {
 pub async fn safe_close(
 	chain: Arc<Chain>,
 	txpool: Arc<TxPool<Chain>>,
-	solo: Solo<DefaultConsensusSupport<Chain>>,
+	poa: Poa<DefaultConsensusSupport<Chain>>,
 ) {
 	drop(chain);
 	drop(txpool);
-	drop(solo);
+	drop(poa);
 	async_std::task::sleep(Duration::from_millis(50)).await;
 }
 
@@ -143,7 +143,7 @@ params = '''
 '''
 
 [[genesis.txs]]
-module = "solo"
+module = "poa"
 method = "init"
 params = '''
 {{

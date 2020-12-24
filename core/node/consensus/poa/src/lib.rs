@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Solo consensus
+//! POA consensus
 //! one node append new blocks at a certain frequency specified by block interval
 
 use std::collections::HashSet;
@@ -35,7 +35,7 @@ use node_executor_primitives::EmptyParams;
 use primitives::errors::CommonResult;
 use primitives::{BuildBlockParams, FullTransaction};
 
-pub struct Solo<S>
+pub struct Poa<S>
 where
 	S: ConsensusSupport,
 {
@@ -43,24 +43,24 @@ where
 	support: Arc<S>,
 }
 
-impl<S> Solo<S>
+impl<S> Poa<S>
 where
 	S: ConsensusSupport + Send + Sync + 'static,
 {
 	pub fn new(support: Arc<S>) -> CommonResult<Self> {
-		let solo = Solo {
+		let poa = Poa {
 			support: support.clone(),
 		};
 
-		let meta = get_solo_meta(support.clone())?;
+		let meta = get_poa_meta(support.clone())?;
 
 		if meta.block_interval.is_some() {
 			task::spawn(start(meta, support.clone()));
 		}
 
-		info!("Initializing consensus solo");
+		info!("Initializing consensus poa");
 
-		Ok(solo)
+		Ok(poa)
 	}
 
 	pub async fn generate_block(&self) -> CommonResult<()> {
@@ -75,7 +75,7 @@ where
 	}
 }
 
-async fn start<S>(meta: module::solo::Meta, support: Arc<S>) -> CommonResult<()>
+async fn start<S>(meta: module::poa::Meta, support: Arc<S>) -> CommonResult<()>
 where
 	S: ConsensusSupport,
 {
@@ -183,12 +183,12 @@ where
 	Ok(())
 }
 
-fn get_solo_meta<S: ConsensusSupport>(support: Arc<S>) -> CommonResult<module::solo::Meta> {
+fn get_poa_meta<S: ConsensusSupport>(support: Arc<S>) -> CommonResult<module::poa::Meta> {
 	support
 		.execute_call_with_block_number(
 			&0,
 			None,
-			"solo".to_string(),
+			"poa".to_string(),
 			"get_meta".to_string(),
 			EmptyParams,
 		)

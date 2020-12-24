@@ -2861,7 +2861,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "module-solo"
+name = "module-poa"
 version = "0.1.0"
 dependencies = [
  "node-executor-macro",
@@ -3031,7 +3031,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "node-consensus-solo"
+name = "node-consensus-poa"
 version = "0.1.0"
 dependencies = [
  "async-std",
@@ -3070,7 +3070,7 @@ dependencies = [
  "crypto",
  "module-balance",
  "module-contract",
- "module-solo",
+ "module-poa",
  "module-system",
  "node-db",
  "node-executor-macro",
@@ -3147,7 +3147,7 @@ dependencies = [
  "node-api",
  "node-chain",
  "node-consensus",
- "node-consensus-solo",
+ "node-consensus-poa",
  "node-db",
  "node-executor",
  "node-statedb",

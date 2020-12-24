@@ -25,7 +25,7 @@ use utils_test::test_accounts;
 mod base;
 
 #[async_std::test]
-async fn test_solo_contract_create() {
+async fn test_poa_contract_create() {
 	let _ = env_logger::try_init();
 
 	let dsa = Arc::new(DsaImpl::Ed25519);
@@ -33,7 +33,7 @@ async fn test_solo_contract_create() {
 
 	let (account1, _account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, solo) = base::get_service(&account1.3);
+	let (chain, txpool, poa) = base::get_service(&account1.3);
 
 	let ori_code = get_code().to_vec();
 
@@ -58,7 +58,7 @@ async fn test_solo_contract_create() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 1
-	solo.generate_block().await.unwrap();
+	poa.generate_block().await.unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -118,11 +118,11 @@ async fn test_solo_contract_create() {
 			members: vec![(account1.3.clone(), 1)],
 		})
 	);
-	base::safe_close(chain, txpool, solo).await;
+	base::safe_close(chain, txpool, poa).await;
 }
 
 #[async_std::test]
-async fn test_solo_contract_create_fail() {
+async fn test_poa_contract_create_fail() {
 	let _ = env_logger::try_init();
 
 	let dsa = Arc::new(DsaImpl::Ed25519);
@@ -130,7 +130,7 @@ async fn test_solo_contract_create_fail() {
 
 	let (account1, _account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, solo) = base::get_service(&account1.3);
+	let (chain, txpool, poa) = base::get_service(&account1.3);
 
 	let ori_code = get_code().to_vec();
 
@@ -171,11 +171,11 @@ async fn test_solo_contract_create_fail() {
 
 	assert_eq!(tx1_error.to_string(), "[CommonError] Kind: Executor, Error: PreCompileError: ValidationError: Bad magic number (at offset 0)".to_string());
 
-	base::safe_close(chain, txpool, solo).await;
+	base::safe_close(chain, txpool, poa).await;
 }
 
 #[async_std::test]
-async fn test_solo_contract_update_admin() {
+async fn test_poa_contract_update_admin() {
 	let _ = env_logger::try_init();
 
 	let dsa = Arc::new(DsaImpl::Ed25519);
@@ -183,7 +183,7 @@ async fn test_solo_contract_update_admin() {
 
 	let (account1, account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, solo) = base::get_service(&account1.3);
+	let (chain, txpool, poa) = base::get_service(&account1.3);
 
 	let ori_code = get_code().to_vec();
 
@@ -208,7 +208,7 @@ async fn test_solo_contract_update_admin() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 1
-	solo.generate_block().await.unwrap();
+	poa.generate_block().await.unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -263,7 +263,7 @@ async fn test_solo_contract_update_admin() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 2
-	solo.generate_block().await.unwrap();
+	poa.generate_block().await.unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -339,7 +339,7 @@ async fn test_solo_contract_update_admin() {
 	base::wait_txpool(&txpool, 2).await;
 
 	// generate block 3
-	solo.generate_block().await.unwrap();
+	poa.generate_block().await.unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -387,11 +387,11 @@ async fn test_solo_contract_update_admin() {
 		})
 	);
 
-	base::safe_close(chain, txpool, solo).await;
+	base::safe_close(chain, txpool, poa).await;
 }
 
 #[async_std::test]
-async fn test_solo_contract_update_code() {
+async fn test_poa_contract_update_code() {
 	let _ = env_logger::try_init();
 
 	let dsa = Arc::new(DsaImpl::Ed25519);
@@ -400,7 +400,7 @@ async fn test_solo_contract_update_code() {
 
 	let (account1, account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, solo) = base::get_service(&account1.3);
+	let (chain, txpool, poa) = base::get_service(&account1.3);
 
 	let ori_code = get_code().to_vec();
 
@@ -425,7 +425,7 @@ async fn test_solo_contract_update_code() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 1
-	solo.generate_block().await.unwrap();
+	poa.generate_block().await.unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -495,7 +495,7 @@ async fn test_solo_contract_update_code() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 2
-	solo.generate_block().await.unwrap();
+	poa.generate_block().await.unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -569,7 +569,7 @@ async fn test_solo_contract_update_code() {
 	base::wait_txpool(&txpool, 2).await;
 
 	// generate block 3
-	solo.generate_block().await.unwrap();
+	poa.generate_block().await.unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -632,7 +632,7 @@ async fn test_solo_contract_update_code() {
 	log::info!("code_hash: {:?}", code_hash);
 	assert_eq!(code_hash, Some(expect_code_hash),);
 
-	base::safe_close(chain, txpool, solo).await;
+	base::safe_close(chain, txpool, poa).await;
 }
 
 fn get_code() -> &'static [u8] {
