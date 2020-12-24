@@ -14,7 +14,7 @@ chrono = "0.4.11"
 log = "0.4.8"
 hex = "0.4.2"
 atomic_refcell = "0.1.6"
-async-std = { version = "1.8.0", features = ["attributes"] }
+tokio = { version = "1.0", features = ["rt-multi-thread", "time", "sync", "macros"] }
 futures = "0.3.8"
 
 primitives = { path = "../../primitives" }

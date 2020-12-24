@@ -20,7 +20,7 @@ use std::fmt;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
-use async_std::sync::Arc;
+use std::sync::Arc;
 use futures::FutureExt;
 use futures::StreamExt;
 use futures_codec::BytesMut;

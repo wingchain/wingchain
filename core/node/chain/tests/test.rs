@@ -34,7 +34,7 @@ use primitives::{
 use std::time::Duration;
 use utils_test::test_accounts;
 
-#[async_std::test]
+#[tokio::test]
 async fn test_chain_normal() {
 	let _ = env_logger::try_init();
 
@@ -142,7 +142,7 @@ async fn test_chain_normal() {
 	safe_close(chain).await;
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn test_chain_execute_call() {
 	use tempfile::tempdir;
 
@@ -183,7 +183,7 @@ async fn test_chain_execute_call() {
 	safe_close(chain).await
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn test_chain_invalid_spec() {
 	use tempfile::tempdir;
 
@@ -313,7 +313,7 @@ fn expected_data(
 /// to avoid rocksdb `libc++abi.dylib: Pure virtual function called!`
 async fn safe_close(chain: Chain) {
 	drop(chain);
-	async_std::task::sleep(Duration::from_millis(50)).await;
+	tokio::time::sleep(Duration::from_millis(50)).await;
 }
 
 fn hash<E: Encode>(data: E) -> Hash {

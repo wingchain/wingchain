@@ -23,7 +23,7 @@ use utils_test::test_accounts;
 
 mod base;
 
-#[async_std::test]
+#[tokio::test]
 async fn test_poa_contract_tb_success() {
 	let _ = env_logger::try_init();
 
@@ -351,7 +351,7 @@ async fn test_poa_contract_tb_success() {
 	base::safe_close(chain, txpool, poa).await;
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn test_poa_contract_tb_failed() {
 	let _ = env_logger::try_init();
 
@@ -516,7 +516,7 @@ async fn test_poa_contract_tb_failed() {
 	base::safe_close(chain, txpool, poa).await;
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn test_poa_contract_tb_ea() {
 	let _ = env_logger::try_init();
 

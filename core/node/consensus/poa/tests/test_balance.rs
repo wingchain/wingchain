@@ -22,7 +22,7 @@ use utils_test::test_accounts;
 
 mod base;
 
-#[async_std::test]
+#[tokio::test]
 async fn test_poa_balance() {
 	let _ = env_logger::try_init();
 

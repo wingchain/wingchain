@@ -90,7 +90,7 @@ pub async fn safe_close(
 	drop(chain);
 	drop(txpool);
 	drop(poa);
-	async_std::task::sleep(Duration::from_millis(50)).await;
+	tokio::time::sleep(Duration::from_millis(50)).await;
 }
 
 fn get_chain(address: &Address) -> Arc<Chain> {

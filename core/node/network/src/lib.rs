@@ -14,7 +14,6 @@
 
 use std::num::NonZeroUsize;
 
-use async_std::task;
 use futures::channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
 use futures::channel::oneshot;
 use futures_codec::BytesMut;
@@ -165,7 +164,7 @@ impl Network {
 			in_rx,
 			out_tx,
 		};
-		task::spawn(start(stream));
+		tokio::spawn(start(stream));
 
 		let network = Network {
 			peer_manager_tx,

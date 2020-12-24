@@ -52,7 +52,7 @@ impl ExecuteQueue {
 			task_tx,
 		};
 
-		async_std::task::spawn(process_tasks(task_rx, backend));
+		tokio::spawn(process_tasks(task_rx, backend));
 
 		execute_queue
 	}

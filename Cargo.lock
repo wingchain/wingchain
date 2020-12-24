@@ -11,7 +11,7 @@ dependencies = [
  "futures-core",
  "futures-sink",
  "log",
- "tokio",
+ "tokio 0.2.24",
  "tokio-util 0.2.0",
 ]
 
@@ -27,7 +27,7 @@ dependencies = [
  "futures-sink",
  "log",
  "pin-project 0.4.27",
- "tokio",
+ "tokio 0.2.24",
  "tokio-util 0.3.1",
 ]
 
@@ -132,7 +132,7 @@ dependencies = [
  "futures-channel",
  "futures-util",
  "smallvec 1.5.1",
- "tokio",
+ "tokio 0.2.24",
 ]
 
 [[package]]
@@ -148,7 +148,7 @@ dependencies = [
  "futures-channel",
  "futures-util",
  "log",
- "mio",
+ "mio 0.6.23",
  "mio-uds",
  "num_cpus",
  "slab",
@@ -506,16 +506,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "async-attributes"
-version = "1.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "efd3d156917d94862e779f356c5acae312b08fd3121e792c857d7928c8088423"
-dependencies = [
- "quote",
- "syn",
-]
-
-[[package]]
 name = "async-channel"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -588,7 +578,6 @@ version = "1.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f9f84f1280a2b436a2c77c2582602732b6c2f4321d5494d6e799e6c367859a8"
 dependencies = [
- "async-attributes",
  "async-channel",
  "async-global-executor",
  "async-io",
@@ -1938,7 +1927,7 @@ dependencies = [
  "http",
  "indexmap",
  "slab",
- "tokio",
+ "tokio 0.2.24",
  "tokio-util 0.3.1",
  "tracing",
  "tracing-futures",
@@ -2807,10 +2796,23 @@ dependencies = [
  "kernel32-sys",
  "libc",
  "log",
- "miow",
+ "miow 0.2.2",
  "net2",
  "slab",
  "winapi 0.2.8",
+]
+
+[[package]]
+name = "mio"
+version = "0.7.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f33bc887064ef1fd66020c9adfc45bb9f33d75a42096c81e7c56c65b75dd1a8b"
+dependencies = [
+ "libc",
+ "log",
+ "miow 0.3.6",
+ "ntapi",
+ "winapi 0.3.9",
 ]
 
 [[package]]
@@ -2821,7 +2823,7 @@ checksum = "afcb699eb26d4332647cc848492bbc15eafb26f08d0304550d5aa1f612e066f0"
 dependencies = [
  "iovec",
  "libc",
- "mio",
+ "mio 0.6.23",
 ]
 
 [[package]]
@@ -2834,6 +2836,16 @@ dependencies = [
  "net2",
  "winapi 0.2.8",
  "ws2_32-sys",
+]
+
+[[package]]
+name = "miow"
+version = "0.3.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5a33c1b55807fbed163481b5ba66db4b2fa6cde694a5027be10fb724206c5897"
+dependencies = [
+ "socket2",
+ "winapi 0.3.9",
 ]
 
 [[package]]
@@ -2976,7 +2988,6 @@ version = "0.1.0"
 dependencies = [
  "actix-rt",
  "actix-web",
- "async-std",
  "async-trait",
  "crypto",
  "erased-serde",
@@ -2984,6 +2995,7 @@ dependencies = [
  "hex",
  "jsonrpc-v2",
  "log",
+ "node-api-rt",
  "node-chain",
  "node-txpool",
  "num_cpus",
@@ -2991,15 +3003,23 @@ dependencies = [
  "serde",
  "surf",
  "tempfile",
- "tokio",
+ "tokio 1.0.0",
  "utils-test",
+]
+
+[[package]]
+name = "node-api-rt"
+version = "0.1.0"
+dependencies = [
+ "actix-rt",
+ "futures",
+ "tokio 0.2.24",
 ]
 
 [[package]]
 name = "node-chain"
 version = "0.1.0"
 dependencies = [
- "async-std",
  "atomic_refcell",
  "chrono",
  "crypto",
@@ -3016,6 +3036,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
+ "tokio 1.0.0",
  "toml",
  "utils-test",
 ]
@@ -3034,7 +3055,6 @@ dependencies = [
 name = "node-consensus-poa"
 version = "0.1.0"
 dependencies = [
- "async-std",
  "crypto",
  "env_logger",
  "futures",
@@ -3048,6 +3068,7 @@ dependencies = [
  "node-txpool",
  "primitives",
  "tempfile",
+ "tokio 1.0.0",
  "utils-test",
 ]
 
@@ -3103,7 +3124,6 @@ dependencies = [
 name = "node-network"
 version = "0.1.0"
 dependencies = [
- "async-std",
  "derive_more",
  "env_logger",
  "fnv",
@@ -3117,6 +3137,7 @@ dependencies = [
  "node-peer-manager",
  "pin-project 0.4.27",
  "primitives",
+ "tokio 1.0.0",
  "unsigned-varint",
 ]
 
@@ -3124,20 +3145,19 @@ dependencies = [
 name = "node-peer-manager"
 version = "0.1.0"
 dependencies = [
- "async-std",
  "futures",
  "futures-timer",
  "libp2p",
  "linked-hash-map",
  "log",
  "primitives",
+ "tokio 1.0.0",
 ]
 
 [[package]]
 name = "node-service"
 version = "0.1.0"
 dependencies = [
- "async-std",
  "chrono",
  "crypto",
  "futures",
@@ -3153,7 +3173,7 @@ dependencies = [
  "node-statedb",
  "node-txpool",
  "primitives",
- "tokio",
+ "tokio 1.0.0",
  "toml",
 ]
 
@@ -3181,7 +3201,6 @@ dependencies = [
 name = "node-txpool"
 version = "0.1.0"
 dependencies = [
- "async-std",
  "chashmap",
  "crypto",
  "futures",
@@ -3193,6 +3212,7 @@ dependencies = [
  "primitives",
  "rand 0.4.6",
  "tempfile",
+ "tokio 1.0.0",
  "utils-test",
 ]
 
@@ -3259,6 +3279,15 @@ checksum = "ffb4262d26ed83a1c0a33a38fe2bb15797329c85770da05e6b828ddb782627af"
 dependencies = [
  "memchr",
  "version_check",
+]
+
+[[package]]
+name = "ntapi"
+version = "0.3.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3f6bb902e437b6d86e03cce10a7e2af662292c5dfef23b65899ea3ac9354ad44"
+dependencies = [
+ "winapi 0.3.9",
 ]
 
 [[package]]
@@ -4812,12 +4841,29 @@ dependencies = [
  "lazy_static",
  "libc",
  "memchr",
- "mio",
+ "mio 0.6.23",
  "mio-uds",
  "pin-project-lite 0.1.11",
  "signal-hook-registry",
  "slab",
- "tokio-macros",
+ "tokio-macros 0.2.6",
+ "winapi 0.3.9",
+]
+
+[[package]]
+name = "tokio"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9f4bfdcbd00fa893ac0549b38aa27080636a0104b0d0c38475a99439405e1df8"
+dependencies = [
+ "autocfg 1.0.1",
+ "libc",
+ "mio 0.7.6",
+ "num_cpus",
+ "once_cell",
+ "pin-project-lite 0.2.0",
+ "signal-hook-registry",
+ "tokio-macros 1.0.0",
  "winapi 0.3.9",
 ]
 
@@ -4826,6 +4872,17 @@ name = "tokio-macros"
 version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e44da00bfc73a25f814cd8d7e57a68a5c31b74b3152a0a1d1f590c97ed06265a"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "tokio-macros"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "42517d2975ca3114b22a16192634e8241dc5cc1f130be194645970cc1c371494"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4843,7 +4900,7 @@ dependencies = [
  "futures-sink",
  "log",
  "pin-project-lite 0.1.11",
- "tokio",
+ "tokio 0.2.24",
 ]
 
 [[package]]
@@ -4857,7 +4914,7 @@ dependencies = [
  "futures-sink",
  "log",
  "pin-project-lite 0.1.11",
- "tokio",
+ "tokio 0.2.24",
 ]
 
 [[package]]
@@ -4956,7 +5013,7 @@ dependencies = [
  "rand 0.7.3",
  "smallvec 1.5.1",
  "socket2",
- "tokio",
+ "tokio 0.2.24",
  "url",
 ]
 
@@ -4975,7 +5032,7 @@ dependencies = [
  "lru-cache",
  "resolv-conf",
  "smallvec 1.5.1",
- "tokio",
+ "tokio 0.2.24",
  "trust-dns-proto",
 ]
 
