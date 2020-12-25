@@ -32,7 +32,7 @@ async fn test_poa_contract_tb_success() {
 
 	let (account1, _account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, poa) = base::get_service(&account1.3);
+	let (chain, txpool, poa) = base::get_service(&account1);
 
 	// create token contract
 	let token_code = get_token_code().to_vec();
@@ -360,7 +360,7 @@ async fn test_poa_contract_tb_failed() {
 
 	let (account1, _account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, poa) = base::get_service(&account1.3);
+	let (chain, txpool, poa) = base::get_service(&account1);
 
 	// create token contract
 	let token_code = get_token_code().to_vec();
@@ -525,7 +525,7 @@ async fn test_poa_contract_tb_ea() {
 
 	let (account1, _account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, poa) = base::get_service(&account1.3);
+	let (chain, txpool, poa) = base::get_service(&account1);
 
 	// create token contract
 	let token_code = get_token_code().to_vec();

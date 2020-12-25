@@ -23,17 +23,17 @@ use node_chain::{Chain, ChainConfig};
 use node_consensus::support::DefaultConsensusSupport;
 use node_consensus_poa::{Poa, PoaConfig};
 use node_txpool::{TxPool, TxPoolConfig};
-use primitives::{Address, Hash, Transaction};
-use utils_test::test_accounts;
+use primitives::{Address, Hash, Transaction, SecretKey, PublicKey};
+use crypto::dsa::KeyPairImpl;
 
 pub fn get_service(
-	address: &Address,
+	account: &(SecretKey, PublicKey, KeyPairImpl, Address),
 ) -> (
 	Arc<Chain>,
 	Arc<TxPool<Chain>>,
 	Poa<DefaultConsensusSupport<Chain>>,
 ) {
-	let chain = get_chain(address);
+	let chain = get_chain(&account.3);
 
 	let txpool_config = TxPoolConfig {
 		pool_capacity: 32,
@@ -44,12 +44,8 @@ pub fn get_service(
 
 	let support = Arc::new(DefaultConsensusSupport::new(chain.clone(), txpool.clone()));
 
-	let (account1, _) = test_accounts(
-		chain.get_basic().dsa.clone(),
-		chain.get_basic().address.clone(),
-	);
 	let poa_config = PoaConfig {
-		secret_key: account1.0,
+		secret_key: account.0.clone(),
 	};
 
 	let poa = Poa::new(poa_config, support).unwrap();
