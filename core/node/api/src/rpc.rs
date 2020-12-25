@@ -45,7 +45,6 @@ where
 			node_api_rt::tokio::task::spawn_local(actix_rt);
 
 			start_rpc_app(&config, support).await.expect("start api");
-
 		});
 	});
 }

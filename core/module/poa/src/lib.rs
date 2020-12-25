@@ -31,6 +31,7 @@ where
 	#[allow(dead_code)]
 	util: U,
 	block_interval: StorageValue<Option<u64>, Self>,
+	authority: StorageValue<Address, Self>,
 }
 
 #[module]
@@ -43,6 +44,7 @@ impl<C: Context, U: Util> Module<C, U> {
 			env: context.env(),
 			util,
 			block_interval: StorageValue::new(context.clone(), b"block_interval"),
+			authority: StorageValue::new(context.clone(), b"authority"),
 		}
 	}
 
@@ -55,6 +57,11 @@ impl<C: Context, U: Util> Module<C, U> {
 		Ok(())
 	}
 
+	fn validate_init(&self, _sender: Option<&Address>, params: InitParams) -> ModuleResult<()> {
+		self.util.validate_address(&params.authority)?;
+		Ok(())
+	}
+
 	#[call]
 	fn get_meta(&self, _sender: Option<&Address>, _params: EmptyParams) -> ModuleResult<Meta> {
 		let block_interval = self.block_interval.get()?;
@@ -63,9 +70,25 @@ impl<C: Context, U: Util> Module<C, U> {
 		let meta = Meta { block_interval };
 		Ok(meta)
 	}
+
+	#[call]
+	fn get_authority(
+		&self,
+		_sender: Option<&Address>,
+		_params: EmptyParams,
+	) -> ModuleResult<Address> {
+		let authority = self.authority.get()?;
+		let authority = authority.ok_or("unexpected none")?;
+
+		Ok(authority)
+	}
 }
 
-pub type InitParams = Meta;
+#[derive(Encode, Decode, Debug, PartialEq)]
+pub struct InitParams {
+	pub block_interval: Option<u64>,
+	pub authority: Address,
+}
 
 #[derive(Encode, Decode, Debug, PartialEq)]
 pub struct Meta {

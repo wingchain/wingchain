@@ -32,7 +32,11 @@ use node_consensus::{errors, support::ConsensusSupport};
 use node_executor::module;
 use node_executor_primitives::EmptyParams;
 use primitives::errors::CommonResult;
-use primitives::{BuildBlockParams, FullTransaction};
+use primitives::{BuildBlockParams, FullTransaction, SecretKey};
+
+pub struct PoaConfig {
+	pub secret_key: SecretKey,
+}
 
 pub struct Poa<S>
 where
@@ -46,7 +50,7 @@ impl<S> Poa<S>
 where
 	S: ConsensusSupport + Send + Sync + 'static,
 {
-	pub fn new(support: Arc<S>) -> CommonResult<Self> {
+	pub fn new(_config: PoaConfig, support: Arc<S>) -> CommonResult<Self> {
 		let poa = Poa {
 			support: support.clone(),
 		};

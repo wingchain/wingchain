@@ -35,7 +35,8 @@ module = "poa"
 method = "init"
 params = '''
 {
-    "block_interval": 3000
+    "block_interval": 3000,
+    "authority": ""
 }
 '''
 

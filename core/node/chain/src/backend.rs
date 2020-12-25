@@ -683,6 +683,7 @@ impl Backend {
 
 	/// Init the genesis block
 	fn init_genesis(&self) -> CommonResult<()> {
+		// prepare spec
 		let spec_path = self
 			.config
 			.home
@@ -694,17 +695,32 @@ impl Backend {
 		let spec: Spec = toml::from_str(&spec_str)
 			.map_err(|e| errors::ErrorKind::Spec(format!("failed to parse spec file: {:?}", e)))?;
 
+		// build genesis
+		let env = ContextEnv {
+			number: 0,
+			timestamp: 0,
+		};
+		let build_genesis_context_essence = ContextEssence::new(
+			env,
+			self.trie_root.clone(),
+			self.meta_statedb.clone(),
+			Hash(self.meta_statedb.default_root()),
+			self.payload_statedb.clone(),
+			Hash(self.payload_statedb.default_root()),
+		)?;
+		let build_genesis_context = Context::new(&build_genesis_context_essence)?;
+
 		let BuildBlockParams {
 			number,
 			timestamp,
 			meta_txs,
 			payload_txs,
-		} = build_genesis(&spec, &self.executor)?;
+		} = build_genesis(&spec, &self.executor, &build_genesis_context)?;
 
+		// execute genesis
 		let zero_hash = self.executor.default_hash();
 
 		let env = ContextEnv { number, timestamp };
-
 		let context_essence = ContextEssence::new(
 			env,
 			self.trie_root.clone(),
@@ -713,7 +729,6 @@ impl Backend {
 			self.payload_statedb.clone(),
 			Hash(self.payload_statedb.default_root()),
 		)?;
-
 		let context = Context::new(&context_essence)?;
 
 		for tx in &meta_txs {

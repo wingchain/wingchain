@@ -29,8 +29,8 @@ use crypto::dsa::{DsaImpl, KeyPairImpl};
 use node_chain::{module, Chain, ChainConfig};
 use node_txpool::{TxPool, TxPoolConfig};
 use primitives::{Address, PublicKey, SecretKey, Transaction};
-use utils_test::test_accounts;
 use tokio::runtime::Runtime;
+use utils_test::test_accounts;
 
 const TXS_SIZE: usize = 2000;
 

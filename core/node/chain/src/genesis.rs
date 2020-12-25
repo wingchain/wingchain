@@ -21,20 +21,25 @@ use chrono::DateTime;
 use serde::Deserialize;
 
 use main_base::spec::{Spec, Tx};
-use node_executor::{module, Executor};
+use node_executor::{module, Context, Executor};
+use primitives::codec::Encode;
 use primitives::errors::{CommonError, CommonResult};
 use primitives::{Address, BlockNumber, BuildBlockParams, FullTransaction, Transaction};
 
 use crate::errors;
 
-pub fn build_genesis(spec: &Spec, executor: &Executor) -> CommonResult<BuildBlockParams> {
+pub fn build_genesis(
+	spec: &Spec,
+	executor: &Executor,
+	context: &Context,
+) -> CommonResult<BuildBlockParams> {
 	let mut meta_txs = vec![];
 	let mut payload_txs = vec![];
 
 	let mut timestamp: Option<u64> = None;
 
 	for tx in &spec.genesis.txs {
-		let tx = build_tx(tx, &executor, &mut timestamp)?;
+		let tx = build_tx(tx, &executor, context, &mut timestamp)?;
 		let is_meta = executor.is_meta_tx(&tx)?;
 		let tx_hash = executor.hash_transaction(&tx)?;
 		let tx = FullTransaction { tx, tx_hash };
@@ -61,6 +66,7 @@ pub fn build_genesis(spec: &Spec, executor: &Executor) -> CommonResult<BuildBloc
 fn build_tx(
 	tx: &Tx,
 	executor: &Executor,
+	context: &Context,
 	timestamp: &mut Option<u64>,
 ) -> CommonResult<Transaction> {
 	let module = &tx.module;
@@ -69,21 +75,21 @@ fn build_tx(
 
 	match (module.as_str(), method.as_str()) {
 		("system", "init") => {
-			let params: module::system::InitParams = JsonParams(params).try_into()?;
-			*timestamp = Some(params.timestamp);
-			executor.build_tx(None, module.clone(), method.clone(), params)
+			let module_params: module::system::InitParams = JsonParams(params).try_into()?;
+			*timestamp = Some(module_params.timestamp);
+			build_validate_tx(executor, context, module, method, module_params, params)
 		}
 		("balance", "init") => {
-			let params: module::balance::InitParams = JsonParams(params).try_into()?;
-			executor.build_tx(None, module.clone(), method.clone(), params)
+			let module_params: module::balance::InitParams = JsonParams(params).try_into()?;
+			build_validate_tx(executor, context, module, method, module_params, params)
 		}
 		("poa", "init") => {
-			let params: module::poa::InitParams = JsonParams(params).try_into()?;
-			executor.build_tx(None, module.clone(), method.clone(), params)
+			let module_params: module::poa::InitParams = JsonParams(params).try_into()?;
+			build_validate_tx(executor, context, module, method, module_params, params)
 		}
 		("contract", "init") => {
-			let params: module::contract::InitParams = JsonParams(params).try_into()?;
-			executor.build_tx(None, module.clone(), method.clone(), params)
+			let module_params: module::contract::InitParams = JsonParams(params).try_into()?;
+			build_validate_tx(executor, context, module, method, module_params, params)
 		}
 		_ => Err(errors::ErrorKind::Spec(format!(
 			"unknown module or method: {}.{}",
@@ -91,6 +97,32 @@ fn build_tx(
 		))
 		.into()),
 	}
+}
+
+fn build_validate_tx<P: Encode>(
+	executor: &Executor,
+	context: &Context,
+	module: &str,
+	method: &str,
+	module_params: P,
+	params: &str,
+) -> CommonResult<Transaction> {
+	let tx = executor
+		.build_tx(None, module.to_string(), method.to_string(), module_params)
+		.map_err(|e| {
+			errors::ErrorKind::Spec(format!(
+				"invalid params for {}.{}: \n{} \ncause: {}",
+				module, method, params, e
+			))
+		})?;
+
+	executor.validate_tx(context, &tx, false).map_err(|e| {
+		errors::ErrorKind::Spec(format!(
+			"invalid params for {}.{}: \n{} \ncause: {}",
+			module, method, params, e
+		))
+	})?;
+	Ok(tx)
 }
 
 struct JsonParams<'a>(&'a str);
@@ -124,20 +156,11 @@ impl<'a> TryInto<module::balance::InitParams> for JsonParams<'a> {
 	fn try_into(self) -> Result<module::balance::InitParams, Self::Error> {
 		#[derive(Deserialize)]
 		pub struct InitParams {
-			pub endow: Vec<(String, u64)>,
+			pub endow: Vec<(Address, u64)>,
 		}
 		let params = serde_json::from_str::<InitParams>(self.0)
 			.map_err(|e| errors::ErrorKind::Spec(format!("invalid json: {:?}", e)))?;
-		let endow = params
-			.endow
-			.into_iter()
-			.map(|(address, balance)| {
-				let address = Address(hex::decode(&address).map_err(|_| {
-					errors::ErrorKind::Spec(format!("invalid address format: {}", address))
-				})?);
-				Ok((address, balance))
-			})
-			.collect::<CommonResult<Vec<_>>>()?;
+		let endow = params.endow;
 
 		Ok(module::balance::InitParams { endow })
 	}
@@ -149,12 +172,17 @@ impl<'a> TryInto<module::poa::InitParams> for JsonParams<'a> {
 		#[derive(Deserialize)]
 		pub struct InitParams {
 			pub block_interval: Option<u64>,
+			pub authority: Address,
 		}
 		let params = serde_json::from_str::<InitParams>(self.0)
 			.map_err(|e| errors::ErrorKind::Spec(format!("invalid json: {:?}", e)))?;
 		let block_interval = params.block_interval;
+		let authority = params.authority;
 
-		Ok(module::poa::InitParams { block_interval })
+		Ok(module::poa::InitParams {
+			block_interval,
+			authority,
+		})
 	}
 }
 
@@ -186,11 +214,6 @@ impl<'a> TryInto<module::contract::InitParams> for JsonParams<'a> {
 
 #[cfg(test)]
 mod tests {
-	use crypto::address::AddressImpl;
-	use crypto::dsa::DsaImpl;
-	use crypto::hash::HashImpl;
-	use main_base::spec::{Basic, Genesis};
-
 	use super::*;
 
 	#[test]
@@ -256,7 +279,8 @@ mod tests {
 	fn test_into_poa_init_params() {
 		let str = r#"
 		{
-			"block_interval": 1000
+			"block_interval": 1000,
+			"authority": "01020304"
 		}
 		"#;
 
@@ -268,6 +292,7 @@ mod tests {
 			param,
 			module::poa::InitParams {
 				block_interval: Some(1000),
+				authority: Address::from_hex("01020304").unwrap(),
 			}
 		)
 	}
@@ -300,87 +325,5 @@ mod tests {
 				max_nest_depth: Some(8),
 			}
 		)
-	}
-
-	#[test]
-	fn test_build_genesis_txs() {
-		let spec = Spec {
-			basic: Basic {
-				hash: "blake2b_256".to_string(),
-				dsa: "ed25519".to_string(),
-				address: "blake2b_160".to_string(),
-			},
-			genesis: Genesis {
-				txs: vec![
-					Tx {
-						module: "system".to_string(),
-						method: "init".to_string(),
-						params: r#"
-							{
-								"chain_id": "chain-test",
-								"timestamp": "2020-04-16T23:46:02.189+08:00",
-								"until_gap": 20
-							}
-						"#
-						.to_string(),
-					},
-					Tx {
-						module: "balance".to_string(),
-						method: "init".to_string(),
-						params: r#"
-							{
-								"endow": [
-									["0001020304050607080900010203040506070809", 1]
-								]
-							}
-						"#
-						.to_string(),
-					},
-					Tx {
-						module: "poa".to_string(),
-						method: "init".to_string(),
-						params: r#"
-							{
-								"block_interval": 1000
-							}
-						"#
-						.to_string(),
-					},
-					Tx {
-						module: "contract".to_string(),
-						method: "init".to_string(),
-						params: r#"
-							{
-								"max_stack_height": 16384,
-								"initial_memory_pages": 1024,
-								"max_memory_pages": 2048,
-								"max_share_value_len": 104857600,
-								"max_share_size": 1024,
-								"max_nest_depth": 8
-							}
-						"#
-						.to_string(),
-					},
-				],
-			},
-		};
-
-		let executor = Executor::new(
-			Arc::new(HashImpl::Blake2b256),
-			Arc::new(DsaImpl::Ed25519),
-			Arc::new(AddressImpl::Blake2b160),
-		);
-
-		let BuildBlockParams {
-			number,
-			timestamp,
-			meta_txs,
-			payload_txs,
-		} = build_genesis(&spec, &executor).unwrap();
-
-		assert_eq!(number, 0);
-		assert_eq!(timestamp, 1587051962189);
-		assert_eq!(meta_txs.len(), 2);
-		assert_eq!(payload_txs.len(), 2);
 	}
 }

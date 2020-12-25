@@ -21,9 +21,10 @@ use tempfile::tempdir;
 
 use node_chain::{Chain, ChainConfig};
 use node_consensus::support::DefaultConsensusSupport;
-use node_consensus_poa::Poa;
+use node_consensus_poa::{Poa, PoaConfig};
 use node_txpool::{TxPool, TxPoolConfig};
 use primitives::{Address, Hash, Transaction};
+use utils_test::test_accounts;
 
 pub fn get_service(
 	address: &Address,
@@ -43,7 +44,15 @@ pub fn get_service(
 
 	let support = Arc::new(DefaultConsensusSupport::new(chain.clone(), txpool.clone()));
 
-	let poa = Poa::new(support).unwrap();
+	let (account1, _) = test_accounts(
+		chain.get_basic().dsa.clone(),
+		chain.get_basic().address.clone(),
+	);
+	let poa_config = PoaConfig {
+		secret_key: account1.0,
+	};
+
+	let poa = Poa::new(poa_config, support).unwrap();
 
 	(chain, txpool, poa)
 }
@@ -147,7 +156,8 @@ module = "poa"
 method = "init"
 params = '''
 {{
-    "block_interval": null
+    "block_interval": null,
+    "authority": "{}"
 }}
 '''
 
@@ -159,7 +169,7 @@ params = '''
 }}
 '''
 	"#,
-		address
+		address, address
 	);
 
 	fs::write(config_path.join("spec.toml"), &spec).unwrap();

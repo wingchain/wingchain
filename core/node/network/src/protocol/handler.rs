@@ -20,7 +20,6 @@ use std::fmt;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
-use std::sync::Arc;
 use futures::FutureExt;
 use futures::StreamExt;
 use futures_codec::BytesMut;
@@ -32,6 +31,7 @@ use libp2p::swarm::{
 	ProtocolsHandlerUpgrErr, SubstreamProtocol,
 };
 use libp2p::PeerId;
+use std::sync::Arc;
 
 use crate::protocol::upgrade::{InProtocol, InSubstream, OutProtocol, OutSubstream};
 use std::fmt::Formatter;
