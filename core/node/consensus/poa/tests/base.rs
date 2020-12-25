@@ -19,12 +19,12 @@ use std::sync::Arc;
 use std::time::Duration;
 use tempfile::tempdir;
 
+use crypto::dsa::KeyPairImpl;
 use node_chain::{Chain, ChainConfig};
 use node_consensus::support::DefaultConsensusSupport;
 use node_consensus_poa::{Poa, PoaConfig};
 use node_txpool::{TxPool, TxPoolConfig};
-use primitives::{Address, Hash, Transaction, SecretKey, PublicKey};
-use crypto::dsa::KeyPairImpl;
+use primitives::{Address, Hash, PublicKey, SecretKey, Transaction};
 
 pub fn get_service(
 	account: &(SecretKey, PublicKey, KeyPairImpl, Address),

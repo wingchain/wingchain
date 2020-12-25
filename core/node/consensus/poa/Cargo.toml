@@ -18,6 +18,7 @@ node-chain = { path = "../../chain" }
 node-txpool = { path = "../../txpool" }
 node-executor = { path = "../../executor" }
 node-executor-primitives = { path = "../../executor/primitives" }
+crypto = { path = "../../../crypto" }
 
 [dev-dependencies]
 tempfile = "3.1.0"
@@ -25,4 +26,3 @@ env_logger = "0.7.1"
 hex = "0.4.2"
 
 utils-test = { path = "../../../../utils/test" }
-crypto = { path = "../../../crypto" }

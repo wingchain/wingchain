@@ -16,7 +16,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use node_chain::{Chain, ChainCommitBlockParams};
+use node_chain::{Basic, Chain, ChainCommitBlockParams};
 use node_txpool::support::TxPoolSupport;
 use node_txpool::TxPool;
 use primitives::codec::{Decode, Encode};
@@ -48,6 +48,7 @@ pub trait ConsensusSupport {
 	async fn commit_block(&self, commit_block_params: ChainCommitBlockParams) -> CommonResult<()>;
 	fn get_transactions_in_txpool(&self) -> CommonResult<Vec<Arc<FullTransaction>>>;
 	fn remove_transactions_in_txpool(&self, tx_hash_set: &HashSet<Hash>) -> CommonResult<()>;
+	fn get_basic(&self) -> CommonResult<Arc<Basic>>;
 }
 
 pub struct DefaultConsensusSupport<TS>
@@ -113,5 +114,8 @@ where
 	}
 	fn remove_transactions_in_txpool(&self, tx_hash_set: &HashSet<Hash>) -> CommonResult<()> {
 		self.txpool.remove(tx_hash_set)
+	}
+	fn get_basic(&self) -> CommonResult<Arc<Basic>> {
+		Ok(self.chain.get_basic())
 	}
 }

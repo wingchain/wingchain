@@ -28,6 +28,9 @@ pub enum ErrorKind {
 
 	#[display(fmt = "Time error")]
 	TimeError,
+
+	#[display(fmt = "{}", _0)]
+	Other(String),
 }
 
 impl Error for ErrorKind {}

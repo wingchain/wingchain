@@ -53,6 +53,7 @@ impl<C: Context, U: Util> Module<C, U> {
 			return Err("Not genesis".into());
 		}
 		self.block_interval.set(&params.block_interval)?;
+		self.authority.set(&params.authority)?;
 		Ok(())
 	}
 
