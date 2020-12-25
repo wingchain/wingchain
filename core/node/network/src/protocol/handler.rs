@@ -125,7 +125,6 @@ pub enum HandlerError {}
 
 pub struct Handler {
 	local_peer_id: PeerId,
-	#[allow(dead_code)]
 	remote_peer_id: PeerId,
 	connected_point: ConnectedPoint,
 	protocol_name: Cow<'static, [u8]>,

@@ -28,7 +28,6 @@ where
 	U: Util,
 {
 	env: Arc<ContextEnv>,
-	#[allow(dead_code)]
 	util: U,
 	block_interval: StorageValue<Option<u64>, Self>,
 	authority: StorageValue<Address, Self>,

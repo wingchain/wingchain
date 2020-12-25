@@ -38,7 +38,6 @@ where
 	C: Context,
 	U: Util,
 {
-	#[allow(dead_code)]
 	env: Arc<ContextEnv>,
 	context: C,
 	util: U,

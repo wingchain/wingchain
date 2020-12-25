@@ -55,7 +55,6 @@ where
 	TS: TxPoolSupport,
 {
 	chain: Arc<Chain>,
-	#[allow(dead_code)]
 	txpool: Arc<TxPool<TS>>,
 }
 

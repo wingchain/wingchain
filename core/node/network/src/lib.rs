@@ -87,7 +87,6 @@ pub enum NetworkOutMessage {
 	},
 }
 
-#[allow(dead_code)]
 pub struct Network {
 	peer_manager_tx: UnboundedSender<PMInMessage>,
 	network_tx: UnboundedSender<NetworkInMessage>,
