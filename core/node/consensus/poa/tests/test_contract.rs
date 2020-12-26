@@ -33,7 +33,7 @@ async fn test_poa_contract_create() {
 
 	let (account1, _account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, poa) = base::get_service(&account1.3);
+	let (chain, txpool, poa) = base::get_service(&account1);
 
 	let ori_code = get_code().to_vec();
 
@@ -130,7 +130,7 @@ async fn test_poa_contract_create_fail() {
 
 	let (account1, _account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, poa) = base::get_service(&account1.3);
+	let (chain, txpool, poa) = base::get_service(&account1);
 
 	let ori_code = get_code().to_vec();
 
@@ -183,7 +183,7 @@ async fn test_poa_contract_update_admin() {
 
 	let (account1, account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, poa) = base::get_service(&account1.3);
+	let (chain, txpool, poa) = base::get_service(&account1);
 
 	let ori_code = get_code().to_vec();
 
@@ -400,7 +400,7 @@ async fn test_poa_contract_update_code() {
 
 	let (account1, account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, poa) = base::get_service(&account1.3);
+	let (chain, txpool, poa) = base::get_service(&account1);
 
 	let ori_code = get_code().to_vec();
 

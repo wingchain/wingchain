@@ -9,3 +9,6 @@ buffer_capacity = 10240
 rpc_addr = "0.0.0.0:3109"
 rpc_workers = 0
 rpc_maxconn = 10240
+
+[validator]
+secret_key_file = "secret_key.dat"

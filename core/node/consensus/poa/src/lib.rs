@@ -27,12 +27,18 @@ use futures::{Future, Stream, TryStreamExt};
 use futures_timer::Delay;
 use log::{debug, info, warn};
 
+use crypto::address::Address as AddressT;
+use crypto::dsa::{Dsa, KeyPair};
 use node_consensus::errors::ErrorKind;
 use node_consensus::{errors, support::ConsensusSupport};
 use node_executor::module;
 use node_executor_primitives::EmptyParams;
 use primitives::errors::CommonResult;
-use primitives::{BuildBlockParams, FullTransaction};
+use primitives::{Address, BuildBlockParams, FullTransaction, SecretKey};
+
+pub struct PoaConfig {
+	pub secret_key: SecretKey,
+}
 
 pub struct Poa<S>
 where
@@ -40,29 +46,43 @@ where
 {
 	#[allow(dead_code)]
 	support: Arc<S>,
+	is_authority: bool,
 }
 
 impl<S> Poa<S>
 where
 	S: ConsensusSupport + Send + Sync + 'static,
 {
-	pub fn new(support: Arc<S>) -> CommonResult<Self> {
-		let poa = Poa {
-			support: support.clone(),
-		};
+	pub fn new(config: PoaConfig, support: Arc<S>) -> CommonResult<Self> {
+		let meta = get_poa_meta(&support)?;
+		let authority_address = get_poa_authority(&support)?;
+		let current_address = get_current_address(&config.secret_key, &support)?;
+		let is_authority = current_address == authority_address;
 
-		let meta = get_poa_meta(support.clone())?;
+		info!(
+			"Current node is authority: {}, authority address: {}, current address: {}",
+			is_authority, authority_address, current_address
+		);
 
-		if meta.block_interval.is_some() {
+		if is_authority && meta.block_interval.is_some() {
 			tokio::spawn(start(meta, support.clone()));
 		}
 
 		info!("Initializing consensus poa");
 
+		let poa = Poa {
+			support: support.clone(),
+			is_authority,
+		};
+
 		Ok(poa)
 	}
 
 	pub async fn generate_block(&self) -> CommonResult<()> {
+		if !self.is_authority {
+			return Err(errors::ErrorKind::Other("not authority".to_string()).into());
+		}
+
 		let timestamp = SystemTime::now();
 		let timestamp = timestamp
 			.duration_since(SystemTime::UNIX_EPOCH)
@@ -78,6 +98,7 @@ async fn start<S>(meta: module::poa::Meta, support: Arc<S>) -> CommonResult<()>
 where
 	S: ConsensusSupport,
 {
+	info!("Start poa work");
 	let block_interval = meta.block_interval.expect("qed");
 	let task = Scheduler::new(block_interval)
 		.try_for_each(move |schedule_info| {
@@ -182,7 +203,7 @@ where
 	Ok(())
 }
 
-fn get_poa_meta<S: ConsensusSupport>(support: Arc<S>) -> CommonResult<module::poa::Meta> {
+fn get_poa_meta<S: ConsensusSupport>(support: &Arc<S>) -> CommonResult<module::poa::Meta> {
 	support
 		.execute_call_with_block_number(
 			&0,
@@ -192,6 +213,37 @@ fn get_poa_meta<S: ConsensusSupport>(support: Arc<S>) -> CommonResult<module::po
 			EmptyParams,
 		)
 		.map(|x| x.expect("qed"))
+}
+
+fn get_poa_authority<S: ConsensusSupport>(support: &Arc<S>) -> CommonResult<Address> {
+	support
+		.execute_call_with_block_number(
+			&0,
+			None,
+			"poa".to_string(),
+			"get_authority".to_string(),
+			EmptyParams,
+		)
+		.map(|x| x.expect("qed"))
+}
+
+fn get_current_address<S: ConsensusSupport>(
+	secret_key: &SecretKey,
+	support: &Arc<S>,
+) -> CommonResult<Address> {
+	let dsa = support.get_basic()?.dsa.clone();
+	let (_, public_key_len, _) = dsa.length().into();
+	let mut public_key = vec![0u8; public_key_len];
+	dsa.key_pair_from_secret_key(&secret_key.0)?
+		.public_key(&mut public_key);
+
+	let addresser = support.get_basic()?.address.clone();
+	let address_len = addresser.length().into();
+	let mut address = vec![0u8; address_len];
+	addresser.address(&mut address, &public_key);
+
+	let address = Address(address);
+	Ok(address)
 }
 
 struct Scheduler {

@@ -19,7 +19,6 @@ use std::io;
 use std::iter;
 use std::pin::Pin;
 
-use std::sync::Arc;
 use futures::stream::Fuse;
 use futures::task::{Context, Poll};
 use futures::StreamExt;
@@ -28,6 +27,7 @@ use futures_codec::{BytesMut, Framed};
 use libp2p::core::UpgradeInfo;
 use libp2p::swarm::protocols_handler::{InboundUpgradeSend, OutboundUpgradeSend};
 use libp2p::swarm::NegotiatedSubstream;
+use std::sync::Arc;
 use unsigned_varint::codec::UviBytes;
 
 const MAX_HANDSHAKE_LEN: usize = 1024;

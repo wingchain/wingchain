@@ -15,11 +15,13 @@
 //! Scheme for config.toml
 
 use serde::Deserialize;
+use std::path::PathBuf;
 
 #[derive(Deserialize, Debug)]
 pub struct Config {
 	pub txpool: TxPoolConfig,
 	pub api: ApiConfig,
+	pub validator: ValidatorConfig,
 }
 
 #[derive(Deserialize, Debug)]
@@ -33,4 +35,9 @@ pub struct ApiConfig {
 	pub rpc_addr: String,
 	pub rpc_workers: usize,
 	pub rpc_maxconn: usize,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct ValidatorConfig {
+	pub secret_key_file: PathBuf,
 }

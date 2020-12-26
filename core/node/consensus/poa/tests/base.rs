@@ -19,20 +19,21 @@ use std::sync::Arc;
 use std::time::Duration;
 use tempfile::tempdir;
 
+use crypto::dsa::KeyPairImpl;
 use node_chain::{Chain, ChainConfig};
 use node_consensus::support::DefaultConsensusSupport;
-use node_consensus_poa::Poa;
+use node_consensus_poa::{Poa, PoaConfig};
 use node_txpool::{TxPool, TxPoolConfig};
-use primitives::{Address, Hash, Transaction};
+use primitives::{Address, Hash, PublicKey, SecretKey, Transaction};
 
 pub fn get_service(
-	address: &Address,
+	account: &(SecretKey, PublicKey, KeyPairImpl, Address),
 ) -> (
 	Arc<Chain>,
 	Arc<TxPool<Chain>>,
 	Poa<DefaultConsensusSupport<Chain>>,
 ) {
-	let chain = get_chain(address);
+	let chain = get_chain(&account.3);
 
 	let txpool_config = TxPoolConfig {
 		pool_capacity: 32,
@@ -43,7 +44,11 @@ pub fn get_service(
 
 	let support = Arc::new(DefaultConsensusSupport::new(chain.clone(), txpool.clone()));
 
-	let poa = Poa::new(support).unwrap();
+	let poa_config = PoaConfig {
+		secret_key: account.0.clone(),
+	};
+
+	let poa = Poa::new(poa_config, support).unwrap();
 
 	(chain, txpool, poa)
 }
@@ -147,7 +152,8 @@ module = "poa"
 method = "init"
 params = '''
 {{
-    "block_interval": null
+    "block_interval": null,
+    "authority": "{}"
 }}
 '''
 
@@ -159,7 +165,7 @@ params = '''
 }}
 '''
 	"#,
-		address
+		address, address
 	);
 
 	fs::write(config_path.join("spec.toml"), &spec).unwrap();

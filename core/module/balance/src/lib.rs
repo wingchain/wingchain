@@ -31,7 +31,6 @@ where
 {
 	env: Arc<ContextEnv>,
 	context: C,
-	#[allow(dead_code)]
 	util: U,
 	balance: StorageMap<Address, Balance, Self>,
 }

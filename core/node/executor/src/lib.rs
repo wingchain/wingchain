@@ -322,7 +322,7 @@ impl<'a> Context<'a> {
 
 /// Default implementation of Util
 #[derive(Clone)]
-struct Util {
+pub struct Util {
 	hash: Arc<HashImpl>,
 	dsa: Arc<DsaImpl>,
 	address: Arc<AddressImpl>,
@@ -636,16 +636,21 @@ impl Executor {
 		Ok(self.hash_slice(&encoded))
 	}
 
+	/// Get the hash of the given slice
+	pub fn hash_slice(&self, data: &[u8]) -> Hash {
+		let mut out = vec![0u8; self.hash.length().into()];
+		self.hash.hash(&mut out, data);
+		Hash(out)
+	}
+
 	/// Get the default hash of the hash algorithm
 	pub fn default_hash(&self) -> Hash {
 		Hash(vec![0u8; self.hash.length().into()])
 	}
 
-	/// Get the hash of the given slice
-	fn hash_slice(&self, data: &[u8]) -> Hash {
-		let mut out = vec![0u8; self.hash.length().into()];
-		self.hash.hash(&mut out, data);
-		Hash(out)
+	/// Get the util
+	pub fn util(&self) -> Util {
+		self.util.clone()
 	}
 }
 

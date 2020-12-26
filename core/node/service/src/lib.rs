@@ -41,22 +41,23 @@
 //!   |                          Crypto                            |
 //!   +------------------------------------------------------------+
 
-use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use tokio::runtime::Runtime;
 
-use crate::errors::ErrorKind;
-use main_base::config::Config;
 use node_api::support::DefaultApiSupport;
-use node_api::{Api, ApiConfig};
+use node_api::Api;
 use node_chain::{Chain, ChainConfig};
 use node_consensus::support::DefaultConsensusSupport;
 use node_consensus_poa::Poa;
-use node_txpool::{TxPool, TxPoolConfig};
+use node_txpool::TxPool;
 use primitives::errors::CommonResult;
 
+use crate::config::get_config;
+use crate::errors::ErrorKind;
+
+mod config;
 pub mod errors;
 
 pub struct ServiceConfig {
@@ -79,34 +80,25 @@ pub struct Service {
 
 impl Service {
 	pub fn new(config: ServiceConfig) -> CommonResult<Self> {
-		let file_config = get_config(&config.home)?;
-
 		// init chain
 		let chain_config = ChainConfig {
 			home: config.home.clone(),
 		};
 		let chain = Arc::new(Chain::new(chain_config)?);
 
+		let global_config = get_config(&config.home, chain.get_basic())?;
+
 		// init txpool
-		let txpool_config = TxPoolConfig {
-			pool_capacity: file_config.txpool.pool_capacity,
-			buffer_capacity: file_config.txpool.buffer_capacity,
-		};
-		let txpool = Arc::new(TxPool::new(txpool_config, chain.clone())?);
+		let txpool = Arc::new(TxPool::new(global_config.txpool, chain.clone())?);
 
 		// init api
-		let api_config = ApiConfig {
-			rpc_addr: file_config.api.rpc_addr,
-			rpc_workers: file_config.api.rpc_workers,
-			rpc_maxconn: file_config.api.rpc_maxconn,
-		};
 		let api_support = Arc::new(DefaultApiSupport::new(chain.clone(), txpool.clone()));
-		let api = Arc::new(Api::new(api_config, api_support));
+		let api = Arc::new(Api::new(global_config.api, api_support));
 
 		// init consensus poa
 		let consensus_support =
 			Arc::new(DefaultConsensusSupport::new(chain.clone(), txpool.clone()));
-		let consensus = Arc::new(Poa::new(consensus_support)?);
+		let consensus = Arc::new(Poa::new(global_config.poa, consensus_support)?);
 
 		Ok(Self {
 			config,
@@ -120,14 +112,12 @@ impl Service {
 
 /// Start service daemon
 pub fn start(config: ServiceConfig) -> CommonResult<()> {
-	let rt = Runtime::new().map_err(|e|ErrorKind::Runtime(e))?;
+	let rt = Runtime::new().map_err(|e| ErrorKind::Runtime(e))?;
 	rt.block_on(start_service(config))?;
 	Ok(())
 }
 
-async fn start_service(
-	config: ServiceConfig,
-) -> CommonResult<()> {
+async fn start_service(config: ServiceConfig) -> CommonResult<()> {
 	Service::new(config)?;
 	wait_shutdown().await;
 	Ok(())
@@ -146,16 +136,4 @@ async fn wait_shutdown() {
 			_ = sigtun_term.recv() => {}
 		}
 	}
-}
-
-fn get_config(home: &PathBuf) -> CommonResult<Config> {
-	let config_path = home.join(main_base::CONFIG).join(main_base::CONFIG_FILE);
-	let config = fs::read_to_string(&config_path).map_err(|_| {
-		errors::ErrorKind::Config(format!("failed to read config file: {:?}", config_path))
-	})?;
-
-	let config = toml::from_str(&config)
-		.map_err(|e| errors::ErrorKind::Config(format!("failed to parse config file: {:?}", e)))?;
-
-	Ok(config)
 }

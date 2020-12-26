@@ -31,7 +31,7 @@ async fn test_poa_balance() {
 
 	let (account1, account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, poa) = base::get_service(&account1.3);
+	let (chain, txpool, poa) = base::get_service(&account1);
 
 	let tx1_hash = base::insert_tx(
 		&chain,

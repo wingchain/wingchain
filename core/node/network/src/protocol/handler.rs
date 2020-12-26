@@ -20,7 +20,6 @@ use std::fmt;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
-use std::sync::Arc;
 use futures::FutureExt;
 use futures::StreamExt;
 use futures_codec::BytesMut;
@@ -32,6 +31,7 @@ use libp2p::swarm::{
 	ProtocolsHandlerUpgrErr, SubstreamProtocol,
 };
 use libp2p::PeerId;
+use std::sync::Arc;
 
 use crate::protocol::upgrade::{InProtocol, InSubstream, OutProtocol, OutSubstream};
 use std::fmt::Formatter;
@@ -125,7 +125,6 @@ pub enum HandlerError {}
 
 pub struct Handler {
 	local_peer_id: PeerId,
-	#[allow(dead_code)]
 	remote_peer_id: PeerId,
 	connected_point: ConnectedPoint,
 	protocol_name: Cow<'static, [u8]>,

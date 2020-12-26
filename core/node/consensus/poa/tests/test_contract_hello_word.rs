@@ -33,7 +33,7 @@ async fn test_poa_contract_hw_read() {
 
 	let (account1, _account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, poa) = base::get_service(&account1.3);
+	let (chain, txpool, poa) = base::get_service(&account1);
 
 	let ori_code = get_code().to_vec();
 
@@ -317,7 +317,7 @@ async fn test_poa_contract_hw_write() {
 
 	let (account1, _account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, poa) = base::get_service(&account1.3);
+	let (chain, txpool, poa) = base::get_service(&account1);
 
 	let ori_code = get_code().to_vec();
 
@@ -474,7 +474,7 @@ async fn test_poa_contract_hw_transfer_success() {
 
 	let (account1, account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, poa) = base::get_service(&account1.3);
+	let (chain, txpool, poa) = base::get_service(&account1);
 
 	let ori_code = get_code().to_vec();
 
@@ -611,7 +611,7 @@ async fn test_poa_contract_hw_transfer_failed() {
 
 	let (account1, account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, poa) = base::get_service(&account1.3);
+	let (chain, txpool, poa) = base::get_service(&account1);
 
 	let ori_code = get_code().to_vec();
 
@@ -734,7 +734,7 @@ async fn test_poa_contract_hw_transfer_partial_failed() {
 
 	let (account1, account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, poa) = base::get_service(&account1.3);
+	let (chain, txpool, poa) = base::get_service(&account1);
 
 	let ori_code = get_code().to_vec();
 
@@ -864,7 +864,7 @@ async fn test_poa_contract_hw_nested_contract() {
 
 	let (account1, _account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, poa) = base::get_service(&account1.3);
+	let (chain, txpool, poa) = base::get_service(&account1);
 
 	let ori_code = get_code().to_vec();
 
