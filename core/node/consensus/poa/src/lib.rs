@@ -35,6 +35,7 @@ use node_executor::module;
 use node_executor_primitives::EmptyParams;
 use primitives::errors::CommonResult;
 use primitives::{Address, BuildBlockParams, FullTransaction, SecretKey};
+use node_chain::CommitBlockResult;
 
 pub struct PoaConfig {
 	pub secret_key: SecretKey,
@@ -172,14 +173,21 @@ where
 
 	let commit_block_params = support.build_block(build_block_params)?;
 
-	support.commit_block(commit_block_params).await?;
+	let result = support.commit_block(commit_block_params).await?;
 
-	let tx_hash_set = txs
-		.iter()
-		.map(|x| x.tx_hash.clone())
-		.collect::<HashSet<_>>();
+	match result {
+		CommitBlockResult::Ok => {
+			let tx_hash_set = txs
+				.iter()
+				.map(|x| x.tx_hash.clone())
+				.collect::<HashSet<_>>();
 
-	support.remove_transactions_in_txpool(&tx_hash_set)?;
+			support.remove_transactions_in_txpool(&tx_hash_set)?;
+		},
+		_ => {
+			warn!("Commit block failed: {:?}", result);
+		},
+	}
 
 	Ok(())
 }

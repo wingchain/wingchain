@@ -12,29 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::error::Error;
+use async_trait::async_trait;
+use futures::channel::mpsc::UnboundedReceiver;
+use node_chain::ChainOutMessage;
 
-use primitives::errors::{CommonError, CommonErrorKind, Display};
-
-#[derive(Debug, Display)]
-pub enum ErrorKind {
-	#[display(fmt = "Spec error: {}", _0)]
-	Spec(String),
-
-	#[display(fmt = "Data error: {}", _0)]
-	Data(String),
-
-	#[display(fmt = "Execute queue error: {}", _0)]
-	ExecuteQueue(String),
-
-	#[display(fmt = "Channel error: {:?}", _0)]
-	Channel(Box<dyn Error + Send + Sync>),
-}
-
-impl Error for ErrorKind {}
-
-impl From<ErrorKind> for CommonError {
-	fn from(error: ErrorKind) -> Self {
-		CommonError::new(CommonErrorKind::Chain, Box::new(error))
-	}
+#[async_trait]
+pub trait CoordinatorSupport {
+	fn chain_rx(&self) -> Option<UnboundedReceiver<ChainOutMessage>>;
 }

@@ -17,6 +17,8 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use futures::channel::mpsc::UnboundedReceiver;
+
 use crypto::address::AddressImpl;
 use crypto::dsa::DsaImpl;
 use crypto::hash::HashImpl;
@@ -151,7 +153,7 @@ impl Chain {
 	pub async fn commit_block(
 		&self,
 		commit_block_params: ChainCommitBlockParams,
-	) -> CommonResult<()> {
+	) -> CommonResult<CommitBlockResult> {
 		let number = commit_block_params.header.number;
 		let timestamp = commit_block_params.header.timestamp;
 		let block_hash = commit_block_params.block_hash.clone();
@@ -159,7 +161,7 @@ impl Chain {
 		let meta_state_root = commit_block_params.header.meta_state_root.clone();
 		let payload_txs = commit_block_params.payload_txs.clone();
 
-		self.backend.commit_block(commit_block_params)?;
+		let result = self.backend.commit_block(commit_block_params)?;
 
 		let execute_task = ExecuteTask {
 			number,
@@ -170,7 +172,8 @@ impl Chain {
 			payload_txs,
 		};
 		self.execute_queue.insert_task(execute_task).await?;
-		Ok(())
+
+		Ok(result)
 	}
 
 	/// Get the basic algorithms: das, hash and address
@@ -212,4 +215,24 @@ impl Chain {
 		self.backend
 			.execute_call_with_block_number(block_number, sender, module, method, params)
 	}
+
+	pub fn message_rx(&self) -> Option<UnboundedReceiver<ChainOutMessage>> {
+		self.backend.message_rx()
+	}
+}
+
+pub enum ChainOutMessage {
+	BlockCommitted { number: u64, hash: Hash },
+	ExecutionCommitted { number: u64, hash: Hash },
+}
+
+#[must_use]
+#[derive(Debug)]
+pub enum CommitBlockResult {
+	/// Successfully committed
+	Ok,
+	/// Block repeated
+	Repeated,
+	/// Block is not the best
+	NotBest,
 }

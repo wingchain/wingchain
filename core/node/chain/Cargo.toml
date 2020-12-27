@@ -16,6 +16,7 @@ hex = "0.4.2"
 atomic_refcell = "0.1.6"
 tokio = { version = "1.0", features = ["rt-multi-thread", "time", "sync", "macros"] }
 futures = "0.3.8"
+parking_lot = "0.10.0"
 
 primitives = { path = "../../primitives" }
 crypto = { path = "../../crypto" }

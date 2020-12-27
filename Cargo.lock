@@ -3032,6 +3032,7 @@ dependencies = [
  "node-executor",
  "node-executor-primitives",
  "node-statedb",
+ "parking_lot 0.10.2",
  "primitives",
  "serde",
  "serde_json",
@@ -3070,6 +3071,16 @@ dependencies = [
  "tempfile",
  "tokio 1.0.0",
  "utils-test",
+]
+
+[[package]]
+name = "node-coordinator"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "futures",
+ "node-chain",
+ "tokio 1.0.0",
 ]
 
 [[package]]

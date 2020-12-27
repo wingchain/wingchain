@@ -20,7 +20,9 @@ use std::sync::Arc;
 use std::time::SystemTime;
 
 use atomic_refcell::AtomicRefCell;
+use futures::channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
 use log::{debug, info};
+use parking_lot::RwLock;
 
 use crypto::address::AddressImpl;
 use crypto::dsa::DsaImpl;
@@ -38,8 +40,12 @@ use primitives::{
 	Execution, Hash, Header, Nonce, OpaqueCallResult, Receipt, SecretKey, Transaction,
 };
 
+use crate::errors::ErrorKind;
 use crate::genesis::build_genesis;
-use crate::{errors, Basic, ChainCommitBlockParams, ChainCommitExecutionParams, ChainConfig};
+use crate::{
+	errors, Basic, ChainCommitBlockParams, ChainCommitExecutionParams, ChainConfig,
+	ChainOutMessage, CommitBlockResult,
+};
 
 pub struct Backend {
 	db: Arc<DB>,
@@ -50,6 +56,9 @@ pub struct Backend {
 	executor: Executor,
 	basic: Arc<Basic>,
 	current_context_essence: AtomicRefCell<Option<ContextEssence>>,
+	message_tx: UnboundedSender<ChainOutMessage>,
+	message_rx: RwLock<Option<UnboundedReceiver<ChainOutMessage>>>,
+	commit_block_lock: RwLock<()>,
 }
 
 impl Backend {
@@ -79,6 +88,8 @@ impl Backend {
 
 		let current_context_essence = AtomicRefCell::new(None);
 
+		let (message_tx, message_rx) = unbounded();
+
 		let mut backend = Self {
 			db,
 			config,
@@ -88,6 +99,9 @@ impl Backend {
 			executor,
 			basic,
 			current_context_essence,
+			message_tx,
+			message_rx: RwLock::new(Some(message_rx)),
+			commit_block_lock: RwLock::new(()),
 		};
 
 		info!("Initializing backend: genesis_inited: {}", genesis_inited);
@@ -480,26 +494,59 @@ impl Backend {
 
 	/// Commit a block
 	/// this will persist the block into the db
-	pub fn commit_block(&self, commit_block_params: ChainCommitBlockParams) -> CommonResult<()> {
+	pub fn commit_block(
+		&self,
+		commit_block_params: ChainCommitBlockParams,
+	) -> CommonResult<CommitBlockResult> {
+		let _guard = self.commit_block_lock.write();
+
 		debug!("Commit block params: {:?}", commit_block_params);
+
+		let number = commit_block_params.header.number;
+		let block_hash = &commit_block_params.block_hash;
+		let parent_hash = &commit_block_params.header.parent_hash;
+
+		if self.get_header(block_hash)?.is_some() {
+			return Ok(CommitBlockResult::Repeated);
+		}
+
+		let confirmed = {
+			let confirmed_number =
+				self.get_confirmed_number()?
+					.ok_or(errors::ErrorKind::Data(format!(
+						"confirmed number not found"
+					)))?;
+			let block_hash =
+				self.get_block_hash(&confirmed_number)?
+					.ok_or(errors::ErrorKind::Data(format!(
+						"invalid block number: {}",
+						confirmed_number
+					)))?;
+			(confirmed_number, block_hash)
+		};
+
+		if !(number == confirmed.0 + 1 && parent_hash == &confirmed.1) {
+			return Ok(CommitBlockResult::NotBest);
+		}
 
 		let mut transaction = DBTransaction::new();
 
-		let number = commit_block_params.header.number;
 		let block_hash = commit_block_params.block_hash.clone();
+		let meta_tx_count = commit_block_params.meta_txs.len();
+		let payload_tx_count = commit_block_params.payload_txs.len();
 
 		commit_block(&mut transaction, commit_block_params)?;
 
 		self.db.write(transaction)?;
 
 		info!(
-			"Block committed: block number: {}, block hash: {:?}",
-			number, block_hash
+			"Block committed: block number: {}, block hash: {:?}, meta({}), payload({})",
+			number, block_hash, meta_tx_count, payload_tx_count,
 		);
 
-		self.on_block_committed(number, block_hash)?;
+		self.on_block_committed(number, block_hash.clone())?;
 
-		Ok(())
+		Ok(CommitBlockResult::Ok)
 	}
 
 	/// Build an execution
@@ -557,14 +604,15 @@ impl Backend {
 
 		let number = commit_execution_params.number;
 		let block_hash = commit_execution_params.block_hash.clone();
+		let payload_tx_count = commit_execution_params.payload_receipts.len();
 
 		commit_execution(&mut transaction, commit_execution_params)?;
 
 		self.db.write(transaction)?;
 
 		info!(
-			"Block execution: block number: {}, block hash: {:?}",
-			number, block_hash
+			"Execution committed: block number: {}, block hash: {:?}, payload({})",
+			number, block_hash, payload_tx_count,
 		);
 
 		self.on_execution_committed(number, block_hash)?;
@@ -572,13 +620,29 @@ impl Backend {
 		Ok(())
 	}
 
-	fn on_block_committed(&self, _number: u64, _block_hash: Hash) -> CommonResult<()> {
+	pub fn message_rx(&self) -> Option<UnboundedReceiver<ChainOutMessage>> {
+		self.message_rx.write().take()
+	}
+
+	fn on_block_committed(&self, number: u64, block_hash: Hash) -> CommonResult<()> {
 		self.update_current_context_essence()?;
+		self.message_tx
+			.unbounded_send(ChainOutMessage::BlockCommitted {
+				number,
+				hash: block_hash,
+			})
+			.map_err(|e| ErrorKind::Channel(Box::new(e)))?;
 		Ok(())
 	}
 
-	fn on_execution_committed(&self, _number: u64, _block_hash: Hash) -> CommonResult<()> {
+	fn on_execution_committed(&self, number: u64, block_hash: Hash) -> CommonResult<()> {
 		self.update_current_context_essence()?;
+		self.message_tx
+			.unbounded_send(ChainOutMessage::ExecutionCommitted {
+				number,
+				hash: block_hash,
+			})
+			.map_err(|e| ErrorKind::Channel(Box::new(e)))?;
 		Ok(())
 	}
 

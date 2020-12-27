@@ -27,6 +27,8 @@ use crate::backend::Backend;
 use crate::errors;
 use futures::{SinkExt, StreamExt};
 
+const EXECUTE_QUEUE_SIZE: usize = 128;
+
 #[derive(Debug)]
 pub struct ExecuteTask {
 	pub number: BlockNumber,
@@ -45,7 +47,7 @@ pub struct ExecuteQueue {
 
 impl ExecuteQueue {
 	pub fn new(backend: Arc<Backend>) -> Self {
-		let (task_tx, task_rx) = channel(32);
+		let (task_tx, task_rx) = channel(EXECUTE_QUEUE_SIZE);
 
 		let execute_queue = Self {
 			backend: backend.clone(),
