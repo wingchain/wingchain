@@ -56,6 +56,7 @@ pub enum BehaviourOut {
 		connected_point: ConnectedPoint,
 	},
 	Message {
+		peer_id: PeerId,
 		message: BytesMut,
 	},
 }
@@ -170,8 +171,9 @@ impl NetworkBehaviourEventProcess<ProtocolOut> for Behaviour {
 					connected_point,
 				});
 			}
-			ProtocolOut::Message { message } => {
-				self.events.push_back(BehaviourOut::Message { message });
+			ProtocolOut::Message { peer_id, message } => {
+				self.events
+					.push_back(BehaviourOut::Message { peer_id, message });
 			}
 		}
 	}

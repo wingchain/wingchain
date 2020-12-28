@@ -232,8 +232,13 @@ async fn wait_message(network: &mut Network, expected_message: &[u8]) {
 	loop {
 		match rx.next().await {
 			Some(message) => match message {
-				NetworkOutMessage::Message { message } if message.as_ref() == expected_message => {
-					info!("Network get message: {:?}", message);
+				NetworkOutMessage::Message { peer_id, message }
+					if message.as_ref() == expected_message =>
+				{
+					info!(
+						"Network get message: peer_id: {}, message: {:?}",
+						peer_id, message
+					);
 					break;
 				}
 				_ => (),

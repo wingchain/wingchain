@@ -12,11 +12,44 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use futures::channel::mpsc::UnboundedReceiver;
-use node_chain::ChainOutMessage;
+
+use node_chain::{Chain, ChainOutMessage};
+use primitives::errors::CommonResult;
+use primitives::{BlockNumber, Hash, Header};
 
 #[async_trait]
 pub trait CoordinatorSupport {
 	fn chain_rx(&self) -> Option<UnboundedReceiver<ChainOutMessage>>;
+	fn get_confirmed_number(&self) -> CommonResult<Option<BlockNumber>>;
+	fn get_block_hash(&self, number: &BlockNumber) -> CommonResult<Option<Hash>>;
+	fn get_header(&self, block_hash: &Hash) -> CommonResult<Option<Header>>;
+}
+
+pub struct DefaultCoordinatorSupport {
+	chain: Arc<Chain>,
+}
+
+impl DefaultCoordinatorSupport {
+	pub fn new(chain: Arc<Chain>) -> Self {
+		Self { chain }
+	}
+}
+
+impl CoordinatorSupport for DefaultCoordinatorSupport {
+	fn chain_rx(&self) -> Option<UnboundedReceiver<ChainOutMessage>> {
+		self.chain.message_rx()
+	}
+	fn get_confirmed_number(&self) -> CommonResult<Option<BlockNumber>> {
+		self.chain.get_confirmed_number()
+	}
+	fn get_block_hash(&self, number: &BlockNumber) -> CommonResult<Option<Hash>> {
+		self.chain.get_block_hash(number)
+	}
+	fn get_header(&self, block_hash: &Hash) -> CommonResult<Option<Header>> {
+		self.chain.get_header(block_hash)
+	}
 }

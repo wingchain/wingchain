@@ -29,13 +29,13 @@ use log::{debug, info, warn};
 
 use crypto::address::Address as AddressT;
 use crypto::dsa::{Dsa, KeyPair};
+use node_chain::CommitBlockResult;
 use node_consensus::errors::ErrorKind;
 use node_consensus::{errors, support::ConsensusSupport};
 use node_executor::module;
 use node_executor_primitives::EmptyParams;
 use primitives::errors::CommonResult;
 use primitives::{Address, BuildBlockParams, FullTransaction, SecretKey};
-use node_chain::CommitBlockResult;
 
 pub struct PoaConfig {
 	pub secret_key: SecretKey,
@@ -183,10 +183,10 @@ where
 				.collect::<HashSet<_>>();
 
 			support.remove_transactions_in_txpool(&tx_hash_set)?;
-		},
+		}
 		_ => {
 			warn!("Commit block failed: {:?}", result);
-		},
+		}
 	}
 
 	Ok(())

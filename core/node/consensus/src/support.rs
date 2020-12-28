@@ -45,7 +45,10 @@ pub trait ConsensusSupport {
 		&self,
 		build_block_params: BuildBlockParams,
 	) -> CommonResult<ChainCommitBlockParams>;
-	async fn commit_block(&self, commit_block_params: ChainCommitBlockParams) -> CommonResult<CommitBlockResult>;
+	async fn commit_block(
+		&self,
+		commit_block_params: ChainCommitBlockParams,
+	) -> CommonResult<CommitBlockResult>;
 	fn get_transactions_in_txpool(&self) -> CommonResult<Vec<Arc<FullTransaction>>>;
 	fn remove_transactions_in_txpool(&self, tx_hash_set: &HashSet<Hash>) -> CommonResult<()>;
 	fn get_basic(&self) -> CommonResult<Arc<Basic>>;
@@ -105,7 +108,10 @@ where
 	) -> CommonResult<ChainCommitBlockParams> {
 		self.chain.build_block(build_block_params)
 	}
-	async fn commit_block(&self, commit_block_params: ChainCommitBlockParams) -> CommonResult<CommitBlockResult> {
+	async fn commit_block(
+		&self,
+		commit_block_params: ChainCommitBlockParams,
+	) -> CommonResult<CommitBlockResult> {
 		self.chain.commit_block(commit_block_params).await
 	}
 	fn get_transactions_in_txpool(&self) -> CommonResult<Vec<Arc<FullTransaction>>> {

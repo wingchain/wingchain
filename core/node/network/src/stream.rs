@@ -202,7 +202,9 @@ impl From<BehaviourOut> for NetworkOutMessage {
 				peer_id,
 				connected_point,
 			},
-			BehaviourOut::Message { message } => NetworkOutMessage::Message { message },
+			BehaviourOut::Message { peer_id, message } => {
+				NetworkOutMessage::Message { peer_id, message }
+			}
 		}
 	}
 }
