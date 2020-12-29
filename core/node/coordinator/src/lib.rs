@@ -25,10 +25,11 @@ use crate::support::CoordinatorSupport;
 mod errors;
 mod protocol;
 mod stream;
-mod support;
+pub mod support;
+mod sync;
 
 pub struct CoordinatorConfig {
-	network_config: NetworkConfig,
+	pub network_config: NetworkConfig,
 }
 
 pub struct Coordinator<S>
@@ -73,7 +74,7 @@ where
 			network_tx,
 			network_rx,
 			support.clone(),
-		);
+		)?;
 
 		tokio::spawn(start(stream));
 

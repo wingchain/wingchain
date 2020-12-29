@@ -23,18 +23,25 @@ use crypto::dsa::KeyPairImpl;
 use node_chain::{Chain, ChainConfig};
 use node_consensus::support::DefaultConsensusSupport;
 use node_consensus_poa::{Poa, PoaConfig};
-use node_network::{Network, NetworkConfig};
+use node_network::{Network, NetworkConfig, PeerId, Multiaddr, Protocol, LinkedHashMap, Keypair};
 use node_txpool::{TxPool, TxPoolConfig};
 use primitives::{Address, Hash, PublicKey, SecretKey, Transaction};
+use node_coordinator::{Coordinator, CoordinatorConfig};
+use node_coordinator::support::DefaultCoordinatorSupport;
 
 pub fn get_service(
-	account: &(SecretKey, PublicKey, KeyPairImpl, Address),
+	authority_account: &(SecretKey, PublicKey, Address),
+	account: &(SecretKey, PublicKey, Address),
+	local_key_pair: Keypair,
+	port: u16,
+	bootnodes: LinkedHashMap<(PeerId, Multiaddr), ()>,
 ) -> (
 	Arc<Chain>,
 	Arc<TxPool<Chain>>,
 	Poa<DefaultConsensusSupport<Chain>>,
+	Arc<Coordinator<DefaultCoordinatorSupport>>
 ) {
-	let chain = get_chain(&account.3);
+	let chain = get_chain(&authority_account.2);
 
 	let txpool_config = TxPoolConfig {
 		pool_capacity: 32,
@@ -51,7 +58,10 @@ pub fn get_service(
 
 	let poa = Poa::new(poa_config, support).unwrap();
 
-	(chain, txpool, poa)
+	let coordinator_support = Arc::new(DefaultCoordinatorSupport::new(chain.clone()));
+	let coordinator = get_coordinator(local_key_pair, port, bootnodes, coordinator_support);
+
+	(chain, txpool, poa, coordinator)
 }
 
 pub async fn insert_tx(chain: &Arc<Chain>, txpool: &Arc<TxPool<Chain>>, tx: Transaction) -> Hash {
@@ -92,11 +102,45 @@ pub async fn safe_close(
 	chain: Arc<Chain>,
 	txpool: Arc<TxPool<Chain>>,
 	poa: Poa<DefaultConsensusSupport<Chain>>,
+	coordinator: Arc<Coordinator<DefaultCoordinatorSupport>>,
 ) {
 	drop(chain);
 	drop(txpool);
 	drop(poa);
+	drop(coordinator);
 	tokio::time::sleep(Duration::from_millis(50)).await;
+}
+
+fn get_coordinator(
+	local_key_pair: Keypair,
+	port: u16,
+	bootnodes: LinkedHashMap<(PeerId, Multiaddr), ()>,
+	support: Arc<DefaultCoordinatorSupport>,
+) -> Arc<Coordinator<DefaultCoordinatorSupport>> {
+
+	let agent_version = "wingchain/1.0.0".to_string();
+	let listen_address = Multiaddr::empty()
+		.with(Protocol::Ip4([0, 0, 0, 0].into()))
+		.with(Protocol::Tcp(port));
+	let listen_addresses = vec![listen_address].into_iter().map(|v| (v, ())).collect();
+	let network_config = NetworkConfig {
+		max_in_peers: 32,
+		max_out_peers: 32,
+		listen_addresses,
+		external_addresses: LinkedHashMap::new(),
+		bootnodes,
+		reserved_nodes: LinkedHashMap::new(),
+		reserved_only: false,
+		agent_version,
+		local_key_pair,
+		handshake: vec![],
+	};
+	let config = CoordinatorConfig {
+		network_config,
+	};
+
+	let coordinator = Coordinator::new(config, support).unwrap();
+	Arc::new(coordinator)
 }
 
 fn get_chain(address: &Address) -> Arc<Chain> {
@@ -153,7 +197,7 @@ module = "poa"
 method = "init"
 params = '''
 {{
-    "block_interval": null,
+    "block_interval": 3000,
     "authority": "{}"
 }}
 '''

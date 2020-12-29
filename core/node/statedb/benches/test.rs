@@ -82,7 +82,7 @@ fn prepare_statedb(records: usize) -> (StateDB, Vec<u8>) {
 			(DBKey::from_slice(b"abc"), Some(vec![1u8; 1024])),
 			(DBKey::from_slice(b"abd"), Some(vec![1u8; 1024])),
 		],
-		_ => unimplemented!(),
+		_ => unreachable!(),
 	}
 	.into_iter()
 	.collect::<HashMap<_, _>>();

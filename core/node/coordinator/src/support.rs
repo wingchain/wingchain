@@ -19,7 +19,7 @@ use futures::channel::mpsc::UnboundedReceiver;
 
 use node_chain::{Chain, ChainOutMessage};
 use primitives::errors::CommonResult;
-use primitives::{BlockNumber, Hash, Header};
+use primitives::{BlockNumber, Hash, Header, Body, Transaction};
 
 #[async_trait]
 pub trait CoordinatorSupport {
@@ -27,6 +27,8 @@ pub trait CoordinatorSupport {
 	fn get_confirmed_number(&self) -> CommonResult<Option<BlockNumber>>;
 	fn get_block_hash(&self, number: &BlockNumber) -> CommonResult<Option<Hash>>;
 	fn get_header(&self, block_hash: &Hash) -> CommonResult<Option<Header>>;
+	fn get_body(&self, block_hash: &Hash) -> CommonResult<Option<Body>>;
+	fn get_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Transaction>>;
 }
 
 pub struct DefaultCoordinatorSupport {
@@ -51,5 +53,11 @@ impl CoordinatorSupport for DefaultCoordinatorSupport {
 	}
 	fn get_header(&self, block_hash: &Hash) -> CommonResult<Option<Header>> {
 		self.chain.get_header(block_hash)
+	}
+	fn get_body(&self, block_hash: &Hash) -> CommonResult<Option<Body>> {
+		self.chain.get_body(block_hash)
+	}
+	fn get_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Transaction>> {
+		self.chain.get_transaction(tx_hash)
 	}
 }

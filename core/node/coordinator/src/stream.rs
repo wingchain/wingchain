@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
@@ -20,103 +19,83 @@ use futures::StreamExt;
 use log::{error, warn};
 
 use node_chain::ChainOutMessage;
-use node_network::{BytesMut, NetworkInMessage, NetworkOutMessage, PMInMessage, PeerId};
-use primitives::codec::{Decode, Encode};
+use node_network::{BytesMut, NetworkInMessage, NetworkOutMessage, PeerId, PMInMessage};
+use primitives::{BlockNumber, Hash, Header, Body, Transaction};
+use primitives::codec::{Decode};
 use primitives::errors::CommonResult;
-use primitives::types::FullHeader;
-use primitives::{BlockNumber, Hash};
 
 use crate::errors;
-use crate::protocol::{BlockAnnounce, ProtocolMessage};
+use crate::protocol::{BlockAnnounce, ProtocolMessage, BlockRequest, BlockResponse};
 use crate::support::CoordinatorSupport;
-use lru::LruCache;
-
-const PEER_KNOWN_BLOCKS_SIZE: usize = 1024;
+use crate::sync::ChainSync;
 
 pub struct CoordinatorStream<S>
-where
-	S: CoordinatorSupport + Send + Sync + 'static,
+    where
+        S: CoordinatorSupport + Send + Sync + 'static,
 {
-	genesis_hash: Hash,
-	chain_rx: UnboundedReceiver<ChainOutMessage>,
-	peer_manager_tx: UnboundedSender<PMInMessage>,
-	network_tx: UnboundedSender<NetworkInMessage>,
-	network_rx: UnboundedReceiver<NetworkOutMessage>,
-	support: Arc<S>,
-	peers: HashMap<PeerId, PeerInfo>,
-}
-
-pub struct PeerInfo {
-	known_blocks: LruCache<Hash, ()>,
-	confirmed_number: BlockNumber,
-	confirmed_hash: Hash,
+    chain_rx: UnboundedReceiver<ChainOutMessage>,
+    network_rx: UnboundedReceiver<NetworkOutMessage>,
+    sync: ChainSync<S>,
+    support: Arc<StreamSupport<S>>,
 }
 
 impl<S> CoordinatorStream<S>
-where
-	S: CoordinatorSupport + Send + Sync + 'static,
+    where
+        S: CoordinatorSupport + Send + Sync + 'static,
 {
-	pub fn new(
-		genesis_hash: Hash,
-		chain_rx: UnboundedReceiver<ChainOutMessage>,
-		peer_manager_tx: UnboundedSender<PMInMessage>,
-		network_tx: UnboundedSender<NetworkInMessage>,
-		network_rx: UnboundedReceiver<NetworkOutMessage>,
-		support: Arc<S>,
-	) -> Self {
-		Self {
-			genesis_hash,
-			chain_rx,
-			peer_manager_tx,
-			network_tx,
-			network_rx,
-			support,
-			peers: HashMap::new(),
-		}
-	}
+    pub fn new(
+        genesis_hash: Hash,
+        chain_rx: UnboundedReceiver<ChainOutMessage>,
+        peer_manager_tx: UnboundedSender<PMInMessage>,
+        network_tx: UnboundedSender<NetworkInMessage>,
+        network_rx: UnboundedReceiver<NetworkOutMessage>,
+        support: Arc<S>,
+    ) -> CommonResult<Self> {
+        let support = Arc::new(StreamSupport {
+            genesis_hash,
+            peer_manager_tx,
+            network_tx,
+            support,
+        });
 
-	fn on_chain_message(&mut self, message: ChainOutMessage) -> CommonResult<()> {
-		match message {
-			ChainOutMessage::BlockCommitted { number, hash } => self.on_block_committed(number, hash),
-			_ => Ok(()),
-		}
-	}
+        let sync = ChainSync::new(support.clone())?;
 
-	fn on_network_message(&mut self, message: NetworkOutMessage) -> CommonResult<()> {
-		match message {
-			NetworkOutMessage::ProtocolOpen {
-				peer_id, handshake, ..
-			} => self.on_protocol_open(peer_id, handshake),
-			NetworkOutMessage::ProtocolClose { peer_id, .. } => self.on_protocol_close(peer_id),
-			NetworkOutMessage::Message { peer_id, message } => self.on_message(peer_id, message),
-		}
-	}
+        let stream = Self {
+            chain_rx,
+            network_rx,
+            support,
+            sync,
+        };
+        Ok(stream)
+    }
 
+    fn on_chain_message(&mut self, message: ChainOutMessage) -> CommonResult<()> {
+        match message {
+            ChainOutMessage::BlockCommitted { number, hash } => self.on_block_committed(number, hash),
+            _ => Ok(()),
+        }
+    }
+
+    fn on_network_message(&mut self, message: NetworkOutMessage) -> CommonResult<()> {
+        match message {
+            NetworkOutMessage::ProtocolOpen {
+                peer_id, handshake, ..
+            } => self.on_protocol_open(peer_id, handshake),
+            NetworkOutMessage::ProtocolClose { peer_id, .. } => self.on_protocol_close(peer_id),
+            NetworkOutMessage::Message { peer_id, message } => self.on_message(peer_id, message),
+        }
+    }
 }
 
 /// methods for chain messages
 impl<S> CoordinatorStream<S>
-	where
-		S: CoordinatorSupport + Send + Sync + 'static,
+    where
+        S: CoordinatorSupport + Send + Sync + 'static,
 {
-	fn on_block_committed(&mut self, _number: BlockNumber, hash: Hash) -> CommonResult<()> {
-		let (block_hash, block_announce) = {
-			let header = self.get_full_header_by_block_hash(hash)?;
-			let block_hash = header.block_hash.clone();
-			(block_hash, ProtocolMessage::BlockAnnounce(BlockAnnounce { header }))
-		};
-		let block_announce = block_announce.encode();
-		let network_tx = &self.network_tx;
-		for (peer_id, peer_info) in &mut self.peers {
-
-			peer_info.known_blocks.put(block_hash.clone(), ());
-			Self::network_send_message(&network_tx, NetworkInMessage::SendMessage {
-				peer_id: peer_id.clone(),
-				message: block_announce.clone(),
-			});
-		}
-		Ok(())
-	}
+    fn on_block_committed(&mut self, number: BlockNumber, hash: Hash) -> CommonResult<()> {
+        self.sync.on_block_committed(number, hash)?;
+        Ok(())
+    }
 }
 
 /// methods for network messages
@@ -124,135 +103,185 @@ impl<S> CoordinatorStream<S>
     where
         S: CoordinatorSupport + Send + Sync + 'static,
 {
-	fn on_protocol_open(&mut self, peer_id: PeerId, handshake: Vec<u8>) -> CommonResult<()> {
-		let handshake_ok = match Decode::decode(&mut &handshake[..]) {
-			Ok(ProtocolMessage::Handshake(handshake)) => {
-				let ok = handshake.genesis_hash == self.genesis_hash;
-				if !ok {
-					warn!(
-						"Handshake from {} is different: local: {}, remote: {}",
-						peer_id, self.genesis_hash, handshake.genesis_hash
-					);
-				}
-				ok
-			}
-			Ok(_) => {
-				warn!("Handshake from {} is invalid", peer_id);
-				false
-			}
-			Err(e) => {
-				warn!("Handshake from {} cannot decode: {:?}", peer_id, e);
-				false
-			}
-		};
-		if !handshake_ok {
-			warn!("Discard {} for handshake failure", peer_id);
-			Self::peer_manager_send_message(&self.peer_manager_tx, PMInMessage::DiscardPeer(peer_id.clone()));
-			return Ok(());
-		}
+    fn on_protocol_open(&mut self, peer_id: PeerId, handshake: Vec<u8>) -> CommonResult<()> {
+        let handshake_ok = match Decode::decode(&mut &handshake[..]) {
+            Ok(ProtocolMessage::Handshake(handshake)) => {
+                let local_genesis_hash = self.support.get_genesis_hash();
+                let ok = &handshake.genesis_hash == local_genesis_hash;
+                if !ok {
+                    warn!(
+                        "Handshake from {} is different: local: {}, remote: {}",
+                        peer_id, local_genesis_hash, handshake.genesis_hash
+                    );
+                }
+                ok
+            }
+            Ok(_) => {
+                warn!("Handshake from {} is invalid", peer_id);
+                false
+            }
+            Err(e) => {
+                warn!("Handshake from {} cannot decode: {:?}", peer_id, e);
+                false
+            }
+        };
+        if !handshake_ok {
+            warn!("Discard {} for handshake failure", peer_id);
+            self.support.peer_manager_send_message(PMInMessage::DiscardPeer(peer_id.clone()));
+            return Ok(());
+        }
 
-		self.peers.insert(peer_id.clone(), PeerInfo {
-			known_blocks: LruCache::new(PEER_KNOWN_BLOCKS_SIZE),
-			confirmed_number: 0,
-			confirmed_hash: self.genesis_hash.clone(),
-		});
+        self.sync.on_protocol_open(peer_id)?;
 
-		// announce block
-		let (block_hash, block_announce) = {
-			let header = self.get_full_header_by_number(self.get_confirmed_number()?)?;
-			let block_hash = header.block_hash.clone();
-			(block_hash, ProtocolMessage::BlockAnnounce(BlockAnnounce { header }))
-		};
-		match self.peers.get_mut(&peer_id) {
-			Some(peer) => {
-				peer.known_blocks.put(block_hash, ());
-			},
-			_ => (),
-		}
-		Self::network_send_message(&self.network_tx,NetworkInMessage::SendMessage {
-			peer_id: peer_id,
-			message: block_announce.encode(),
-		});
+        Ok(())
+    }
 
-		Ok(())
-	}
+    fn on_protocol_close(&mut self, peer_id: PeerId) -> CommonResult<()> {
+        self.sync.on_protocol_close(peer_id)?;
+        Ok(())
+    }
 
-	fn on_protocol_close(&mut self, peer_id: PeerId) -> CommonResult<()> {
-		self.peers.remove(&peer_id);
-		Ok(())
-	}
+    fn on_message(&mut self, peer_id: PeerId, message: BytesMut) -> CommonResult<()> {
+        let message: ProtocolMessage = match Decode::decode(&mut message.as_ref()) {
+            Ok(message) => message,
+            Err(e) => {
+                warn!("Message from {} cannot decode: {:?}", peer_id, e);
+                return Ok(());
+            }
+        };
 
-	fn on_message(&self, _peer_id: PeerId, _message: BytesMut) -> CommonResult<()> {
-		unimplemented!()
-	}
+        match message {
+            ProtocolMessage::BlockAnnounce(block_announce) => self.on_block_announce(peer_id, block_announce),
+            ProtocolMessage::BlockRequest(block_request) => self.on_block_request(peer_id, block_request),
+            ProtocolMessage::BlockResponse(block_response) => self.on_block_response(peer_id, block_response),
+            ProtocolMessage::Handshake(_) => Ok(()),
+        }
+    }
+
+    fn on_block_announce(&mut self, peer_id: PeerId, block_announce: BlockAnnounce)-> CommonResult<()> {
+        self.sync.on_block_announce(peer_id, block_announce)
+    }
+
+    fn on_block_request(&mut self, peer_id: PeerId, block_request: BlockRequest) -> CommonResult<()> {
+        self.sync.on_block_request(peer_id, block_request)
+    }
+
+    fn on_block_response(&mut self, peer_id: PeerId, block_response: BlockResponse) -> CommonResult<()> {
+        self.sync.on_block_response(peer_id, block_response)
+    }
 }
 
-/// methods for util
-impl<S> CoordinatorStream<S>
-where
-	S: CoordinatorSupport + Send + Sync + 'static,
+pub struct StreamSupport<S> where
+    S: CoordinatorSupport + Send + Sync + 'static,
 {
-	fn peer_manager_send_message(tx: &UnboundedSender<PMInMessage>, message: PMInMessage) {
-		tx.unbounded_send(message)
-			.unwrap_or_else(|e| error!("Coordinator send message to peer manager error: {}", e));
-	}
+    genesis_hash: Hash,
+    peer_manager_tx: UnboundedSender<PMInMessage>,
+    network_tx: UnboundedSender<NetworkInMessage>,
+    support: Arc<S>,
+}
 
-	fn network_send_message(tx: &UnboundedSender<NetworkInMessage>, message: NetworkInMessage) {
-		tx.unbounded_send(message)
-			.unwrap_or_else(|e| error!("Coordinator send message to network error: {}", e));
-	}
+impl<S> StreamSupport<S>
+    where
+        S: CoordinatorSupport + Send + Sync + 'static,
+{
+    pub fn peer_manager_send_message(&self, message: PMInMessage) {
+        self.peer_manager_tx.unbounded_send(message)
+            .unwrap_or_else(|e| error!("Coordinator send message to peer manager error: {}", e));
+    }
 
-	fn get_confirmed_number(&self) -> CommonResult<BlockNumber> {
-		let number = self
-			.support
-			.get_confirmed_number()?
-			.ok_or(errors::ErrorKind::Data(format!("missing confirmed number")))?;
-		Ok(number)
-	}
-	fn get_full_header_by_block_hash(&self, block_hash: Hash) -> CommonResult<FullHeader> {
-		let header = self
-			.support
-			.get_header(&block_hash)?
-			.ok_or(errors::ErrorKind::Data(format!(
-				"missing header: block_hash: {:?}",
-				block_hash
-			)))?;
-		let header = FullHeader { header, block_hash };
-		Ok(header)
-	}
-	fn get_full_header_by_number(&self, number: BlockNumber) -> CommonResult<FullHeader> {
-		let block_hash = self
-			.support
-			.get_block_hash(&number)?
-			.ok_or(errors::ErrorKind::Data(format!(
-				"missing block hash: number: {}",
-				number
-			)))?;
-		let header = self
-			.support
-			.get_header(&block_hash)?
-			.ok_or(errors::ErrorKind::Data(format!(
-				"missing header: block_hash: {:?}",
-				block_hash
-			)))?;
-		let header = FullHeader { header, block_hash };
-		Ok(header)
-	}
+    pub fn network_send_message(&self, message: NetworkInMessage) {
+        self.network_tx.unbounded_send(message)
+            .unwrap_or_else(|e| error!("Coordinator send message to network error: {}", e));
+    }
+
+    pub fn get_genesis_hash(&self) -> &Hash {
+        &self.genesis_hash
+    }
+
+    pub fn get_confirmed_number(&self) -> CommonResult<BlockNumber> {
+        let number = self
+            .support
+            .get_confirmed_number()?
+            .ok_or(errors::ErrorKind::Data(format!("missing confirmed number")))?;
+        Ok(number)
+    }
+
+    pub fn get_block_hash_by_number(&self, number: &BlockNumber) -> CommonResult<Hash> {
+        let block_hash = self
+            .support
+            .get_block_hash(number)?
+            .ok_or(errors::ErrorKind::Data(format!(
+                "missing block hash: number: {}",
+                number
+            )))?;
+        Ok(block_hash)
+    }
+
+    pub fn get_header_by_block_hash(&self, block_hash: &Hash) -> CommonResult<Header> {
+        let header = self
+            .support
+            .get_header(block_hash)?
+            .ok_or(errors::ErrorKind::Data(format!(
+                "missing header: block_hash: {:?}",
+                block_hash
+            )))?;
+        Ok(header)
+    }
+
+    pub fn get_header_by_number(&self, number: &BlockNumber) -> CommonResult<(Hash, Header)> {
+        let block_hash = self
+            .support
+            .get_block_hash(number)?
+            .ok_or(errors::ErrorKind::Data(format!(
+                "missing block hash: number: {}",
+                number
+            )))?;
+        let header = self
+            .support
+            .get_header(&block_hash)?
+            .ok_or(errors::ErrorKind::Data(format!(
+                "missing header: block_hash: {:?}",
+                block_hash
+            )))?;
+        Ok((block_hash, header))
+    }
+
+    pub fn get_body_by_block_hash(&self, block_hash: &Hash) -> CommonResult<Body> {
+        let body = self
+            .support
+            .get_body(block_hash)?
+            .ok_or(errors::ErrorKind::Data(format!(
+                "missing body: block_hash: {:?}",
+                block_hash
+            )))?;
+        Ok(body)
+    }
+
+    pub fn get_transaction_by_hash(&self, tx_hash: &Hash) -> CommonResult<Transaction> {
+        let body = self
+            .support
+            .get_transaction(tx_hash)?
+            .ok_or(errors::ErrorKind::Data(format!(
+                "missing transaction: tx_hash: {:?}",
+                tx_hash
+            )))?;
+        Ok(body)
+    }
 }
 
 pub async fn start<S>(mut stream: CoordinatorStream<S>)
-where
-	S: CoordinatorSupport + Send + Sync + 'static,
+    where
+        S: CoordinatorSupport + Send + Sync + 'static,
 {
-	loop {
-		futures::select! {
+    loop {
+        futures::select! {
 			chain_message = stream.chain_rx.next() => {
 				let chain_message = match chain_message {
 					Some(v) => v,
 					None => return,
 				};
 				stream.on_chain_message(chain_message)
-					.unwrap_or_else(|e| error!("Coordinator handle chain error: {}", e));
+					.unwrap_or_else(|e| error!("Coordinator handle chain message error: {}", e));
 			}
 			network_message = stream.network_rx.next() => {
 				let network_message = match network_message {
@@ -260,8 +289,8 @@ where
 					None => return,
 				};
 				stream.on_network_message(network_message)
-					.unwrap_or_else(|e| error!("Coordinator handle network error: {}", e));
+					.unwrap_or_else(|e| error!("Coordinator handle network message error: {}", e));
 			}
 		}
-	}
+    }
 }

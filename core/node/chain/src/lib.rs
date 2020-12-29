@@ -27,10 +27,7 @@ pub use node_executor::module;
 use primitives::codec::{Decode, Encode};
 use primitives::errors::CommonResult;
 use primitives::types::CallResult;
-use primitives::{
-	Address, Block, BlockNumber, BuildBlockParams, Call, CommitBlockParams, CommitExecutionParams,
-	Execution, Hash, Header, Nonce, OpaqueCallResult, Receipt, SecretKey, Transaction,
-};
+use primitives::{Address, Block, BlockNumber, BuildBlockParams, Call, CommitBlockParams, CommitExecutionParams, Execution, Hash, Header, Nonce, OpaqueCallResult, Receipt, SecretKey, Transaction, Body};
 
 use crate::backend::Backend;
 use crate::execute::{ExecuteQueue, ExecuteTask};
@@ -81,6 +78,11 @@ impl Chain {
 	/// Get the header by block hash
 	pub fn get_header(&self, block_hash: &Hash) -> CommonResult<Option<Header>> {
 		self.backend.get_header(block_hash)
+	}
+
+	/// Get the body by block hash
+	pub fn get_body(&self, block_hash: &Hash) -> CommonResult<Option<Body>> {
+		self.backend.get_body(block_hash)
 	}
 
 	/// Get the block by block hash

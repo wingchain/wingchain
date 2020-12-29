@@ -3093,6 +3093,7 @@ dependencies = [
  "primitives",
  "tempfile",
  "tokio 1.0.0",
+ "utils-test",
 ]
 
 [[package]]

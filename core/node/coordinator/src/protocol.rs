@@ -15,13 +15,14 @@
 use std::convert::{TryFrom, TryInto};
 
 use primitives::codec::{Decode, Encode};
-use primitives::types::FullHeader;
-use primitives::Hash;
+use primitives::{Hash, BlockNumber, Header, Transaction};
 
 #[derive(Debug, PartialEq)]
 pub enum ProtocolMessage {
 	Handshake(Handshake),
 	BlockAnnounce(BlockAnnounce),
+	BlockRequest(BlockRequest),
+	BlockResponse(BlockResponse),
 }
 
 #[derive(Encode, Decode, Debug, PartialEq)]
@@ -31,7 +32,56 @@ pub struct Handshake {
 
 #[derive(Encode, Decode, Debug, PartialEq)]
 pub struct BlockAnnounce {
-	pub header: FullHeader,
+	pub block_hash: Hash,
+	pub header: Header,
+}
+
+#[derive(Encode, Decode, Debug, PartialEq)]
+pub struct BlockRequest {
+	pub request_id: RequestId,
+	pub fields: Fields,
+	pub block_id: BlockId,
+	pub count: u32,
+	pub direction: Direction,
+}
+
+#[derive(Encode, Decode, Debug, PartialEq)]
+pub struct BlockResponse {
+	pub request_id: RequestId,
+	pub blocks: Vec<BlockData>,
+}
+
+#[derive(Encode, Decode, Debug, PartialEq, Clone)]
+pub struct RequestId(pub u64);
+
+pub type Fields = u32;
+pub const FIELDS_HEADER: u32 = 0b01;
+pub const FIELDS_BODY: u32 = 0b10;
+
+#[derive(Encode, Decode, Debug, PartialEq)]
+pub enum BlockId{
+	Number(BlockNumber),
+	Hash(Hash),
+}
+
+#[derive(Encode, Decode, Debug, PartialEq)]
+pub enum Direction {
+	Asc,
+	Desc,
+}
+
+#[derive(Encode, Decode, Debug, PartialEq)]
+pub struct BlockData {
+	pub number: BlockNumber,
+	pub block_hash: Hash,
+	pub header: Option<Header>,
+	pub body: Option<BodyData>,
+}
+
+#[derive(Encode, Decode, Debug, PartialEq)]
+pub struct BodyData {
+	pub meta_txs: Vec<Transaction>,
+	pub payload_txs: Vec<Transaction>,
 }
 
 impl Encode for ProtocolMessage {
@@ -67,6 +117,14 @@ impl<'a> From<&'a ProtocolMessage> for ProtocolMessagePayload {
 				name: "BlockAnnounce".to_string(),
 				payload: v.encode(),
 			},
+			ProtocolMessage::BlockRequest(v) => ProtocolMessagePayload {
+				name: "BlockRequest".to_string(),
+				payload: v.encode(),
+			},
+			ProtocolMessage::BlockResponse(v) => ProtocolMessagePayload {
+				name: "BlockResponse".to_string(),
+				payload: v.encode(),
+			}
 		}
 	}
 }
@@ -79,6 +137,12 @@ impl TryFrom<ProtocolMessagePayload> for ProtocolMessage {
 				&mut &v.payload[..],
 			)?)),
 			"BlockAnnounce" => Ok(ProtocolMessage::BlockAnnounce(Decode::decode(
+				&mut &v.payload[..],
+			)?)),
+			"BlockRequest" => Ok(ProtocolMessage::BlockRequest(Decode::decode(
+				&mut &v.payload[..],
+			)?)),
+			"BlockResponse" => Ok(ProtocolMessage::BlockResponse(Decode::decode(
 				&mut &v.payload[..],
 			)?)),
 			_ => Err("unknown protocol message name".into()),

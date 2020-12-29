@@ -89,12 +89,6 @@ pub struct Block {
 	pub body: Body,
 }
 
-#[derive(Debug, PartialEq, Encode, Decode)]
-pub struct FullHeader {
-	pub header: Header,
-	pub block_hash: Hash,
-}
-
 #[derive(Debug, PartialEq)]
 pub struct FullTransaction {
 	pub tx: Transaction,

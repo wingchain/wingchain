@@ -28,3 +28,4 @@ node-consensus = { path = "../consensus" }
 node-consensus-poa = { path = "../consensus/poa" }
 node-txpool = { path = "../txpool" }
 crypto = { path = "../../crypto" }
+utils-test = { path = "../../../utils/test" }

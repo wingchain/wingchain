@@ -225,42 +225,51 @@ impl Backend {
 		)
 	}
 
+	/// Get the block body by block hash
+	pub fn get_body(&self, block_hash: &Hash) -> CommonResult<Option<Body>> {
+		let meta_txs: Vec<Hash> = match self
+			.db
+			.get_with(
+				node_db::columns::META_TXS,
+				&DBKey::from_slice(&block_hash.0),
+				|x| codec::decode(&x[..]),
+			)? {
+			Some(v) => v,
+			None => return Ok(None),
+		};
+
+		let payload_txs: Vec<Hash> = match self
+			.db
+			.get_with(
+				node_db::columns::PAYLOAD_TXS,
+				&DBKey::from_slice(&block_hash.0),
+				|x| codec::decode(&x[..]),
+			)? {
+			Some(v) => v,
+			None => return Ok(None),
+		};
+
+		Ok(Some(Body {
+			meta_txs,
+			payload_txs,
+		}))
+	}
+
 	/// Get the block by block hash
 	pub fn get_block(&self, block_hash: &Hash) -> CommonResult<Option<Block>> {
 		let header = match self.get_header(block_hash)? {
 			Some(header) => header,
 			None => return Ok(None),
 		};
-		let meta_txs: Vec<Hash> = self
-			.db
-			.get_with(
-				node_db::columns::META_TXS,
-				&DBKey::from_slice(&block_hash.0),
-				|x| codec::decode(&x[..]),
-			)?
+		let body = self.get_body(block_hash)?
 			.ok_or(errors::ErrorKind::Data(format!(
-				"block missing meta_txs: block_hash: {:?}",
-				block_hash
-			)))?;
-
-		let payload_txs: Vec<Hash> = self
-			.db
-			.get_with(
-				node_db::columns::PAYLOAD_TXS,
-				&DBKey::from_slice(&block_hash.0),
-				|x| codec::decode(&x[..]),
-			)?
-			.ok_or(errors::ErrorKind::Data(format!(
-				"block missing meta_txs: block_hash: {:?}",
-				block_hash
-			)))?;
+			"block missing body: block_hash: {:?}",
+			block_hash
+		)))?;
 
 		Ok(Some(Block {
 			header,
-			body: Body {
-				meta_txs,
-				payload_txs,
-			},
+			body,
 		}))
 	}
 
