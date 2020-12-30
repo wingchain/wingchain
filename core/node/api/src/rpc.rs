@@ -34,7 +34,7 @@ where
 	let config = config.clone();
 
 	thread::spawn(move || {
-		let mut runtime = node_api_rt::tokio::runtime::Runtime::new().expect("create http runtime");
+		let mut runtime = node_api_rt::tokio::runtime::Runtime::new().expect("Create http runtime");
 
 		let local = node_api_rt::tokio::task::LocalSet::new();
 
@@ -44,7 +44,7 @@ where
 			let actix_rt = actix_rt::System::run_in_tokio("actix-web", &local);
 			node_api_rt::tokio::task::spawn_local(actix_rt);
 
-			start_rpc_app(&config, support).await.expect("start api");
+			start_rpc_app(&config, support).await.expect("Start api");
 		});
 	});
 }

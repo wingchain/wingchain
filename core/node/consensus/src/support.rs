@@ -29,6 +29,7 @@ use primitives::{
 #[async_trait]
 pub trait ConsensusSupport {
 	fn get_confirmed_number(&self) -> CommonResult<Option<BlockNumber>>;
+	fn get_execution_number(&self) -> CommonResult<Option<BlockNumber>>;
 	fn get_block_hash(&self, number: &BlockNumber) -> CommonResult<Option<Hash>>;
 	fn get_header(&self, block_hash: &Hash) -> CommonResult<Option<Header>>;
 	fn get_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Transaction>>;
@@ -45,7 +46,7 @@ pub trait ConsensusSupport {
 		&self,
 		build_block_params: BuildBlockParams,
 	) -> CommonResult<ChainCommitBlockParams>;
-	async fn commit_block(
+	fn commit_block(
 		&self,
 		commit_block_params: ChainCommitBlockParams,
 	) -> CommonResult<CommitBlockResult>;
@@ -79,6 +80,9 @@ where
 	fn get_confirmed_number(&self) -> CommonResult<Option<BlockNumber>> {
 		self.chain.get_confirmed_number()
 	}
+	fn get_execution_number(&self) -> CommonResult<Option<BlockNumber>> {
+		self.chain.get_execution_number()
+	}
 	fn get_block_hash(&self, number: &BlockNumber) -> CommonResult<Option<Hash>> {
 		self.chain.get_block_hash(number)
 	}
@@ -108,11 +112,11 @@ where
 	) -> CommonResult<ChainCommitBlockParams> {
 		self.chain.build_block(build_block_params)
 	}
-	async fn commit_block(
+	fn commit_block(
 		&self,
 		commit_block_params: ChainCommitBlockParams,
 	) -> CommonResult<CommitBlockResult> {
-		self.chain.commit_block(commit_block_params).await
+		self.chain.commit_block(commit_block_params)
 	}
 	fn get_transactions_in_txpool(&self) -> CommonResult<Vec<Arc<FullTransaction>>> {
 		let txs = (*self.txpool.get_queue().read()).clone();

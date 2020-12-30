@@ -258,7 +258,7 @@ fn dsa_from_dylib() -> DsaImpl {
 
 	assert!(
 		path.exists(),
-		"should build first to make exist: {:?}",
+		"Should build first to make exist: {:?}",
 		path
 	);
 

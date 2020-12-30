@@ -23,19 +23,19 @@ use std::time::{Duration, SystemTime};
 
 use futures::prelude::*;
 use futures::task::Poll;
-use futures::{Future, Stream, TryStreamExt};
+use futures::{Future, Stream};
 use futures_timer::Delay;
 use log::{debug, info, warn};
 
 use crypto::address::Address as AddressT;
 use crypto::dsa::{Dsa, KeyPair};
-use node_chain::CommitBlockResult;
 use node_consensus::errors::ErrorKind;
 use node_consensus::{errors, support::ConsensusSupport};
 use node_executor::module;
 use node_executor_primitives::EmptyParams;
 use primitives::errors::CommonResult;
-use primitives::{Address, BuildBlockParams, FullTransaction, SecretKey};
+use primitives::types::ExecutionGap;
+use primitives::{Address, BlockNumber, BuildBlockParams, FullTransaction, SecretKey};
 
 pub struct PoaConfig {
 	pub secret_key: SecretKey,
@@ -45,8 +45,7 @@ pub struct Poa<S>
 where
 	S: ConsensusSupport,
 {
-	#[allow(dead_code)]
-	support: Arc<S>,
+	stream: Arc<PoaStream<S>>,
 	is_authority: bool,
 }
 
@@ -55,7 +54,8 @@ where
 	S: ConsensusSupport + Send + Sync + 'static,
 {
 	pub fn new(config: PoaConfig, support: Arc<S>) -> CommonResult<Self> {
-		let meta = get_poa_meta(&support)?;
+		let system_meta = get_system_meta(&support)?;
+		let poa_meta = get_poa_meta(&support)?;
 		let authority_address = get_poa_authority(&support)?;
 		let current_address = get_current_address(&config.secret_key, &support)?;
 		let is_authority = current_address == authority_address;
@@ -65,14 +65,20 @@ where
 			is_authority, authority_address, current_address
 		);
 
-		if is_authority && meta.block_interval.is_some() {
-			tokio::spawn(start(meta, support.clone()));
+		let stream = Arc::new(PoaStream {
+			system_meta,
+			poa_meta,
+			support,
+		});
+
+		if is_authority && stream.poa_meta.block_interval.is_some() {
+			tokio::spawn(start(stream.clone()));
 		}
 
 		info!("Initializing consensus poa");
 
 		let poa = Poa {
-			support: support.clone(),
+			stream,
 			is_authority,
 		};
 
@@ -81,7 +87,7 @@ where
 
 	pub async fn generate_block(&self) -> CommonResult<()> {
 		if !self.is_authority {
-			return Err(errors::ErrorKind::Other("not authority".to_string()).into());
+			return Err(errors::ErrorKind::Other("Not authority".to_string()).into());
 		}
 
 		let timestamp = SystemTime::now();
@@ -90,125 +96,165 @@ where
 			.map_err(|_| ErrorKind::TimeError)?;
 		let timestamp = timestamp.as_millis() as u64;
 		let schedule_info = ScheduleInfo { timestamp };
-		work(schedule_info, self.support.clone()).await?;
+		self.stream.work(schedule_info).await?;
 		Ok(())
 	}
 }
 
-async fn start<S>(meta: module::poa::Meta, support: Arc<S>) -> CommonResult<()>
+struct PoaStream<S>
+where
+	S: ConsensusSupport,
+{
+	system_meta: module::system::Meta,
+	poa_meta: module::poa::Meta,
+	support: Arc<S>,
+}
+
+impl<S> PoaStream<S>
+where
+	S: ConsensusSupport,
+{
+	async fn work(&self, schedule_info: ScheduleInfo) -> CommonResult<()> {
+		let confirmed_number = match self.support.get_confirmed_number() {
+			Ok(number) => number.expect("qed"),
+			Err(e) => {
+				warn!("Unable to get best number: {}", e);
+				return Ok(());
+			}
+		};
+
+		let number = confirmed_number + 1;
+		let timestamp = schedule_info.timestamp;
+
+		let txs = match self.support.get_transactions_in_txpool() {
+			Ok(txs) => txs,
+			Err(e) => {
+				warn!("Unable to get transactions in txpool: {}", e);
+				return Ok(());
+			}
+		};
+
+		debug!("TxPool txs count: {}", txs.len());
+
+		let mut invalid_txs = vec![];
+		let mut meta_txs = vec![];
+		let mut payload_txs = vec![];
+
+		for tx in &txs {
+			if self.validate_transaction(tx, number).is_err() {
+				invalid_txs.push(tx.clone());
+				continue;
+			}
+			let is_meta = self.support.is_meta_tx(&*(&tx.tx)).expect("qed");
+			match is_meta {
+				true => {
+					meta_txs.push(tx.clone());
+				}
+				false => {
+					payload_txs.push(tx.clone());
+				}
+			}
+		}
+		debug!("Invalid txs count: {}", invalid_txs.len());
+
+		let execution_number =
+			self.support
+				.get_execution_number()?
+				.ok_or(errors::ErrorKind::Data(format!(
+					"Execution number not found"
+				)))?;
+
+		let block_execution_gap = (number - execution_number) as ExecutionGap;
+		if block_execution_gap > self.system_meta.max_execution_gap {
+			warn!(
+				"execution gap exceed max: {}, max: {}",
+				block_execution_gap, self.system_meta.max_execution_gap
+			);
+			return Ok(());
+		}
+
+		let build_block_params = BuildBlockParams {
+			number,
+			timestamp,
+			meta_txs,
+			payload_txs,
+			execution_number,
+		};
+
+		let commit_block_params = self.support.build_block(build_block_params)?;
+
+		let result = self.support.commit_block(commit_block_params)?;
+
+		match result {
+			Ok(_) => {
+				let tx_hash_set = txs
+					.iter()
+					.map(|x| x.tx_hash.clone())
+					.collect::<HashSet<_>>();
+
+				self.support.remove_transactions_in_txpool(&tx_hash_set)?;
+			}
+			Err(e) => {
+				warn!("Commit block failed: {:?}", e);
+			}
+		}
+
+		Ok(())
+	}
+
+	fn validate_transaction(
+		&self,
+		tx: &Arc<FullTransaction>,
+		number: BlockNumber,
+	) -> CommonResult<()> {
+		if self.support.get_transaction(&tx.tx_hash)?.is_some() {
+			return Err(errors::ErrorKind::Duplicated(tx.tx_hash.clone()).into());
+		}
+		let witness = tx.tx.witness.as_ref().expect("qed");
+
+		if witness.until < number {
+			return Err(errors::ErrorKind::InvalidUntil(tx.tx_hash.clone()).into());
+		}
+
+		Ok(())
+	}
+}
+
+async fn start<S>(stream: Arc<PoaStream<S>>) -> CommonResult<()>
 where
 	S: ConsensusSupport,
 {
 	info!("Start poa work");
-	let block_interval = meta.block_interval.expect("qed");
-	let task = Scheduler::new(block_interval)
-		.try_for_each(move |schedule_info| {
-			work(schedule_info, support.clone())
-				.map_err(|e| {
-					warn!("Encountered consensus error: {:?}", e);
-				})
-				.or_else(|_| future::ready(Ok(())))
-		})
-		.then(|res| {
-			if let Err(err) = res {
-				warn!("Terminated with an error: {:?}", err);
+	let block_interval = stream.poa_meta.block_interval.expect("qed");
+	let mut scheduler = Scheduler::new(block_interval);
+	loop {
+		let item = scheduler.next().await;
+		match item {
+			Some(Ok(v)) => match stream.work(v).await {
+				Ok(_) => (),
+				Err(e) => warn!("Encountered consensus error: {:?}", e),
+			},
+			Some(Err(e)) => {
+				warn!("Terminated with an error: {:?}", e);
+				break;
 			}
-			future::ready(Ok(()))
-		});
-	task.await
-}
-
-async fn work<S>(schedule_info: ScheduleInfo, support: Arc<S>) -> CommonResult<()>
-where
-	S: ConsensusSupport,
-{
-	let confirmed_number = match support.get_confirmed_number() {
-		Ok(number) => number.expect("qed"),
-		Err(e) => {
-			warn!("Unable to get best number: {}", e);
-			return Ok(());
-		}
-	};
-
-	let number = confirmed_number + 1;
-	let timestamp = schedule_info.timestamp;
-
-	let txs = match support.get_transactions_in_txpool() {
-		Ok(txs) => txs,
-		Err(e) => {
-			warn!("Unable to get transactions in txpool: {}", e);
-			return Ok(());
-		}
-	};
-
-	debug!("TxPool txs count: {}", txs.len());
-
-	let mut invalid_txs = vec![];
-	let mut meta_txs = vec![];
-	let mut payload_txs = vec![];
-
-	for tx in &txs {
-		if validate_transaction(tx, &support, number).is_err() {
-			invalid_txs.push(tx.clone());
-			continue;
-		}
-		let is_meta = support.is_meta_tx(&*(&tx.tx)).expect("qed");
-		match is_meta {
-			true => {
-				meta_txs.push(tx.clone());
-			}
-			false => {
-				payload_txs.push(tx.clone());
-			}
-		}
-	}
-	debug!("Invalid txs count: {}", invalid_txs.len());
-
-	let build_block_params = BuildBlockParams {
-		number,
-		timestamp,
-		meta_txs,
-		payload_txs,
-	};
-
-	let commit_block_params = support.build_block(build_block_params)?;
-
-	let result = support.commit_block(commit_block_params).await?;
-
-	match result {
-		CommitBlockResult::Ok => {
-			let tx_hash_set = txs
-				.iter()
-				.map(|x| x.tx_hash.clone())
-				.collect::<HashSet<_>>();
-
-			support.remove_transactions_in_txpool(&tx_hash_set)?;
-		}
-		_ => {
-			warn!("Commit block failed: {:?}", result);
+			None => break,
 		}
 	}
 
 	Ok(())
 }
 
-fn validate_transaction<S>(
-	tx: &Arc<FullTransaction>,
-	support: &Arc<S>,
-	number: u64,
-) -> CommonResult<()>
-where
-	S: ConsensusSupport,
-{
-	if support.get_transaction(&tx.tx_hash)?.is_some() {
-		return Err(errors::ErrorKind::Duplicated(tx.tx_hash.clone()).into());
-	}
-	let witness = tx.tx.witness.as_ref().expect("qed");
-	if witness.until < number {
-		return Err(errors::ErrorKind::ExceedUntil(tx.tx_hash.clone()).into());
-	}
-
-	Ok(())
+fn get_system_meta<S: ConsensusSupport>(support: &Arc<S>) -> CommonResult<module::system::Meta> {
+	support
+		.execute_call_with_block_number(
+			&0,
+			None,
+			"system".to_string(),
+			"get_meta".to_string(),
+			EmptyParams,
+		)
+		.map(|x| x.expect("qed"))
 }
 
 fn get_poa_meta<S: ConsensusSupport>(support: &Arc<S>) -> CommonResult<module::poa::Meta> {

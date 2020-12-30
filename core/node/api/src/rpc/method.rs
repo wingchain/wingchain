@@ -172,7 +172,7 @@ pub async fn chain_send_raw_transaction<S: ApiSupport>(
 	let raw_transaction: Vec<u8> = raw_transaction.try_into()?;
 	let transaction: CommonResult<primitives::Transaction> = codec::decode(&raw_transaction)
 		.map_err(|_| {
-			errors::ErrorKind::InvalidParams("invalid raw transaction".to_string()).into()
+			errors::ErrorKind::InvalidParams("Invalid raw transaction".to_string()).into()
 		});
 	let transaction = transaction?;
 
@@ -467,7 +467,7 @@ impl TryInto<primitives::Hash> for Hash {
 	fn try_into(self) -> Result<primitives::Hash, Self::Error> {
 		let hex = self.0.trim_start_matches("0x");
 		let hex = hex::decode(hex)
-			.map_err(|_| errors::ErrorKind::InvalidParams(format!("invalid hex: {}", hex)))?;
+			.map_err(|_| errors::ErrorKind::InvalidParams(format!("Invalid hex: {}", hex)))?;
 		Ok(primitives::Hash(hex))
 	}
 }
@@ -478,7 +478,7 @@ impl TryInto<primitives::Address> for Address {
 	fn try_into(self) -> Result<primitives::Address, Self::Error> {
 		let hex = self.0.trim_start_matches("0x");
 		let hex = hex::decode(hex)
-			.map_err(|_| errors::ErrorKind::InvalidParams(format!("invalid hex: {}", hex)))?;
+			.map_err(|_| errors::ErrorKind::InvalidParams(format!("Invalid hex: {}", hex)))?;
 		Ok(primitives::Address(hex))
 	}
 }
@@ -489,7 +489,7 @@ impl TryInto<Vec<u8>> for Hex {
 	fn try_into(self) -> Result<Vec<u8>, Self::Error> {
 		let hex = self.0.trim_start_matches("0x");
 		let hex = hex::decode(hex)
-			.map_err(|_| errors::ErrorKind::InvalidParams(format!("invalid hex: {}", hex)))?;
+			.map_err(|_| errors::ErrorKind::InvalidParams(format!("Invalid hex: {}", hex)))?;
 		Ok(hex)
 	}
 }
@@ -518,13 +518,13 @@ impl TryFrom<BlockNumber> for BlockNumberEnum {
 			number if number.starts_with("0x") => {
 				let hex = number.trim_start_matches("0x");
 				let number = u64::from_str_radix(hex, 16).map_err(|_| {
-					errors::ErrorKind::InvalidParams(format!("invalid hex: {}", number))
+					errors::ErrorKind::InvalidParams(format!("Invalid hex: {}", number))
 				})?;
 				BlockNumberEnum::Number(number)
 			}
 			number => {
 				let number = number.parse::<u64>().map_err(|_| {
-					errors::ErrorKind::InvalidParams(format!("invalid number: {}", number))
+					errors::ErrorKind::InvalidParams(format!("Invalid number: {}", number))
 				})?;
 				BlockNumberEnum::Number(number)
 			}

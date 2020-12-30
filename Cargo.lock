@@ -3087,6 +3087,8 @@ dependencies = [
  "node-chain",
  "node-consensus",
  "node-consensus-poa",
+ "node-executor",
+ "node-executor-primitives",
  "node-network",
  "node-txpool",
  "parity-scale-codec",

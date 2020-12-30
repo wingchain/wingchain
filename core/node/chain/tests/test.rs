@@ -40,7 +40,7 @@ async fn test_chain_normal() {
 
 	use tempfile::tempdir;
 
-	let path = tempdir().expect("could not create a temp dir");
+	let path = tempdir().expect("Could not create a temp dir");
 	let home = path.into_path();
 
 	let dsa = Arc::new(DsaImpl::Ed25519);
@@ -146,7 +146,7 @@ async fn test_chain_normal() {
 async fn test_chain_execute_call() {
 	use tempfile::tempdir;
 
-	let path = tempdir().expect("could not create a temp dir");
+	let path = tempdir().expect("Could not create a temp dir");
 	let home = path.into_path();
 
 	let dsa = Arc::new(DsaImpl::Ed25519);
@@ -187,7 +187,7 @@ async fn test_chain_execute_call() {
 async fn test_chain_invalid_spec() {
 	use tempfile::tempdir;
 
-	let path = tempdir().expect("could not create a temp dir");
+	let path = tempdir().expect("Could not create a temp dir");
 	let home = path.into_path();
 
 	init_invalid_spec(&home);
@@ -226,7 +226,8 @@ fn expected_data(
 			module::system::InitParams {
 				chain_id: "chain-test".to_string(),
 				timestamp,
-				until_gap: 20,
+				max_until_gap: 20,
+				max_execution_gap: 8,
 			},
 		)
 		.unwrap()];
@@ -278,7 +279,7 @@ fn expected_data(
 		meta_state_root,
 		meta_receipts_root,
 		payload_txs_root,
-		payload_execution_gap: 1,
+		payload_execution_gap: 0,
 		payload_execution_state_root: Hash(zero_hash.clone()),
 		payload_execution_receipts_root: Hash(zero_hash),
 	};
@@ -370,8 +371,12 @@ fn expected_block_0_meta_state_root(txs: &Vec<Arc<FullTransaction>>) -> Hash {
 			Some(codec::encode(&params.timestamp).unwrap()),
 		),
 		(
-			DBKey::from_slice(b"system_until_gap"),
-			Some(codec::encode(&params.until_gap).unwrap()),
+			DBKey::from_slice(b"system_max_until_gap"),
+			Some(codec::encode(&params.max_until_gap).unwrap()),
+		),
+		(
+			DBKey::from_slice(b"system_max_execution_gap"),
+			Some(codec::encode(&params.max_execution_gap).unwrap()),
 		),
 	]
 	.into_iter()
@@ -379,7 +384,7 @@ fn expected_block_0_meta_state_root(txs: &Vec<Arc<FullTransaction>>) -> Hash {
 
 	use tempfile::tempdir;
 
-	let path = tempdir().expect("could not create a temp dir");
+	let path = tempdir().expect("Could not create a temp dir");
 	let path = path.into_path();
 
 	let db = Arc::new(DB::open(&path).unwrap());
@@ -415,7 +420,7 @@ fn expected_block_0_payload_state_root(txs: &Vec<Arc<FullTransaction>>) -> Hash 
 
 	use tempfile::tempdir;
 
-	let path = tempdir().expect("could not create a temp dir");
+	let path = tempdir().expect("Could not create a temp dir");
 	let path = path.into_path();
 
 	let db = Arc::new(DB::open(&path).unwrap());
@@ -452,7 +457,8 @@ params = '''
 {{
     "chain_id": "chain-test",
     "timestamp": "2020-04-29T15:51:36.502+08:00",
-    "until_gap" : 20
+    "max_until_gap" : 20,
+    "max_execution_gap": 8
 }}
 '''
 
@@ -493,7 +499,8 @@ params = '''
 {
     "chain_id": "chain-test",
     "timestamp": "2020-04-29T15:51:36.502+08:00",
-    "until_gap" : 20
+    "max_until_gap" : 20,
+    "max_execution_gap": 8
 }
 '''
 

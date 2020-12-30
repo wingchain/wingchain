@@ -207,7 +207,7 @@ impl<'a> ContextT for Context<'a> {
 		Ok(events)
 	}
 	fn apply_events(&self, _items: Vec<Event>) -> ModuleResult<()> {
-		unreachable!("no need to apply events")
+		unreachable!("No need to apply events")
 	}
 }
 
@@ -440,13 +440,13 @@ impl Executor {
 				let message = codec::encode(&(&witness.nonce, &witness.until, call, genesis_hash))?;
 				let verifier = self.dsa.verifier_from_public_key(&witness.public_key.0)?;
 				verifier.verify(&message, &signature.0).map_err(|_| {
-					errors::ErrorKind::InvalidTxWitness("invalid signature".to_string())
+					errors::ErrorKind::InvalidTxWitness("Invalid signature".to_string())
 				})?;
 			}
 			None => {
 				if witness_required {
 					return Err(
-						errors::ErrorKind::InvalidTxWitness("missing witness".to_string()).into(),
+						errors::ErrorKind::InvalidTxWitness("Missing witness".to_string()).into(),
 					);
 				}
 			}
@@ -530,7 +530,7 @@ impl Executor {
 				Some(txs_is_meta) => {
 					if txs_is_meta != is_meta {
 						return Err(errors::ErrorKind::InvalidTxs(
-							"mixed meta and payload in one txs batch".to_string(),
+							"Mixed meta and payload in one txs batch".to_string(),
 						)
 						.into());
 					}
@@ -595,7 +595,7 @@ impl Executor {
 
 		if context.inner.payload_phase.get() && txs_is_meta == Some(true) {
 			return Err(errors::ErrorKind::InvalidTxs(
-				"meta after payload not allowed".to_string(),
+				"Meta after payload not allowed".to_string(),
 			)
 			.into());
 		}

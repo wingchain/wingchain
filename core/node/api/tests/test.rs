@@ -82,21 +82,21 @@ fn get_cases(chain: &Arc<Chain>) -> Vec<(String, String)> {
         (
             r#"{"jsonrpc": "2.0", "method": "chain_getBlockByNumber", "params": ["confirmed"], "id": 1}"#
                 .to_string(),
-            format!(r#"{{"jsonrpc":"2.0","result":{{"hash":"0xae046cf7079964f49f571d7db9574a2a1c4181fadd7a604afac915a534307a41","header":{{"number":"0x0000000000000000","timestamp":"0x00000171c4eb7136","parent_hash":"0x0000000000000000000000000000000000000000000000000000000000000000","meta_txs_root":"0x17462939e972f9cfe72553b9f56c18cd94ec8955a44a6012a350d9e4ac5f4a83","meta_state_root":"0x5e594917a6e59ef9260b411384550d016fc2314b209fdc1be3f401461c2a8cce","meta_receipts_root":"0x46f793ce72de14b7eecae2b4524658a09cb9cbaa313cf9b27a0dd1274e7caf28","payload_txs_root":"0xc73b1740e53645a26e1926f9d910e560a99a601d14680deb6dc31eb26f321edc","payload_execution_gap":"0x01","payload_execution_state_root":"0x0000000000000000000000000000000000000000000000000000000000000000","payload_execution_receipts_root":"0x0000000000000000000000000000000000000000000000000000000000000000"}},"body":{{"meta_txs":["0x172006405359c1a2c08417272186e71e30b11db45f59a5f12c50ec7e658112df"],"payload_txs":["0x6745417d545c3e0f7d610cadfd1ee8d450a92e89fa74bb75777950a779f2aa94"]}}}},"id":1}}"#, ),
+            format!(r#"{{"jsonrpc":"2.0","result":{{"hash":"0x75f3a28816f3eab0079a734b4f275cd9a1c012d523c86203ee8bff08188f1318","header":{{"number":"0x0000000000000000","timestamp":"0x00000171c4eb7136","parent_hash":"0x0000000000000000000000000000000000000000000000000000000000000000","meta_txs_root":"0x41236f2124e3af09facc6908a9b2befbb3f0614b88e5cf580130cbe657043f29","meta_state_root":"0xaeda7d48b84f094ee0fd8e31aaf5b7d19995b613df19efccbb03e7ee5787ce12","meta_receipts_root":"0x46f793ce72de14b7eecae2b4524658a09cb9cbaa313cf9b27a0dd1274e7caf28","payload_txs_root":"0xc73b1740e53645a26e1926f9d910e560a99a601d14680deb6dc31eb26f321edc","payload_execution_gap":"0x00","payload_execution_state_root":"0x0000000000000000000000000000000000000000000000000000000000000000","payload_execution_receipts_root":"0x0000000000000000000000000000000000000000000000000000000000000000"}},"body":{{"meta_txs":["0x91b00eaf36abb6c89954e1ddc7933ed55373859de12bfdf24abc7c0abb327904"],"payload_txs":["0x6745417d545c3e0f7d610cadfd1ee8d450a92e89fa74bb75777950a779f2aa94"]}}}},"id":1}}"#, ),
         ),
         (
-            r#"{"jsonrpc": "2.0", "method": "chain_getTransactionByHash", "params": ["0x172006405359c1a2c08417272186e71e30b11db45f59a5f12c50ec7e658112df"], "id": 1}"#
+            r#"{"jsonrpc": "2.0", "method": "chain_getTransactionByHash", "params": ["0x91b00eaf36abb6c89954e1ddc7933ed55373859de12bfdf24abc7c0abb327904"], "id": 1}"#
                 .to_string(),
-            r#"{"jsonrpc":"2.0","result":{"hash":"0x172006405359c1a2c08417272186e71e30b11db45f59a5f12c50ec7e658112df","witness":null,"call":{"module":"system","method":"init","params":"0x28636861696e2d746573743671ebc4710100001400000000000000"}},"id":1}"#.to_string(),
+            r#"{"jsonrpc":"2.0","result":{"hash":"0x91b00eaf36abb6c89954e1ddc7933ed55373859de12bfdf24abc7c0abb327904","witness":null,"call":{"module":"system","method":"init","params":"0x28636861696e2d746573743671ebc471010000140000000000000008"}},"id":1}"#.to_string(),
         ),
         (
-            r#"{"jsonrpc": "2.0", "method": "chain_getRawTransactionByHash", "params": ["0x172006405359c1a2c08417272186e71e30b11db45f59a5f12c50ec7e658112df"], "id": 1}"#.to_string(),
-            r#"{"jsonrpc":"2.0","result":"0x001873797374656d10696e69746c28636861696e2d746573743671ebc4710100001400000000000000","id":1}"#.to_string(),
+            r#"{"jsonrpc": "2.0", "method": "chain_getRawTransactionByHash", "params": ["0x91b00eaf36abb6c89954e1ddc7933ed55373859de12bfdf24abc7c0abb327904"], "id": 1}"#.to_string(),
+            r#"{"jsonrpc":"2.0","result":"0x001873797374656d10696e69747028636861696e2d746573743671ebc471010000140000000000000008","id":1}"#.to_string(),
         ),
         (
-            r#"{"jsonrpc": "2.0", "method": "chain_getReceiptByHash", "params": ["0x172006405359c1a2c08417272186e71e30b11db45f59a5f12c50ec7e658112df"], "id": 1}"#
+            r#"{"jsonrpc": "2.0", "method": "chain_getReceiptByHash", "params": ["0x91b00eaf36abb6c89954e1ddc7933ed55373859de12bfdf24abc7c0abb327904"], "id": 1}"#
                 .to_string(),
-            r#"{"jsonrpc":"2.0","result":{"hash":"0x172006405359c1a2c08417272186e71e30b11db45f59a5f12c50ec7e658112df","block_number":"0x0000000000000000","events":[],"result":"0x0000"},"id":1}"#.to_string(),
+            r#"{"jsonrpc":"2.0","result":{"hash":"0x91b00eaf36abb6c89954e1ddc7933ed55373859de12bfdf24abc7c0abb327904","block_number":"0x0000000000000000","events":[],"result":"0x0000"},"id":1}"#.to_string(),
         ),
         (
             format!(r#"{{"jsonrpc": "2.0", "method": "chain_sendRawTransaction", "params": ["0x{}"], "id": 1}}"#, tx_hex),
@@ -108,7 +108,7 @@ fn get_cases(chain: &Arc<Chain>) -> Vec<(String, String)> {
                     tx_hash_hex, tx_public_key_hex, tx_sig_hex, nonce_hex, until_hex, params_hex),
         ),
         (
-            format!(r#"{{"jsonrpc": "2.0", "method": "chain_executeCall", "params": {{ "block_hash": "0x0xae046cf7079964f49f571d7db9574a2a1c4181fadd7a604afac915a534307a41", "sender": "0xb4decd5a5f8f2ba708f8ced72eec89f44f3be96a", "call": {{ "module":"balance", "method":"get_balance", "params": "" }} }}, "id": 1}}"#),
+            format!(r#"{{"jsonrpc": "2.0", "method": "chain_executeCall", "params": {{ "block_hash": "0x75f3a28816f3eab0079a734b4f275cd9a1c012d523c86203ee8bff08188f1318", "sender": "0xb4decd5a5f8f2ba708f8ced72eec89f44f3be96a", "call": {{ "module":"balance", "method":"get_balance", "params": "" }} }}, "id": 1}}"#),
             format!(r#"{{"jsonrpc":"2.0","result":"0x0a00000000000000","id":1}}"#),
         )
     ]
@@ -138,7 +138,7 @@ fn get_tx(chain: &Arc<Chain>) -> Transaction {
 }
 
 fn get_chain(address: &Address) -> Arc<Chain> {
-	let path = tempdir().expect("could not create a temp dir");
+	let path = tempdir().expect("Could not create a temp dir");
 	let home = path.into_path();
 
 	init(&home, address);
@@ -171,7 +171,8 @@ params = '''
 {{
     "chain_id": "chain-test",
     "timestamp": "2020-04-29T15:51:36.502+08:00",
-    "until_gap": 20
+    "max_until_gap": 20,
+    "max_execution_gap": 8
 }}
 '''
 

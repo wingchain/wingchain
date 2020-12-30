@@ -15,7 +15,7 @@
 use std::convert::{TryFrom, TryInto};
 
 use primitives::codec::{Decode, Encode};
-use primitives::{Hash, BlockNumber, Header, Transaction};
+use primitives::{BlockNumber, Hash, Header, Transaction};
 
 #[derive(Debug, PartialEq)]
 pub enum ProtocolMessage {
@@ -59,7 +59,7 @@ pub const FIELDS_HEADER: u32 = 0b01;
 pub const FIELDS_BODY: u32 = 0b10;
 
 #[derive(Encode, Decode, Debug, PartialEq)]
-pub enum BlockId{
+pub enum BlockId {
 	Number(BlockNumber),
 	Hash(Hash),
 }
@@ -124,7 +124,7 @@ impl<'a> From<&'a ProtocolMessage> for ProtocolMessagePayload {
 			ProtocolMessage::BlockResponse(v) => ProtocolMessagePayload {
 				name: "BlockResponse".to_string(),
 				payload: v.encode(),
-			}
+			},
 		}
 	}
 }
@@ -145,7 +145,7 @@ impl TryFrom<ProtocolMessagePayload> for ProtocolMessage {
 			"BlockResponse" => Ok(ProtocolMessage::BlockResponse(Decode::decode(
 				&mut &v.payload[..],
 			)?)),
-			_ => Err("unknown protocol message name".into()),
+			_ => Err("Unknown protocol message name".into()),
 		}
 	}
 }

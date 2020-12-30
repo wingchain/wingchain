@@ -49,7 +49,7 @@ where
 	pub fn new(config: CoordinatorConfig, support: Arc<S>) -> CommonResult<Self> {
 		let genesis_hash = support
 			.get_block_hash(&0)?
-			.ok_or(errors::ErrorKind::Data("missing genesis block".to_string()))?;
+			.ok_or(errors::ErrorKind::Data("Missing genesis block".to_string()))?;
 
 		let handshake = ProtocolMessage::Handshake(Handshake {
 			genesis_hash: genesis_hash.clone(),

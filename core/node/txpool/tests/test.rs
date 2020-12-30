@@ -164,7 +164,7 @@ async fn test_txpool_validate() {
 		)
 		.unwrap();
 	let result = txpool.insert(tx).await;
-	assert!(format!("{}", result.unwrap_err()).contains("Error: Invalid until"));
+	assert!(format!("{}", result.unwrap_err()).contains("Error: Exceed until"));
 
 	let tx = chain
 		.build_transaction(
@@ -178,7 +178,7 @@ async fn test_txpool_validate() {
 		)
 		.unwrap();
 	let result = txpool.insert(tx).await;
-	assert!(format!("{}", result.unwrap_err()).contains("Error: Exceed until"));
+	assert!(format!("{}", result.unwrap_err()).contains("Error: Invalid until"));
 
 	safe_close(chain, txpool).await;
 }
@@ -255,7 +255,7 @@ async fn safe_close(chain: Arc<Chain>, txpool: TxPool<Chain>) {
 }
 
 fn get_chain(address: &Address) -> Arc<Chain> {
-	let path = tempdir().expect("could not create a temp dir");
+	let path = tempdir().expect("Could not create a temp dir");
 	let home = path.into_path();
 
 	init(&home, address);
@@ -288,7 +288,8 @@ params = '''
 {{
     "chain_id": "chain-test",
     "timestamp": "2020-04-29T15:51:36.502+08:00",
-    "until_gap": 20
+    "max_until_gap": 20,
+    "max_execution_gap": 8
 }}
 '''
 

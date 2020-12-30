@@ -65,7 +65,7 @@ impl<C: Context, U: Util> Module<C, U> {
 	#[call]
 	fn get_meta(&self, _sender: Option<&Address>, _params: EmptyParams) -> ModuleResult<Meta> {
 		let block_interval = self.block_interval.get()?;
-		let block_interval = block_interval.ok_or("unexpected none")?;
+		let block_interval = block_interval.ok_or("Unexpected none")?;
 
 		let meta = Meta { block_interval };
 		Ok(meta)
@@ -78,7 +78,7 @@ impl<C: Context, U: Util> Module<C, U> {
 		_params: EmptyParams,
 	) -> ModuleResult<Address> {
 		let authority = self.authority.get()?;
-		let authority = authority.ok_or("unexpected none")?;
+		let authority = authority.ok_or("Unexpected none")?;
 
 		Ok(authority)
 	}

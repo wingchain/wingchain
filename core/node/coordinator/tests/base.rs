@@ -19,15 +19,14 @@ use std::sync::Arc;
 use std::time::Duration;
 use tempfile::tempdir;
 
-use crypto::dsa::KeyPairImpl;
 use node_chain::{Chain, ChainConfig};
 use node_consensus::support::DefaultConsensusSupport;
 use node_consensus_poa::{Poa, PoaConfig};
-use node_network::{Network, NetworkConfig, PeerId, Multiaddr, Protocol, LinkedHashMap, Keypair};
+use node_coordinator::support::DefaultCoordinatorSupport;
+use node_coordinator::{Coordinator, CoordinatorConfig};
+use node_network::{Keypair, LinkedHashMap, Multiaddr, NetworkConfig, PeerId, Protocol};
 use node_txpool::{TxPool, TxPoolConfig};
 use primitives::{Address, Hash, PublicKey, SecretKey, Transaction};
-use node_coordinator::{Coordinator, CoordinatorConfig};
-use node_coordinator::support::DefaultCoordinatorSupport;
 
 pub fn get_service(
 	authority_account: &(SecretKey, PublicKey, Address),
@@ -39,7 +38,7 @@ pub fn get_service(
 	Arc<Chain>,
 	Arc<TxPool<Chain>>,
 	Poa<DefaultConsensusSupport<Chain>>,
-	Arc<Coordinator<DefaultCoordinatorSupport>>
+	Arc<Coordinator<DefaultCoordinatorSupport>>,
 ) {
 	let chain = get_chain(&authority_account.2);
 
@@ -98,6 +97,7 @@ pub async fn wait_block_execution(chain: &Arc<Chain>) {
 
 /// safe close,
 /// to avoid rocksdb `libc++abi.dylib: Pure virtual function called!`
+#[allow(dead_code)]
 pub async fn safe_close(
 	chain: Arc<Chain>,
 	txpool: Arc<TxPool<Chain>>,
@@ -117,7 +117,6 @@ fn get_coordinator(
 	bootnodes: LinkedHashMap<(PeerId, Multiaddr), ()>,
 	support: Arc<DefaultCoordinatorSupport>,
 ) -> Arc<Coordinator<DefaultCoordinatorSupport>> {
-
 	let agent_version = "wingchain/1.0.0".to_string();
 	let listen_address = Multiaddr::empty()
 		.with(Protocol::Ip4([0, 0, 0, 0].into()))
@@ -135,16 +134,14 @@ fn get_coordinator(
 		local_key_pair,
 		handshake: vec![],
 	};
-	let config = CoordinatorConfig {
-		network_config,
-	};
+	let config = CoordinatorConfig { network_config };
 
 	let coordinator = Coordinator::new(config, support).unwrap();
 	Arc::new(coordinator)
 }
 
 fn get_chain(address: &Address) -> Arc<Chain> {
-	let path = tempdir().expect("could not create a temp dir");
+	let path = tempdir().expect("Could not create a temp dir");
 	let home = path.into_path();
 
 	init(&home, address);
@@ -177,7 +174,8 @@ params = '''
 {{
     "chain_id": "chain-test",
     "timestamp": "2020-04-29T15:51:36.502+08:00",
-    "until_gap": 20
+    "max_until_gap": 20,
+    "max_execution_gap": 8
 }}
 '''
 
@@ -197,7 +195,7 @@ module = "poa"
 method = "init"
 params = '''
 {{
-    "block_interval": 3000,
+    "block_interval": null,
     "authority": "{}"
 }}
 '''

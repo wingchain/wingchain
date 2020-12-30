@@ -21,7 +21,7 @@ use primitives::DBKey;
 
 #[test]
 fn test_db() {
-	let path = tempdir().expect("could not create a temp dir");
+	let path = tempdir().expect("Could not create a temp dir");
 	let path = path.into_path();
 
 	let db = DB::open(&path).unwrap();
@@ -66,7 +66,7 @@ fn test_db() {
 
 #[test]
 fn test_existing_db() {
-	let path = tempdir().expect("could not create a temp dir");
+	let path = tempdir().expect("Could not create a temp dir");
 	let path = path.into_path();
 
 	let db = DB::open(&path).unwrap();
@@ -96,7 +96,7 @@ fn test_db_concurrent() {
 	use std::sync::Arc;
 	use std::thread;
 
-	let path = tempdir().expect("could not create a temp dir");
+	let path = tempdir().expect("Could not create a temp dir");
 	let path = path.into_path();
 
 	let db = Arc::new(DB::open(&path).unwrap());

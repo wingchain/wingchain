@@ -78,19 +78,19 @@ fn get_poa_config(
 	let secret_key = {
 		let secret_key = fs::read_to_string(&secret_key_file).map_err(|_| {
 			errors::ErrorKind::Config(format!(
-				"failed to read secret key file: {:?}",
+				"Failed to read secret key file: {:?}",
 				secret_key_file
 			))
 		})?;
 		let secret_key = hex::decode(secret_key.trim()).map_err(|_| {
-			errors::ErrorKind::Config(format!("invalid secret key in: {:?}", secret_key_file))
+			errors::ErrorKind::Config(format!("Invalid secret key in: {:?}", secret_key_file))
 		})?;
 
 		let _key_pair = basic
 			.dsa
 			.key_pair_from_secret_key(&secret_key)
 			.map_err(|_| {
-				errors::ErrorKind::Config(format!("invalid secret key in: {:?}", secret_key_file))
+				errors::ErrorKind::Config(format!("Invalid secret key in: {:?}", secret_key_file))
 			})?;
 
 		SecretKey(secret_key)
@@ -103,11 +103,11 @@ fn get_poa_config(
 fn get_file_config(home: &PathBuf) -> CommonResult<FileConfig> {
 	let config_path = home.join(main_base::CONFIG).join(main_base::CONFIG_FILE);
 	let config = fs::read_to_string(&config_path).map_err(|_| {
-		errors::ErrorKind::Config(format!("failed to read config file: {:?}", config_path))
+		errors::ErrorKind::Config(format!("Failed to read config file: {:?}", config_path))
 	})?;
 
 	let config = toml::from_str(&config)
-		.map_err(|e| errors::ErrorKind::Config(format!("failed to parse config file: {:?}", e)))?;
+		.map_err(|e| errors::ErrorKind::Config(format!("Failed to parse config file: {:?}", e)))?;
 
 	Ok(config)
 }

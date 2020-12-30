@@ -20,6 +20,7 @@ use executor_primitives::{
 	StorageValue, Util,
 };
 use primitives::codec::{Decode, Encode};
+use primitives::types::ExecutionGap;
 use primitives::{codec, Address, BlockNumber, Call};
 
 pub struct Module<C, U>
@@ -32,7 +33,8 @@ where
 	util: U,
 	chain_id: StorageValue<String, Self>,
 	timestamp: StorageValue<u64, Self>,
-	until_gap: StorageValue<BlockNumber, Self>,
+	max_until_gap: StorageValue<BlockNumber, Self>,
+	max_execution_gap: StorageValue<ExecutionGap, Self>,
 }
 
 #[module]
@@ -46,7 +48,8 @@ impl<C: Context, U: Util> Module<C, U> {
 			util,
 			chain_id: StorageValue::new(context.clone(), b"chain_id"),
 			timestamp: StorageValue::new(context.clone(), b"timestamp"),
-			until_gap: StorageValue::new(context, b"until_gap"),
+			max_until_gap: StorageValue::new(context.clone(), b"max_until_gap"),
+			max_execution_gap: StorageValue::new(context, b"max_execution_gap"),
 		}
 	}
 
@@ -57,7 +60,8 @@ impl<C: Context, U: Util> Module<C, U> {
 		}
 		self.chain_id.set(&params.chain_id)?;
 		self.timestamp.set(&params.timestamp)?;
-		self.until_gap.set(&params.until_gap)?;
+		self.max_until_gap.set(&params.max_until_gap)?;
+		self.max_execution_gap.set(&params.max_execution_gap)?;
 		Ok(())
 	}
 
@@ -65,11 +69,13 @@ impl<C: Context, U: Util> Module<C, U> {
 	fn get_meta(&self, _sender: Option<&Address>, _params: EmptyParams) -> ModuleResult<Meta> {
 		let chain_id = self.chain_id.get()?.ok_or("Unexpected none")?;
 		let timestamp = self.timestamp.get()?.ok_or("Unexpected none")?;
-		let until_gap = self.until_gap.get()?.ok_or("Unexpected none")?;
+		let max_until_gap = self.max_until_gap.get()?.ok_or("Unexpected none")?;
+		let max_execution_gap = self.max_execution_gap.get()?.ok_or("Unexpected none")?;
 		let meta = Meta {
 			chain_id,
 			timestamp,
-			until_gap,
+			max_until_gap,
+			max_execution_gap,
 		};
 		Ok(meta)
 	}
@@ -81,5 +87,6 @@ pub type InitParams = Meta;
 pub struct Meta {
 	pub chain_id: String,
 	pub timestamp: u64,
-	pub until_gap: BlockNumber,
+	pub max_until_gap: BlockNumber,
+	pub max_execution_gap: ExecutionGap,
 }

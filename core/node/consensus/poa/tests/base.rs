@@ -99,7 +99,7 @@ pub async fn safe_close(
 }
 
 fn get_chain(address: &Address) -> Arc<Chain> {
-	let path = tempdir().expect("could not create a temp dir");
+	let path = tempdir().expect("Could not create a temp dir");
 	let home = path.into_path();
 
 	init(&home, address);
@@ -132,7 +132,8 @@ params = '''
 {{
     "chain_id": "chain-test",
     "timestamp": "2020-04-29T15:51:36.502+08:00",
-    "until_gap": 20
+    "max_until_gap": 20,
+    "max_execution_gap": 8
 }}
 '''
 

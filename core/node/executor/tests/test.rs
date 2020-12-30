@@ -33,7 +33,7 @@ use utils_test::test_accounts;
 fn test_executor() {
 	use tempfile::tempdir;
 
-	let path = tempdir().expect("could not create a temp dir");
+	let path = tempdir().expect("Could not create a temp dir");
 	let path = path.into_path();
 
 	let db = Arc::new(DB::open(&path).unwrap());
@@ -64,7 +64,8 @@ fn test_executor() {
 			module::system::InitParams {
 				chain_id: "chain-test".to_string(),
 				timestamp,
-				until_gap: 20,
+				max_until_gap: 20,
+				max_execution_gap: 8,
 			},
 		)
 		.unwrap()];
@@ -226,7 +227,7 @@ fn test_executor() {
 fn test_executor_validate_tx() {
 	use tempfile::tempdir;
 
-	let path = tempdir().expect("could not create a temp dir");
+	let path = tempdir().expect("Could not create a temp dir");
 	let path = path.into_path();
 
 	let db = Arc::new(DB::open(&path).unwrap());
@@ -382,8 +383,12 @@ fn expected_block_0_meta_state_root(txs: &Vec<Arc<FullTransaction>>) -> Hash {
 			Some(codec::encode(&params.timestamp).unwrap()),
 		),
 		(
-			DBKey::from_slice(b"system_until_gap"),
-			Some(codec::encode(&params.until_gap).unwrap()),
+			DBKey::from_slice(b"system_max_until_gap"),
+			Some(codec::encode(&params.max_until_gap).unwrap()),
+		),
+		(
+			DBKey::from_slice(b"system_max_execution_gap"),
+			Some(codec::encode(&params.max_execution_gap).unwrap()),
 		),
 	]
 	.into_iter()
@@ -391,7 +396,7 @@ fn expected_block_0_meta_state_root(txs: &Vec<Arc<FullTransaction>>) -> Hash {
 
 	use tempfile::tempdir;
 
-	let path = tempdir().expect("could not create a temp dir");
+	let path = tempdir().expect("Could not create a temp dir");
 	let path = path.into_path();
 
 	let db = Arc::new(DB::open(&path).unwrap());
@@ -427,7 +432,7 @@ fn expected_block_0_payload_state_root(txs: &Vec<Arc<FullTransaction>>) -> Hash 
 
 	use tempfile::tempdir;
 
-	let path = tempdir().expect("could not create a temp dir");
+	let path = tempdir().expect("Could not create a temp dir");
 	let path = path.into_path();
 
 	let db = Arc::new(DB::open(&path).unwrap());
@@ -466,7 +471,7 @@ fn expected_block_1_payload_state_root(
 
 	use tempfile::tempdir;
 
-	let path = tempdir().expect("could not create a temp dir");
+	let path = tempdir().expect("Could not create a temp dir");
 	let path = path.into_path();
 
 	let db = Arc::new(DB::open(&path).unwrap());

@@ -53,7 +53,7 @@ async fn test_peer_manager_out_full() {
 
 	let message = select(peer_manager.next(), sleep(Duration::from_millis(10))).await;
 	match message {
-		Either::Left(_) => panic!("should not get message"),
+		Either::Left(_) => panic!("Should not get message"),
 		Either::Right(_) => (),
 	}
 }
@@ -98,7 +98,7 @@ async fn test_peer_manager_contains() {
 	peer_manager.discovered(peer_id_0.clone());
 	let message = select(peer_manager.next(), sleep(Duration::from_millis(10))).await;
 	match message {
-		Either::Left(_) => panic!("should not get message"),
+		Either::Left(_) => panic!("Should not get message"),
 		Either::Right(_) => (),
 	}
 }

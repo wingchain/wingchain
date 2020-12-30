@@ -23,11 +23,14 @@ pub enum ErrorKind {
 	#[display(fmt = "Duplicated tx: tx_hash: {:?}", _0)]
 	Duplicated(Hash),
 
-	#[display(fmt = "Exceed until: tx_hash: {:?}", _0)]
-	ExceedUntil(Hash),
+	#[display(fmt = "Invalid until: tx_hash: {:?}", _0)]
+	InvalidUntil(Hash),
 
 	#[display(fmt = "Time error")]
 	TimeError,
+
+	#[display(fmt = "Data error: {}", _0)]
+	Data(String),
 
 	#[display(fmt = "{}", _0)]
 	Other(String),

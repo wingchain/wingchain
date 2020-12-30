@@ -94,7 +94,7 @@ async fn test_network_connect() {
 	let wait_all = select(wait_all, futures_timer::Delay::new(Duration::from_secs(60))).await;
 	match wait_all {
 		Either::Left(_) => (),
-		Either::Right(_) => panic!("wait connect timeout"),
+		Either::Right(_) => panic!("Wait connect timeout"),
 	}
 
 	for network in &networks {
@@ -115,7 +115,7 @@ async fn test_network_connect() {
 	let wait_all = select(wait_all, futures_timer::Delay::new(Duration::from_secs(60))).await;
 	match wait_all {
 		Either::Left(_) => (),
-		Either::Right(_) => panic!("wait connect timeout"),
+		Either::Right(_) => panic!("Wait connect timeout"),
 	}
 }
 
@@ -186,7 +186,7 @@ async fn test_network_message() {
 
 	match wait_message {
 		Either::Left(_) => (),
-		Either::Right(_) => panic!("wait message timeout"),
+		Either::Right(_) => panic!("Wait message timeout"),
 	}
 }
 

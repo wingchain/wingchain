@@ -27,7 +27,11 @@ pub use node_executor::module;
 use primitives::codec::{Decode, Encode};
 use primitives::errors::CommonResult;
 use primitives::types::CallResult;
-use primitives::{Address, Block, BlockNumber, BuildBlockParams, Call, CommitBlockParams, CommitExecutionParams, Execution, Hash, Header, Nonce, OpaqueCallResult, Receipt, SecretKey, Transaction, Body};
+use primitives::{
+	Address, Block, BlockNumber, Body, BuildBlockParams, Call, CommitBlockParams,
+	CommitExecutionParams, Execution, Hash, Header, Nonce, OpaqueCallResult, Receipt, SecretKey,
+	Transaction,
+};
 
 use crate::backend::Backend;
 use crate::execute::{ExecuteQueue, ExecuteTask};
@@ -152,7 +156,7 @@ impl Chain {
 	/// Commit a block
 	/// this will persist the block into the db
 	/// and insert a execute task into the execute queue
-	pub async fn commit_block(
+	pub fn commit_block(
 		&self,
 		commit_block_params: ChainCommitBlockParams,
 	) -> CommonResult<CommitBlockResult> {
@@ -173,7 +177,7 @@ impl Chain {
 			meta_state_root,
 			payload_txs,
 		};
-		self.execute_queue.insert_task(execute_task).await?;
+		self.execute_queue.insert_task(execute_task)?;
 
 		Ok(result)
 	}
@@ -188,7 +192,14 @@ impl Chain {
 		self.backend.get_confirmed_number()
 	}
 
+	/// Get the executed block number
+	/// the number may not be confirmed
+	pub fn get_execution_number(&self) -> CommonResult<Option<BlockNumber>> {
+		self.backend.get_execution_number()
+	}
+
 	/// Get the confirmed execution block number
+	/// should be confirmed_number - payload_execution_gap
 	pub fn get_confirmed_executed_number(&self) -> CommonResult<Option<BlockNumber>> {
 		self.backend.get_confirmed_executed_number()
 	}
@@ -228,13 +239,12 @@ pub enum ChainOutMessage {
 	ExecutionCommitted { number: u64, hash: Hash },
 }
 
-#[must_use]
 #[derive(Debug)]
-pub enum CommitBlockResult {
-	/// Successfully committed
-	Ok,
-	/// Block repeated
-	Repeated,
+pub enum CommitBlockError {
+	/// Block duplicated
+	Duplicated,
 	/// Block is not the best
 	NotBest,
 }
+
+pub type CommitBlockResult = Result<(), CommitBlockError>;

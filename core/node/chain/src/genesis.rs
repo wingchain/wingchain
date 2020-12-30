@@ -27,6 +27,7 @@ use primitives::errors::{CommonError, CommonResult};
 use primitives::{Address, BlockNumber, BuildBlockParams, FullTransaction, Transaction};
 
 use crate::errors;
+use primitives::types::ExecutionGap;
 
 pub fn build_genesis(
 	spec: &Spec,
@@ -50,16 +51,18 @@ pub fn build_genesis(
 	}
 
 	let timestamp = timestamp.ok_or(errors::ErrorKind::Spec(
-		"no timestamp specified".to_string(),
+		"No timestamp specified".to_string(),
 	))?;
 
 	let number = 0;
+	let execution_number = 0;
 
 	Ok(BuildBlockParams {
 		number,
 		timestamp,
 		meta_txs,
 		payload_txs,
+		execution_number,
 	})
 }
 
@@ -92,7 +95,7 @@ fn build_tx(
 			build_validate_tx(executor, context, module, method, module_params, params)
 		}
 		_ => Err(errors::ErrorKind::Spec(format!(
-			"unknown module or method: {}.{}",
+			"Unknown module or method: {}.{}",
 			module, method
 		))
 		.into()),
@@ -111,14 +114,14 @@ fn build_validate_tx<P: Encode>(
 		.build_tx(None, module.to_string(), method.to_string(), module_params)
 		.map_err(|e| {
 			errors::ErrorKind::Spec(format!(
-				"invalid params for {}.{}: \n{} \ncause: {}",
+				"Invalid params for {}.{}: \n{} \ncause: {}",
 				module, method, params, e
 			))
 		})?;
 
 	executor.validate_tx(context, &tx, false).map_err(|e| {
 		errors::ErrorKind::Spec(format!(
-			"invalid params for {}.{}: \n{} \ncause: {}",
+			"Invalid params for {}.{}: \n{} \ncause: {}",
 			module, method, params, e
 		))
 	})?;
@@ -134,19 +137,22 @@ impl<'a> TryInto<module::system::InitParams> for JsonParams<'a> {
 		pub struct InitParams {
 			pub chain_id: String,
 			pub timestamp: String,
-			pub until_gap: BlockNumber,
+			pub max_until_gap: BlockNumber,
+			pub max_execution_gap: ExecutionGap,
 		}
 		let params = serde_json::from_str::<InitParams>(self.0)
-			.map_err(|e| errors::ErrorKind::Spec(format!("invalid json: {:?}", e)))?;
+			.map_err(|e| errors::ErrorKind::Spec(format!("Invalid json: {:?}", e)))?;
 		let timestamp = DateTime::parse_from_rfc3339(&params.timestamp)
-			.map_err(|e| errors::ErrorKind::Spec(format!("invalid time format: {:?}", e)))?;
+			.map_err(|e| errors::ErrorKind::Spec(format!("Invalid time format: {:?}", e)))?;
 		let timestamp = timestamp.timestamp_millis() as u64;
 		let chain_id = params.chain_id;
-		let until_gap = params.until_gap;
+		let max_until_gap = params.max_until_gap;
+		let max_execution_gap = params.max_execution_gap;
 		Ok(module::system::InitParams {
 			chain_id,
 			timestamp,
-			until_gap,
+			max_until_gap,
+			max_execution_gap,
 		})
 	}
 }
@@ -159,7 +165,7 @@ impl<'a> TryInto<module::balance::InitParams> for JsonParams<'a> {
 			pub endow: Vec<(Address, u64)>,
 		}
 		let params = serde_json::from_str::<InitParams>(self.0)
-			.map_err(|e| errors::ErrorKind::Spec(format!("invalid json: {:?}", e)))?;
+			.map_err(|e| errors::ErrorKind::Spec(format!("Invalid json: {:?}", e)))?;
 		let endow = params.endow;
 
 		Ok(module::balance::InitParams { endow })
@@ -175,7 +181,7 @@ impl<'a> TryInto<module::poa::InitParams> for JsonParams<'a> {
 			pub authority: Address,
 		}
 		let params = serde_json::from_str::<InitParams>(self.0)
-			.map_err(|e| errors::ErrorKind::Spec(format!("invalid json: {:?}", e)))?;
+			.map_err(|e| errors::ErrorKind::Spec(format!("Invalid json: {:?}", e)))?;
 		let block_interval = params.block_interval;
 		let authority = params.authority;
 
@@ -199,7 +205,7 @@ impl<'a> TryInto<module::contract::InitParams> for JsonParams<'a> {
 			pub max_nest_depth: Option<u32>,
 		}
 		let params = serde_json::from_str::<InitParams>(self.0)
-			.map_err(|e| errors::ErrorKind::Spec(format!("invalid json: {:?}", e)))?;
+			.map_err(|e| errors::ErrorKind::Spec(format!("Invalid json: {:?}", e)))?;
 
 		Ok(module::contract::InitParams {
 			max_stack_height: params.max_stack_height,
@@ -222,7 +228,8 @@ mod tests {
 		{
 			"chain_id": "chain-test",
 			"timestamp": "2020-04-16T23:46:02.189+08:00",
-			"until_gap": 20
+			"max_until_gap": 20,
+			"max_execution_gap": 8
 		}
 		"#;
 		let json_params = JsonParams(&str);
@@ -234,7 +241,8 @@ mod tests {
 			module::system::InitParams {
 				chain_id: "chain-test".to_string(),
 				timestamp: 1587051962189,
-				until_gap: 20,
+				max_until_gap: 20,
+				max_execution_gap: 8,
 			}
 		)
 	}
