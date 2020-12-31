@@ -16,7 +16,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use node_chain::Chain;
-use node_txpool::support::TxPoolSupport;
+use node_txpool::support::DefaultTxPoolSupport;
 use node_txpool::TxPool;
 use primitives::errors::CommonResult;
 use primitives::{
@@ -44,28 +44,19 @@ pub trait ApiSupport {
 	) -> CommonResult<OpaqueCallResult>;
 }
 
-pub struct DefaultApiSupport<TS>
-where
-	TS: TxPoolSupport,
-{
+pub struct DefaultApiSupport {
 	chain: Arc<Chain>,
-	txpool: Arc<TxPool<TS>>,
+	txpool: Arc<TxPool<DefaultTxPoolSupport>>,
 }
 
-impl<TS> DefaultApiSupport<TS>
-where
-	TS: TxPoolSupport,
-{
-	pub fn new(chain: Arc<Chain>, txpool: Arc<TxPool<TS>>) -> Self {
+impl DefaultApiSupport {
+	pub fn new(chain: Arc<Chain>, txpool: Arc<TxPool<DefaultTxPoolSupport>>) -> Self {
 		Self { chain, txpool }
 	}
 }
 
 #[async_trait]
-impl<TS> ApiSupport for DefaultApiSupport<TS>
-where
-	TS: TxPoolSupport + Send + Sync,
-{
+impl ApiSupport for DefaultApiSupport {
 	async fn hash_transaction(&self, tx: &Transaction) -> CommonResult<Hash> {
 		self.chain.hash_transaction(tx)
 	}

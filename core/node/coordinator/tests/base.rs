@@ -25,6 +25,7 @@ use node_consensus_poa::{Poa, PoaConfig};
 use node_coordinator::support::DefaultCoordinatorSupport;
 use node_coordinator::{Coordinator, CoordinatorConfig};
 use node_network::{Keypair, LinkedHashMap, Multiaddr, NetworkConfig, PeerId, Protocol};
+use node_txpool::support::DefaultTxPoolSupport;
 use node_txpool::{TxPool, TxPoolConfig};
 use primitives::{Address, Hash, PublicKey, SecretKey, Transaction};
 
@@ -36,8 +37,8 @@ pub fn get_service(
 	bootnodes: LinkedHashMap<(PeerId, Multiaddr), ()>,
 ) -> (
 	Arc<Chain>,
-	Arc<TxPool<Chain>>,
-	Poa<DefaultConsensusSupport<Chain>>,
+	Arc<TxPool<DefaultTxPoolSupport>>,
+	Poa<DefaultConsensusSupport>,
 	Arc<Coordinator<DefaultCoordinatorSupport>>,
 ) {
 	let chain = get_chain(&authority_account.2);
@@ -47,7 +48,8 @@ pub fn get_service(
 		buffer_capacity: 32,
 	};
 
-	let txpool = Arc::new(TxPool::new(txpool_config, chain.clone()).unwrap());
+	let txpool_support = Arc::new(DefaultTxPoolSupport::new(chain.clone()));
+	let txpool = Arc::new(TxPool::new(txpool_config, txpool_support).unwrap());
 
 	let support = Arc::new(DefaultConsensusSupport::new(chain.clone(), txpool.clone()));
 
@@ -63,13 +65,17 @@ pub fn get_service(
 	(chain, txpool, poa, coordinator)
 }
 
-pub async fn insert_tx(chain: &Arc<Chain>, txpool: &Arc<TxPool<Chain>>, tx: Transaction) -> Hash {
+pub async fn insert_tx(
+	chain: &Arc<Chain>,
+	txpool: &Arc<TxPool<DefaultTxPoolSupport>>,
+	tx: Transaction,
+) -> Hash {
 	let tx_hash = chain.hash_transaction(&tx).unwrap();
 	txpool.insert(tx).await.unwrap();
 	tx_hash
 }
 
-pub async fn wait_txpool(txpool: &Arc<TxPool<Chain>>, count: usize) {
+pub async fn wait_txpool(txpool: &Arc<TxPool<DefaultTxPoolSupport>>, count: usize) {
 	loop {
 		{
 			let queue = txpool.get_queue().read();
@@ -100,8 +106,8 @@ pub async fn wait_block_execution(chain: &Arc<Chain>) {
 #[allow(dead_code)]
 pub async fn safe_close(
 	chain: Arc<Chain>,
-	txpool: Arc<TxPool<Chain>>,
-	poa: Poa<DefaultConsensusSupport<Chain>>,
+	txpool: Arc<TxPool<DefaultTxPoolSupport>>,
+	poa: Poa<DefaultConsensusSupport>,
 	coordinator: Arc<Coordinator<DefaultCoordinatorSupport>>,
 ) {
 	drop(chain);

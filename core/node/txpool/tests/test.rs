@@ -22,6 +22,7 @@ use tempfile::tempdir;
 use crypto::address::AddressImpl;
 use crypto::dsa::DsaImpl;
 use node_chain::{module, Chain, ChainConfig};
+use node_txpool::support::DefaultTxPoolSupport;
 use node_txpool::{TxPool, TxPoolConfig};
 use primitives::{Address, FullTransaction};
 use utils_test::test_accounts;
@@ -38,7 +39,8 @@ async fn test_txpool() {
 		pool_capacity: 1024,
 		buffer_capacity: 256,
 	};
-	let txpool = TxPool::new(config, chain.clone()).unwrap();
+	let txpool_support = Arc::new(DefaultTxPoolSupport::new(chain.clone()));
+	let txpool = TxPool::new(config, txpool_support).unwrap();
 
 	let (account1, account2) = test_accounts(
 		chain.get_basic().dsa.clone(),
@@ -90,7 +92,8 @@ async fn test_txpool_dup() {
 		pool_capacity: 1024,
 		buffer_capacity: 256,
 	};
-	let txpool = TxPool::new(config, chain.clone()).unwrap();
+	let txpool_support = Arc::new(DefaultTxPoolSupport::new(chain.clone()));
+	let txpool = TxPool::new(config, txpool_support).unwrap();
 
 	let (account1, account2) = test_accounts(
 		chain.get_basic().dsa.clone(),
@@ -129,7 +132,8 @@ async fn test_txpool_validate() {
 		pool_capacity: 1024,
 		buffer_capacity: 256,
 	};
-	let txpool = TxPool::new(config, chain.clone()).unwrap();
+	let txpool_support = Arc::new(DefaultTxPoolSupport::new(chain.clone()));
+	let txpool = TxPool::new(config, txpool_support).unwrap();
 
 	let (account1, account2) = test_accounts(
 		chain.get_basic().dsa.clone(),
@@ -195,7 +199,8 @@ async fn test_txpool_capacity() {
 		pool_capacity: 2,
 		buffer_capacity: 256,
 	};
-	let txpool = TxPool::new(config, chain.clone()).unwrap();
+	let txpool_support = Arc::new(DefaultTxPoolSupport::new(chain.clone()));
+	let txpool = TxPool::new(config, txpool_support).unwrap();
 
 	let (account1, account2) = test_accounts(
 		chain.get_basic().dsa.clone(),
@@ -248,7 +253,7 @@ async fn test_txpool_capacity() {
 
 /// safe close,
 /// to avoid rocksdb `libc++abi.dylib: Pure virtual function called!`
-async fn safe_close(chain: Arc<Chain>, txpool: TxPool<Chain>) {
+async fn safe_close(chain: Arc<Chain>, txpool: TxPool<DefaultTxPoolSupport>) {
 	drop(chain);
 	drop(txpool);
 	tokio::time::sleep(Duration::from_millis(50)).await;

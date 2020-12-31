@@ -17,6 +17,7 @@ use primitives::codec::{Decode, Encode};
 use primitives::errors::CommonResult;
 use primitives::types::CallResult;
 use primitives::{Address, BlockNumber, Hash, Transaction};
+use std::sync::Arc;
 
 pub trait TxPoolSupport {
 	fn hash_transaction(&self, tx: &Transaction) -> CommonResult<Hash>;
@@ -33,18 +34,28 @@ pub trait TxPoolSupport {
 	) -> CommonResult<CallResult<R>>;
 }
 
-impl TxPoolSupport for Chain {
+pub struct DefaultTxPoolSupport {
+	chain: Arc<Chain>,
+}
+
+impl DefaultTxPoolSupport {
+	pub fn new(chain: Arc<Chain>) -> Self {
+		Self { chain }
+	}
+}
+
+impl TxPoolSupport for DefaultTxPoolSupport {
 	fn hash_transaction(&self, tx: &Transaction) -> CommonResult<Hash> {
-		self.hash_transaction(tx)
+		self.chain.hash_transaction(tx)
 	}
 	fn validate_transaction(&self, tx: &Transaction, witness_required: bool) -> CommonResult<()> {
-		self.validate_transaction(tx, witness_required)
+		self.chain.validate_transaction(tx, witness_required)
 	}
 	fn get_confirmed_number(&self) -> CommonResult<Option<BlockNumber>> {
-		self.get_confirmed_number()
+		self.chain.get_confirmed_number()
 	}
 	fn get_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Transaction>> {
-		self.get_transaction(tx_hash)
+		self.chain.get_transaction(tx_hash)
 	}
 	fn execute_call_with_block_number<P: Encode, R: Decode>(
 		&self,
@@ -54,6 +65,7 @@ impl TxPoolSupport for Chain {
 		method: String,
 		params: P,
 	) -> CommonResult<CallResult<R>> {
-		self.execute_call_with_block_number(block_number, sender, module, method, params)
+		self.chain
+			.execute_call_with_block_number(block_number, sender, module, method, params)
 	}
 }

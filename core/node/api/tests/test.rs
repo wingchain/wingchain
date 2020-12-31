@@ -23,6 +23,7 @@ use crypto::dsa::DsaImpl;
 use node_api::support::DefaultApiSupport;
 use node_api::{Api, ApiConfig};
 use node_chain::{module, Chain, ChainConfig};
+use node_txpool::support::DefaultTxPoolSupport;
 use node_txpool::{TxPool, TxPoolConfig};
 use primitives::{codec, Address, Transaction};
 use utils_test::test_accounts;
@@ -47,7 +48,8 @@ async fn test_api() {
 		buffer_capacity: 32,
 	};
 
-	let txpool = Arc::new(TxPool::new(txpool_config, chain.clone()).unwrap());
+	let txpool_support = Arc::new(DefaultTxPoolSupport::new(chain.clone()));
+	let txpool = Arc::new(TxPool::new(txpool_config, txpool_support).unwrap());
 
 	let support = Arc::new(DefaultApiSupport::new(chain.clone(), txpool));
 
