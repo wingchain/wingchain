@@ -61,6 +61,7 @@ use crate::config::get_config;
 use crate::errors::ErrorKind;
 use node_coordinator::support::DefaultCoordinatorSupport;
 use node_coordinator::Coordinator;
+use node_txpool::support::DefaultTxPoolSupport;
 use tokio::time::Duration;
 
 mod config;
@@ -79,11 +80,11 @@ pub struct Service {
 	#[allow(dead_code)]
 	chain: Arc<Chain>,
 	#[allow(dead_code)]
-	txpool: Arc<TxPool<Chain>>,
+	txpool: Arc<TxPool<DefaultTxPoolSupport>>,
 	#[allow(dead_code)]
-	api: Arc<Api<DefaultApiSupport<Chain>>>,
+	api: Arc<Api<DefaultApiSupport>>,
 	#[allow(dead_code)]
-	consensus: Arc<Poa<DefaultConsensusSupport<Chain>>>,
+	consensus: Arc<Poa<DefaultConsensusSupport>>,
 	#[allow(dead_code)]
 	coordinator: Arc<Coordinator<DefaultCoordinatorSupport>>,
 }
@@ -99,7 +100,8 @@ impl Service {
 		let global_config = get_config(&config, chain.get_basic())?;
 
 		// init txpool
-		let txpool = Arc::new(TxPool::new(global_config.txpool, chain.clone())?);
+		let txpool_support = Arc::new(DefaultTxPoolSupport::new(chain.clone()));
+		let txpool = Arc::new(TxPool::new(global_config.txpool, txpool_support)?);
 
 		// init api
 		let api_support = Arc::new(DefaultApiSupport::new(chain.clone(), txpool.clone()));

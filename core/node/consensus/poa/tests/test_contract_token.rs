@@ -491,9 +491,27 @@ async fn test_poa_contract_token_transfer_from() {
 
 #[tokio::test]
 async fn test_poa_contract_build_tx_create() {
-	let nonce = 0;
-	let until = 710;
-	let home = "/Users/gb/Downloads/show_case/home_a/".into();
+	let nonce = match option_env!("TEST_NONCE") {
+		Some(v) => match str::parse::<u32>(v) {
+			Ok(v) => v,
+			Err(_) => return,
+		},
+		_ => return,
+	};
+
+	let until = match option_env!("TEST_UNTIL") {
+		Some(v) => match str::parse::<u64>(v) {
+			Ok(v) => v,
+			Err(_) => return,
+		},
+		_ => return,
+	};
+
+	let home = match option_env!("TEST_HOME") {
+		Some(v) => v,
+		_ => return,
+	}
+	.into();
 
 	let _ = env_logger::try_init();
 
@@ -527,9 +545,17 @@ async fn test_poa_contract_build_tx_create() {
 
 #[tokio::test]
 async fn test_poa_contract_build_call_balance() {
-	let home = "/Users/gb/Downloads/show_case/home_a/".into();
-	let contract_address =
-		Address(hex::decode("74b342eba1556aff2b578e2861219faf58effe40").unwrap());
+	let home = match option_env!("TEST_HOME") {
+		Some(v) => v,
+		_ => return,
+	}
+	.into();
+
+	let contract_address = match option_env!("TEST_CONTRACT_ADDRESS") {
+		Some(v) => Address(hex::decode(v).unwrap()),
+		_ => return,
+	}
+	.into();
 
 	let _ = env_logger::try_init();
 

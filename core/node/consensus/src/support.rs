@@ -17,7 +17,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use node_chain::{Basic, Chain, ChainCommitBlockParams, CommitBlockResult};
-use node_txpool::support::TxPoolSupport;
+use node_txpool::support::DefaultTxPoolSupport;
 use node_txpool::TxPool;
 use primitives::codec::{Decode, Encode};
 use primitives::errors::CommonResult;
@@ -55,28 +55,19 @@ pub trait ConsensusSupport {
 	fn get_basic(&self) -> CommonResult<Arc<Basic>>;
 }
 
-pub struct DefaultConsensusSupport<TS>
-where
-	TS: TxPoolSupport,
-{
+pub struct DefaultConsensusSupport {
 	chain: Arc<Chain>,
-	txpool: Arc<TxPool<TS>>,
+	txpool: Arc<TxPool<DefaultTxPoolSupport>>,
 }
 
-impl<TS> DefaultConsensusSupport<TS>
-where
-	TS: TxPoolSupport,
-{
-	pub fn new(chain: Arc<Chain>, txpool: Arc<TxPool<TS>>) -> Self {
+impl DefaultConsensusSupport {
+	pub fn new(chain: Arc<Chain>, txpool: Arc<TxPool<DefaultTxPoolSupport>>) -> Self {
 		Self { chain, txpool }
 	}
 }
 
 #[async_trait]
-impl<TS> ConsensusSupport for DefaultConsensusSupport<TS>
-where
-	TS: TxPoolSupport + Send + Sync,
-{
+impl ConsensusSupport for DefaultConsensusSupport {
 	fn get_confirmed_number(&self) -> CommonResult<Option<BlockNumber>> {
 		self.chain.get_confirmed_number()
 	}

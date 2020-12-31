@@ -31,6 +31,7 @@ use node_txpool::{TxPool, TxPoolConfig};
 use primitives::{Address, PublicKey, SecretKey, Transaction};
 use tokio::runtime::Runtime;
 use utils_test::test_accounts;
+use node_txpool::support::DefaultTxPoolSupport;
 
 const TXS_SIZE: usize = 2000;
 
@@ -61,7 +62,9 @@ fn bench_txpool_insert_txs(b: &mut Bencher, address: &Address, txs: Vec<Transact
 			let runtime = Runtime::new().unwrap();
 			runtime.block_on(async {
 				let chain = get_chain(address);
-				let txpool = TxPool::new(config, chain.clone()).unwrap();
+				let txpool_support = Arc::new(DefaultTxPoolSupport::new(chain.clone()));
+
+				let txpool = TxPool::new(config, txpool_support).unwrap();
 				let futures = txs
 					.iter()
 					.map(|tx| txpool.insert(tx.clone()))

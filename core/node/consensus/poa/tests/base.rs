@@ -23,6 +23,7 @@ use crypto::dsa::KeyPairImpl;
 use node_chain::{Chain, ChainConfig};
 use node_consensus::support::DefaultConsensusSupport;
 use node_consensus_poa::{Poa, PoaConfig};
+use node_txpool::support::DefaultTxPoolSupport;
 use node_txpool::{TxPool, TxPoolConfig};
 use primitives::{Address, Hash, PublicKey, SecretKey, Transaction};
 
@@ -30,8 +31,8 @@ pub fn get_service(
 	account: &(SecretKey, PublicKey, KeyPairImpl, Address),
 ) -> (
 	Arc<Chain>,
-	Arc<TxPool<Chain>>,
-	Poa<DefaultConsensusSupport<Chain>>,
+	Arc<TxPool<DefaultTxPoolSupport>>,
+	Poa<DefaultConsensusSupport>,
 ) {
 	let chain = get_chain(&account.3);
 
@@ -40,7 +41,8 @@ pub fn get_service(
 		buffer_capacity: 32,
 	};
 
-	let txpool = Arc::new(TxPool::new(txpool_config, chain.clone()).unwrap());
+	let txpool_support = Arc::new(DefaultTxPoolSupport::new(chain.clone()));
+	let txpool = Arc::new(TxPool::new(txpool_config, txpool_support).unwrap());
 
 	let support = Arc::new(DefaultConsensusSupport::new(chain.clone(), txpool.clone()));
 
@@ -53,13 +55,17 @@ pub fn get_service(
 	(chain, txpool, poa)
 }
 
-pub async fn insert_tx(chain: &Arc<Chain>, txpool: &Arc<TxPool<Chain>>, tx: Transaction) -> Hash {
+pub async fn insert_tx(
+	chain: &Arc<Chain>,
+	txpool: &Arc<TxPool<DefaultTxPoolSupport>>,
+	tx: Transaction,
+) -> Hash {
 	let tx_hash = chain.hash_transaction(&tx).unwrap();
 	txpool.insert(tx).await.unwrap();
 	tx_hash
 }
 
-pub async fn wait_txpool(txpool: &Arc<TxPool<Chain>>, count: usize) {
+pub async fn wait_txpool(txpool: &Arc<TxPool<DefaultTxPoolSupport>>, count: usize) {
 	loop {
 		{
 			let queue = txpool.get_queue().read();
@@ -89,8 +95,8 @@ pub async fn wait_block_execution(chain: &Arc<Chain>) {
 /// to avoid rocksdb `libc++abi.dylib: Pure virtual function called!`
 pub async fn safe_close(
 	chain: Arc<Chain>,
-	txpool: Arc<TxPool<Chain>>,
-	poa: Poa<DefaultConsensusSupport<Chain>>,
+	txpool: Arc<TxPool<DefaultTxPoolSupport>>,
+	poa: Poa<DefaultConsensusSupport>,
 ) {
 	drop(chain);
 	drop(txpool);
