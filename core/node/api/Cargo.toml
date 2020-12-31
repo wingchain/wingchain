@@ -29,3 +29,9 @@ tempfile = "3.1.0"
 surf = "2.1.0"
 crypto = { path = "../../crypto" }
 utils-test = { path = "../../../utils/test" }
+futures-timer = "3.0.2"
+env_logger = "0.7.1"
+
+node-consensus = { path = "../consensus" }
+node-consensus-poa = { path = "../consensus/poa" }
+node-coordinator = { path = "../coordinator" }
