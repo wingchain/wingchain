@@ -36,7 +36,7 @@ fn bench_address_dylib(b: &mut Bencher) {
 
 	assert!(
 		path.exists(),
-		"should build first to make exist: {:?}",
+		"Should build first to make exist: {:?}",
 		path
 	);
 

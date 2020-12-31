@@ -30,7 +30,7 @@ pub fn dispatcher(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
 	let variants = match ast.data {
 		syn::Data::Enum(ref v) => &v.variants,
-		_ => panic!("dispatcher only works on Enum"),
+		_ => panic!("Dispatcher only works on Enum"),
 	};
 
 	let is_meta_ts_vec = variants
@@ -163,7 +163,7 @@ pub fn module(_attr: TokenStream, item: TokenStream) -> TokenStream {
 				stringify!(#method_ident) => {
 					let _params = match codec::decode::<#params_ident>(&params) {
 						Ok(params) => params,
-						Err(_) => return Err(errors::ErrorKind::InvalidTxParams("codec error".to_string()).into()),
+						Err(_) => return Err(errors::ErrorKind::InvalidTxParams("Codec error".to_string()).into()),
 					};
 					Ok(())
 				},
@@ -186,7 +186,7 @@ pub fn module(_attr: TokenStream, item: TokenStream) -> TokenStream {
 				stringify!(#method_ident) => {
 					let params = match codec::decode::<#params_ident>(&params) {
 						Ok(params) => params,
-						Err(_) => return Err(errors::ErrorKind::InvalidTxParams("codec error".to_string()).into()),
+						Err(_) => return Err(errors::ErrorKind::InvalidTxParams("Codec error".to_string()).into()),
 					};
 					#validate
 				},
@@ -203,7 +203,7 @@ pub fn module(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
 					let params = match codec::decode(&params) {
 						Ok(params) => params,
-						Err(_) => return Err(errors::ErrorKind::InvalidTxParams("codec error".to_string()).into()),
+						Err(_) => return Err(errors::ErrorKind::InvalidTxParams("Codec error".to_string()).into()),
 					};
 					let result = self.#method_ident(sender, params);
 
@@ -273,7 +273,7 @@ pub fn module(_attr: TokenStream, item: TokenStream) -> TokenStream {
 fn get_module_ident(impl_item: &ItemImpl) -> Ident {
 	match &*impl_item.self_ty {
 		Type::Path(type_path) => type_path.path.segments[0].ident.clone(),
-		_ => panic!("module ident not found"),
+		_ => panic!("Module ident not found"),
 	}
 }
 
@@ -307,7 +307,7 @@ fn get_module_call_methods(impl_item: &ItemImpl) -> Vec<ModuleMethod> {
 									{
 										match &nv.lit {
 											syn::Lit::Bool(value) => Some(value.value),
-											_ => panic!("write should have a bool value"),
+											_ => panic!("Write should have a bool value"),
 										}
 									}
 									_ => None,
@@ -382,14 +382,14 @@ fn get_method_params_ident(method: &ImplItemMethod) -> Ident {
 		let params_ident = if let Type::Path(path) = &*pat_type.ty {
 			path.path
 				.get_ident()
-				.expect("no params ident found")
+				.expect("No params ident found")
 				.clone()
 		} else {
-			panic!("no params type found")
+			panic!("No params type found")
 		};
 		params_ident
 	} else {
-		panic!("call method input should be (&self, sender: Option<&Address>, params: Type)");
+		panic!("Call method input should be (&self, sender: Option<&Address>, params: Type)");
 	}
 }
 

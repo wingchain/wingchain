@@ -28,7 +28,7 @@ fn test_custom_lib_dsa() {
 
 	assert!(
 		path.exists(),
-		"should build first to make exist: {:?}",
+		"Should build first to make exist: {:?}",
 		path
 	);
 
@@ -91,7 +91,7 @@ fn test_dylib_dsa() {
 
 	assert!(
 		path.exists(),
-		"should build first to make exist: {:?}",
+		"Should build first to make exist: {:?}",
 		path
 	);
 

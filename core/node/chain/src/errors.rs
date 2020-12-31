@@ -26,6 +26,9 @@ pub enum ErrorKind {
 
 	#[display(fmt = "Execute queue error: {}", _0)]
 	ExecuteQueue(String),
+
+	#[display(fmt = "Channel error: {:?}", _0)]
+	Channel(Box<dyn Error + Send + Sync>),
 }
 
 impl Error for ErrorKind {}

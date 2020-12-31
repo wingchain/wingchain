@@ -17,6 +17,8 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use futures::channel::mpsc::UnboundedReceiver;
+
 use crypto::address::AddressImpl;
 use crypto::dsa::DsaImpl;
 use crypto::hash::HashImpl;
@@ -26,8 +28,9 @@ use primitives::codec::{Decode, Encode};
 use primitives::errors::CommonResult;
 use primitives::types::CallResult;
 use primitives::{
-	Address, Block, BlockNumber, BuildBlockParams, Call, CommitBlockParams, CommitExecutionParams,
-	Execution, Hash, Header, Nonce, OpaqueCallResult, Receipt, SecretKey, Transaction,
+	Address, Block, BlockNumber, Body, BuildBlockParams, Call, CommitBlockParams,
+	CommitExecutionParams, Execution, Hash, Header, Nonce, OpaqueCallResult, Receipt, SecretKey,
+	Transaction,
 };
 
 use crate::backend::Backend;
@@ -79,6 +82,11 @@ impl Chain {
 	/// Get the header by block hash
 	pub fn get_header(&self, block_hash: &Hash) -> CommonResult<Option<Header>> {
 		self.backend.get_header(block_hash)
+	}
+
+	/// Get the body by block hash
+	pub fn get_body(&self, block_hash: &Hash) -> CommonResult<Option<Body>> {
+		self.backend.get_body(block_hash)
 	}
 
 	/// Get the block by block hash
@@ -148,10 +156,10 @@ impl Chain {
 	/// Commit a block
 	/// this will persist the block into the db
 	/// and insert a execute task into the execute queue
-	pub async fn commit_block(
+	pub fn commit_block(
 		&self,
 		commit_block_params: ChainCommitBlockParams,
-	) -> CommonResult<()> {
+	) -> CommonResult<CommitBlockResult> {
 		let number = commit_block_params.header.number;
 		let timestamp = commit_block_params.header.timestamp;
 		let block_hash = commit_block_params.block_hash.clone();
@@ -159,7 +167,7 @@ impl Chain {
 		let meta_state_root = commit_block_params.header.meta_state_root.clone();
 		let payload_txs = commit_block_params.payload_txs.clone();
 
-		self.backend.commit_block(commit_block_params)?;
+		let result = self.backend.commit_block(commit_block_params)?;
 
 		let execute_task = ExecuteTask {
 			number,
@@ -169,8 +177,9 @@ impl Chain {
 			meta_state_root,
 			payload_txs,
 		};
-		self.execute_queue.insert_task(execute_task).await?;
-		Ok(())
+		self.execute_queue.insert_task(execute_task)?;
+
+		Ok(result)
 	}
 
 	/// Get the basic algorithms: das, hash and address
@@ -183,7 +192,14 @@ impl Chain {
 		self.backend.get_confirmed_number()
 	}
 
+	/// Get the executed block number
+	/// the number may not be confirmed
+	pub fn get_execution_number(&self) -> CommonResult<Option<BlockNumber>> {
+		self.backend.get_execution_number()
+	}
+
 	/// Get the confirmed execution block number
+	/// should be confirmed_number - payload_execution_gap
 	pub fn get_confirmed_executed_number(&self) -> CommonResult<Option<BlockNumber>> {
 		self.backend.get_confirmed_executed_number()
 	}
@@ -212,4 +228,23 @@ impl Chain {
 		self.backend
 			.execute_call_with_block_number(block_number, sender, module, method, params)
 	}
+
+	pub fn message_rx(&self) -> Option<UnboundedReceiver<ChainOutMessage>> {
+		self.backend.message_rx()
+	}
 }
+
+pub enum ChainOutMessage {
+	BlockCommitted { number: u64, hash: Hash },
+	ExecutionCommitted { number: u64, hash: Hash },
+}
+
+#[derive(Debug)]
+pub enum CommitBlockError {
+	/// Block duplicated
+	Duplicated,
+	/// Block is not the best
+	NotBest,
+}
+
+pub type CommitBlockResult = Result<(), CommitBlockError>;

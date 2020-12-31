@@ -61,6 +61,8 @@ pub struct Hash(pub Vec<u8>);
 
 pub type BlockNumber = u64;
 
+pub type ExecutionGap = i8;
+
 pub type Balance = u64;
 
 #[derive(Clone, Debug, Encode, Decode, PartialEq)]
@@ -72,7 +74,7 @@ pub struct Header {
 	pub meta_state_root: Hash,
 	pub meta_receipts_root: Hash,
 	pub payload_txs_root: Hash,
-	pub payload_execution_gap: i8,
+	pub payload_execution_gap: ExecutionGap,
 	pub payload_execution_state_root: Hash,
 	pub payload_execution_receipts_root: Hash,
 }
@@ -132,6 +134,7 @@ pub struct BuildBlockParams {
 	pub timestamp: u64,
 	pub meta_txs: Vec<Arc<FullTransaction>>,
 	pub payload_txs: Vec<Arc<FullTransaction>>,
+	pub execution_number: BlockNumber,
 }
 
 #[derive(Debug, PartialEq)]

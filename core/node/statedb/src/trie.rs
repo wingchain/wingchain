@@ -141,7 +141,7 @@ impl Hasher for TrieHasher20 {
 	const LENGTH: usize = 20;
 
 	fn hash(x: &[u8]) -> Self::Out {
-		let hasher = HASH_IMPL_20.read().expect("should load_hasher first");
+		let hasher = HASH_IMPL_20.read().expect("Should load_hasher first");
 		let mut out = [0u8; 20];
 		hasher.hash(&mut out, x);
 		out
@@ -154,7 +154,7 @@ impl Hasher for TrieHasher32 {
 	const LENGTH: usize = 32;
 
 	fn hash(x: &[u8]) -> Self::Out {
-		let hasher = HASH_IMPL_32.read().expect("should load_hasher first");
+		let hasher = HASH_IMPL_32.read().expect("Should load_hasher first");
 		let mut out = [0u8; 32];
 		hasher.hash(&mut out, x);
 		out
@@ -171,7 +171,7 @@ impl Hasher for TrieHasher64 {
 	const LENGTH: usize = 64;
 
 	fn hash(x: &[u8]) -> Self::Out {
-		let hasher = HASH_IMPL_64.read().expect("should load_hasher first");
+		let hasher = HASH_IMPL_64.read().expect("Should load_hasher first");
 		let mut out = [0u8; 64];
 		hasher.hash(&mut out, x);
 		H512::from(out)

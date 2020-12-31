@@ -29,7 +29,7 @@ fn test_custom_lib_hash() {
 
 	assert!(
 		path.exists(),
-		"should build first to make exist: {:?}",
+		"Should build first to make exist: {:?}",
 		path
 	);
 
@@ -60,7 +60,7 @@ fn test_dylib_hash() {
 
 	assert!(
 		path.exists(),
-		"should build first to make exist: {:?}",
+		"Should build first to make exist: {:?}",
 		path
 	);
 

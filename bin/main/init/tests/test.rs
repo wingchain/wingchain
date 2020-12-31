@@ -36,7 +36,7 @@ pub struct BalanceInitParams {
 
 #[test]
 fn test_init() {
-	let home = tempdir().expect("could not create a temp dir");
+	let home = tempdir().expect("Could not create a temp dir");
 	let home = home.into_path();
 
 	// home should not exists
@@ -86,7 +86,7 @@ fn test_init() {
 fn test_init_command() {
 	use assert_cmd::Command;
 
-	let home = tempdir().expect("could not create a temp dir");
+	let home = tempdir().expect("Could not create a temp dir");
 	let home = home.into_path();
 
 	// home should not exists
@@ -94,7 +94,7 @@ fn test_init_command() {
 
 	let mut cmd = match Command::cargo_bin("wingchain") {
 		Ok(cmd) => cmd,
-		Err(e) => panic!(format!("should build first: {}", e)),
+		Err(e) => panic!(format!("Should build first: {}", e)),
 	};
 
 	let output = cmd.arg("init").arg("--home").arg(&home).output().unwrap();

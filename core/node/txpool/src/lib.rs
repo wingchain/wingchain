@@ -170,15 +170,15 @@ where
 		let witness = tx.witness.as_ref().expect("qed");
 
 		let confirmed_number = self.support.get_confirmed_number()?.expect("qed");
-		let until_gap = self.system_meta.until_gap;
-		let max_until = confirmed_number + until_gap;
+		let max_until_gap = self.system_meta.max_until_gap;
+		let max_until = confirmed_number + max_until_gap;
 
 		if witness.until > max_until {
-			return Err(errors::ErrorKind::InvalidUntil(tx_hash.clone()).into());
+			return Err(errors::ErrorKind::ExceedUntil(tx_hash.clone()).into());
 		}
 
 		if witness.until <= confirmed_number {
-			return Err(errors::ErrorKind::ExceedUntil(tx_hash.clone()).into());
+			return Err(errors::ErrorKind::InvalidUntil(tx_hash.clone()).into());
 		}
 
 		Ok(())

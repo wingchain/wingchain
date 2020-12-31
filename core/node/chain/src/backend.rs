@@ -20,7 +20,9 @@ use std::sync::Arc;
 use std::time::SystemTime;
 
 use atomic_refcell::AtomicRefCell;
+use futures::channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
 use log::{debug, info};
+use parking_lot::RwLock;
 
 use crypto::address::AddressImpl;
 use crypto::dsa::DsaImpl;
@@ -32,14 +34,18 @@ use node_executor_primitives::ContextEnv;
 use node_statedb::{StateDB, TrieRoot};
 use primitives::codec::{self, Decode, Encode};
 use primitives::errors::CommonResult;
-use primitives::types::CallResult;
+use primitives::types::{CallResult, ExecutionGap};
 use primitives::{
 	Address, Block, BlockNumber, Body, BuildBlockParams, BuildExecutionParams, Call, DBKey,
 	Execution, Hash, Header, Nonce, OpaqueCallResult, Receipt, SecretKey, Transaction,
 };
 
+use crate::errors::ErrorKind;
 use crate::genesis::build_genesis;
-use crate::{errors, Basic, ChainCommitBlockParams, ChainCommitExecutionParams, ChainConfig};
+use crate::{
+	errors, Basic, ChainCommitBlockParams, ChainCommitExecutionParams, ChainConfig,
+	ChainOutMessage, CommitBlockError, CommitBlockResult,
+};
 
 pub struct Backend {
 	db: Arc<DB>,
@@ -50,6 +56,9 @@ pub struct Backend {
 	executor: Executor,
 	basic: Arc<Basic>,
 	current_context_essence: AtomicRefCell<Option<ContextEssence>>,
+	message_tx: UnboundedSender<ChainOutMessage>,
+	message_rx: RwLock<Option<UnboundedReceiver<ChainOutMessage>>>,
+	commit_block_lock: RwLock<()>,
 }
 
 impl Backend {
@@ -79,6 +88,8 @@ impl Backend {
 
 		let current_context_essence = AtomicRefCell::new(None);
 
+		let (message_tx, message_rx) = unbounded();
+
 		let mut backend = Self {
 			db,
 			config,
@@ -88,6 +99,9 @@ impl Backend {
 			executor,
 			basic,
 			current_context_essence,
+			message_tx,
+			message_rx: RwLock::new(Some(message_rx)),
+			commit_block_lock: RwLock::new(()),
 		};
 
 		info!("Initializing backend: genesis_inited: {}", genesis_inited);
@@ -98,7 +112,7 @@ impl Backend {
 
 		let genesis_hash = backend
 			.get_block_hash(&0)?
-			.ok_or(errors::ErrorKind::Data("missing genesis block".to_string()))?;
+			.ok_or(errors::ErrorKind::Data("Missing genesis block".to_string()))?;
 
 		backend.executor.set_genesis_hash(genesis_hash);
 
@@ -174,14 +188,14 @@ impl Backend {
 		let block_hash = self
 			.get_block_hash(&confirmed_number)?
 			.ok_or(errors::ErrorKind::Data(format!(
-				"missing block hash: number: {}",
+				"Missing block hash: number: {}",
 				confirmed_number
 			)))?;
 
 		let header = self
 			.get_header(&block_hash)?
 			.ok_or(errors::ErrorKind::Data(format!(
-				"missing header: block_hash: {:?}",
+				"Missing header: block_hash: {:?}",
 				block_hash
 			)))?;
 
@@ -211,43 +225,46 @@ impl Backend {
 		)
 	}
 
+	/// Get the block body by block hash
+	pub fn get_body(&self, block_hash: &Hash) -> CommonResult<Option<Body>> {
+		let meta_txs: Vec<Hash> = match self.db.get_with(
+			node_db::columns::META_TXS,
+			&DBKey::from_slice(&block_hash.0),
+			|x| codec::decode(&x[..]),
+		)? {
+			Some(v) => v,
+			None => return Ok(None),
+		};
+
+		let payload_txs: Vec<Hash> = match self.db.get_with(
+			node_db::columns::PAYLOAD_TXS,
+			&DBKey::from_slice(&block_hash.0),
+			|x| codec::decode(&x[..]),
+		)? {
+			Some(v) => v,
+			None => return Ok(None),
+		};
+
+		Ok(Some(Body {
+			meta_txs,
+			payload_txs,
+		}))
+	}
+
 	/// Get the block by block hash
 	pub fn get_block(&self, block_hash: &Hash) -> CommonResult<Option<Block>> {
 		let header = match self.get_header(block_hash)? {
 			Some(header) => header,
 			None => return Ok(None),
 		};
-		let meta_txs: Vec<Hash> = self
-			.db
-			.get_with(
-				node_db::columns::META_TXS,
-				&DBKey::from_slice(&block_hash.0),
-				|x| codec::decode(&x[..]),
-			)?
+		let body = self
+			.get_body(block_hash)?
 			.ok_or(errors::ErrorKind::Data(format!(
-				"block missing meta_txs: block_hash: {:?}",
+				"Block missing body: block_hash: {:?}",
 				block_hash
 			)))?;
 
-		let payload_txs: Vec<Hash> = self
-			.db
-			.get_with(
-				node_db::columns::PAYLOAD_TXS,
-				&DBKey::from_slice(&block_hash.0),
-				|x| codec::decode(&x[..]),
-			)?
-			.ok_or(errors::ErrorKind::Data(format!(
-				"block missing meta_txs: block_hash: {:?}",
-				block_hash
-			)))?;
-
-		Ok(Some(Block {
-			header,
-			body: Body {
-				meta_txs,
-				payload_txs,
-			},
-		}))
+		Ok(Some(Block { header, body }))
 	}
 
 	/// Get the execution by block hash
@@ -293,14 +310,14 @@ impl Backend {
 		let header = self
 			.get_header(block_hash)?
 			.ok_or(errors::ErrorKind::Data(format!(
-				"unknown block hash: {}",
+				"Unknown block hash: {}",
 				block_hash
 			)))?;
 
 		let execution = self
 			.get_execution(block_hash)?
 			.ok_or(errors::ErrorKind::Data(format!(
-				"not execution block hash: {}",
+				"Not execution block hash: {}",
 				block_hash
 			)))?;
 
@@ -339,7 +356,7 @@ impl Backend {
 		let block_hash = self
 			.get_block_hash(block_number)?
 			.ok_or(errors::ErrorKind::Data(format!(
-				"unknown block number: {}",
+				"Unknown block number: {}",
 				block_number
 			)))?;
 		self.execute_call_with_block_hash(&block_hash, sender, module, method, params)
@@ -380,7 +397,7 @@ impl Backend {
 		let parent_hash = self
 			.get_block_hash(&parent_number)?
 			.ok_or(errors::ErrorKind::Data(format!(
-				"invalid block number: {}",
+				"Invalid block number: {}",
 				parent_number
 			)))?;
 		let env = ContextEnv { number, timestamp };
@@ -388,33 +405,29 @@ impl Backend {
 		let parent_header = self
 			.get_header(&parent_hash)?
 			.ok_or(errors::ErrorKind::Data(format!(
-				"invalid block hash: {}",
+				"Invalid block hash: {}",
 				parent_hash
 			)))?;
 
 		let meta_state_root = parent_header.meta_state_root.clone();
 
-		let execution_number =
-			self.get_execution_number()?
-				.ok_or(errors::ErrorKind::Data(format!(
-					"execution number not found"
-				)))?;
+		let execution_number = build_block_params.execution_number;
 
 		let execution_block_hash =
 			self.get_block_hash(&execution_number)?
 				.ok_or(errors::ErrorKind::Data(format!(
-					"invalid block number: {}",
+					"Invalid block number: {}",
 					execution_number
 				)))?;
 
 		let execution =
 			self.get_execution(&execution_block_hash)?
 				.ok_or(errors::ErrorKind::Data(format!(
-					"not execution block hash: {}",
+					"Not execution block hash: {}",
 					execution_block_hash
 				)))?;
 
-		let block_execution_gap = (number - execution_number) as i8;
+		let block_execution_gap = (number - execution_number) as ExecutionGap;
 		let block_execution = execution;
 
 		let context_essence = ContextEssence::new(
@@ -480,26 +493,59 @@ impl Backend {
 
 	/// Commit a block
 	/// this will persist the block into the db
-	pub fn commit_block(&self, commit_block_params: ChainCommitBlockParams) -> CommonResult<()> {
+	pub fn commit_block(
+		&self,
+		commit_block_params: ChainCommitBlockParams,
+	) -> CommonResult<CommitBlockResult> {
+		let _guard = self.commit_block_lock.write();
+
 		debug!("Commit block params: {:?}", commit_block_params);
+
+		let number = commit_block_params.header.number;
+		let block_hash = &commit_block_params.block_hash;
+		let parent_hash = &commit_block_params.header.parent_hash;
+
+		if self.get_header(block_hash)?.is_some() {
+			return Ok(Err(CommitBlockError::Duplicated));
+		}
+
+		let confirmed = {
+			let confirmed_number =
+				self.get_confirmed_number()?
+					.ok_or(errors::ErrorKind::Data(format!(
+						"Confirmed number not found"
+					)))?;
+			let block_hash =
+				self.get_block_hash(&confirmed_number)?
+					.ok_or(errors::ErrorKind::Data(format!(
+						"Invalid block number: {}",
+						confirmed_number
+					)))?;
+			(confirmed_number, block_hash)
+		};
+
+		if !(number == confirmed.0 + 1 && parent_hash == &confirmed.1) {
+			return Ok(Err(CommitBlockError::NotBest));
+		}
 
 		let mut transaction = DBTransaction::new();
 
-		let number = commit_block_params.header.number;
 		let block_hash = commit_block_params.block_hash.clone();
+		let meta_tx_count = commit_block_params.meta_txs.len();
+		let payload_tx_count = commit_block_params.payload_txs.len();
 
 		commit_block(&mut transaction, commit_block_params)?;
 
 		self.db.write(transaction)?;
 
 		info!(
-			"Block committed: block number: {}, block hash: {:?}",
-			number, block_hash
+			"Block committed: block number: {}, block hash: {:?}, meta({}), payload({})",
+			number, block_hash, meta_tx_count, payload_tx_count,
 		);
 
-		self.on_block_committed(number, block_hash)?;
+		self.on_block_committed(number, block_hash.clone())?;
 
-		Ok(())
+		Ok(Ok(()))
 	}
 
 	/// Build an execution
@@ -557,14 +603,15 @@ impl Backend {
 
 		let number = commit_execution_params.number;
 		let block_hash = commit_execution_params.block_hash.clone();
+		let payload_tx_count = commit_execution_params.payload_receipts.len();
 
 		commit_execution(&mut transaction, commit_execution_params)?;
 
 		self.db.write(transaction)?;
 
 		info!(
-			"Block execution: block number: {}, block hash: {:?}",
-			number, block_hash
+			"Execution committed: block number: {}, block hash: {:?}, payload({})",
+			number, block_hash, payload_tx_count,
 		);
 
 		self.on_execution_committed(number, block_hash)?;
@@ -572,13 +619,29 @@ impl Backend {
 		Ok(())
 	}
 
-	fn on_block_committed(&self, _number: u64, _block_hash: Hash) -> CommonResult<()> {
+	pub fn message_rx(&self) -> Option<UnboundedReceiver<ChainOutMessage>> {
+		self.message_rx.write().take()
+	}
+
+	fn on_block_committed(&self, number: u64, block_hash: Hash) -> CommonResult<()> {
 		self.update_current_context_essence()?;
+		self.message_tx
+			.unbounded_send(ChainOutMessage::BlockCommitted {
+				number,
+				hash: block_hash,
+			})
+			.map_err(|e| ErrorKind::Channel(Box::new(e)))?;
 		Ok(())
 	}
 
-	fn on_execution_committed(&self, _number: u64, _block_hash: Hash) -> CommonResult<()> {
+	fn on_execution_committed(&self, number: u64, block_hash: Hash) -> CommonResult<()> {
 		self.update_current_context_essence()?;
+		self.message_tx
+			.unbounded_send(ChainOutMessage::ExecutionCommitted {
+				number,
+				hash: block_hash,
+			})
+			.map_err(|e| ErrorKind::Channel(Box::new(e)))?;
 		Ok(())
 	}
 
@@ -586,36 +649,36 @@ impl Backend {
 		let confirmed_number =
 			self.get_confirmed_number()?
 				.ok_or(errors::ErrorKind::Data(format!(
-					"confirmed number not found"
+					"Confirmed number not found"
 				)))?;
 		let block_hash = self
 			.get_block_hash(&confirmed_number)?
 			.ok_or(errors::ErrorKind::Data(format!(
-				"invalid block number: {}",
+				"Invalid block number: {}",
 				confirmed_number
 			)))?;
 		let header = self
 			.get_header(&block_hash)?
 			.ok_or(errors::ErrorKind::Data(format!(
-				"invalid block hash: {}",
+				"Invalid block hash: {}",
 				confirmed_number
 			)))?;
 
 		let execution_number =
 			self.get_execution_number()?
 				.ok_or(errors::ErrorKind::Data(format!(
-					"execution number not found"
+					"Execution number not found"
 				)))?;
 		let execution_block_hash =
 			self.get_block_hash(&execution_number)?
 				.ok_or(errors::ErrorKind::Data(format!(
-					"invalid block number: {}",
+					"Invalid block number: {}",
 					execution_number
 				)))?;
 		let execution =
 			self.get_execution(&execution_block_hash)?
 				.ok_or(errors::ErrorKind::Data(format!(
-					"not execution block hash: {}",
+					"Not execution block hash: {}",
 					execution_block_hash
 				)))?;
 
@@ -623,7 +686,7 @@ impl Backend {
 		let timestamp = SystemTime::now()
 			.duration_since(SystemTime::UNIX_EPOCH)
 			.map(|timestamp| timestamp.as_millis() as u64)
-			.map_err(|_| errors::ErrorKind::Data(format!("timestamp error")))?;
+			.map_err(|_| errors::ErrorKind::Data(format!("Timestamp error")))?;
 
 		let meta_state_root = header.meta_state_root;
 		let payload_state_root = execution.payload_execution_state_root;
@@ -659,9 +722,9 @@ impl Backend {
 		let spec = match genesis_inited {
 			true => {
 				let spec = db.get(node_db::columns::GLOBAL, node_db::global_key::SPEC)?;
-				let spec = spec.ok_or(errors::ErrorKind::Spec("missing spec in db".to_string()))?;
+				let spec = spec.ok_or(errors::ErrorKind::Spec("Missing spec in db".to_string()))?;
 				let spec: String = codec::decode(&mut &spec[..])
-					.map_err(|_| errors::ErrorKind::Spec("serde error".to_string()))?;
+					.map_err(|_| errors::ErrorKind::Spec("Serde error".to_string()))?;
 				spec
 			}
 			false => {
@@ -670,13 +733,13 @@ impl Backend {
 					.join(main_base::CONFIG)
 					.join(main_base::SPEC_FILE);
 				let spec = fs::read_to_string(&spec_path).map_err(|_| {
-					errors::ErrorKind::Spec(format!("failed to read spec file: {:?}", spec_path))
+					errors::ErrorKind::Spec(format!("Failed to read spec file: {:?}", spec_path))
 				})?;
 				spec
 			}
 		};
 		let spec = toml::from_str(&spec)
-			.map_err(|e| errors::ErrorKind::Spec(format!("failed to parse spec file: {:?}", e)))?;
+			.map_err(|e| errors::ErrorKind::Spec(format!("Failed to parse spec file: {:?}", e)))?;
 
 		Ok((genesis_inited, db, spec))
 	}
@@ -690,10 +753,10 @@ impl Backend {
 			.join(main_base::CONFIG)
 			.join(main_base::SPEC_FILE);
 		let spec_str = fs::read_to_string(&spec_path).map_err(|_| {
-			errors::ErrorKind::Spec(format!("failed to read spec file: {:?}", spec_path))
+			errors::ErrorKind::Spec(format!("Failed to read spec file: {:?}", spec_path))
 		})?;
 		let spec: Spec = toml::from_str(&spec_str)
-			.map_err(|e| errors::ErrorKind::Spec(format!("failed to parse spec file: {:?}", e)))?;
+			.map_err(|e| errors::ErrorKind::Spec(format!("Failed to parse spec file: {:?}", e)))?;
 
 		// build genesis
 		let env = ContextEnv {
@@ -715,6 +778,7 @@ impl Backend {
 			timestamp,
 			meta_txs,
 			payload_txs,
+			execution_number,
 		} = build_genesis(&spec, &self.executor, &build_genesis_context)?;
 
 		// execute genesis
@@ -758,6 +822,8 @@ impl Backend {
 			.map(|x| x.tx_hash.clone())
 			.collect::<Vec<_>>();
 
+		let payload_execution_gap = (number - execution_number) as ExecutionGap;
+
 		let header = Header {
 			number,
 			timestamp,
@@ -766,7 +832,7 @@ impl Backend {
 			meta_state_root,
 			meta_receipts_root,
 			payload_txs_root,
-			payload_execution_gap: 1,
+			payload_execution_gap,
 			payload_execution_state_root: zero_hash.clone(),
 			payload_execution_receipts_root: zero_hash,
 		};

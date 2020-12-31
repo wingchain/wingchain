@@ -65,6 +65,7 @@ pub enum InMessage {
 	AddReservedPeer(PeerId),
 	RemoveReservedPeer(PeerId),
 	SetReservedOnly(bool),
+	DiscardPeer(PeerId),
 }
 
 pub struct PeerManager {
@@ -148,7 +149,7 @@ impl PeerManager {
 		{
 			InsertPeerResult::Inserted(peer_id) => {
 				trace!("Incoming peer inserted: {}", peer_id);
-				self.inactive.remove_peer(peer_id);
+				self.inactive.remove_peer(&peer_id);
 				self.send(OutMessage::Accept(incoming_id));
 			}
 			InsertPeerResult::Replaced { inserted, removed } => {
@@ -157,7 +158,7 @@ impl PeerManager {
 					inserted,
 					removed
 				);
-				self.inactive.remove_peer(inserted);
+				self.inactive.remove_peer(&inserted);
 				self.inactive.insert_peer(removed.clone());
 				self.send(OutMessage::Accept(incoming_id));
 				self.send(OutMessage::Drop(removed));
@@ -241,6 +242,16 @@ impl PeerManager {
 		}
 		self.activate();
 	}
+
+	fn on_discard_peer(&mut self, peer_id: PeerId) {
+		let is_active = self.active.contains(&peer_id);
+		self.active.remove_peer(&peer_id);
+		self.inactive.remove_peer(&peer_id);
+		if is_active {
+			self.send(OutMessage::Drop(peer_id));
+		}
+		self.activate();
+	}
 }
 
 impl Stream for PeerManager {
@@ -262,6 +273,7 @@ impl Stream for PeerManager {
 				InMessage::AddReservedPeer(peer_id) => self.on_add_reserved_peer(peer_id),
 				InMessage::RemoveReservedPeer(peer_id) => self.on_remove_reserved_peer(peer_id),
 				InMessage::SetReservedOnly(reserved) => self.on_set_reserved_only(reserved),
+				InMessage::DiscardPeer(peer_id) => self.on_discard_peer(peer_id),
 			}
 		}
 	}
@@ -410,7 +422,7 @@ impl InactivePeers {
 	fn insert_peer(&mut self, peer_id: PeerId) {
 		self.peers.insert(peer_id, ());
 	}
-	fn remove_peer(&mut self, peer_id: PeerId) {
-		self.peers.remove(&peer_id);
+	fn remove_peer(&mut self, peer_id: &PeerId) {
+		self.peers.remove(peer_id);
 	}
 }

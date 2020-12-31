@@ -82,7 +82,7 @@ pub trait Context: Clone {
 	fn meta_set(&self, key: &[u8], value: Option<DBValue>) -> ModuleResult<()>;
 	/// drain meta tx buffer
 	fn meta_drain_tx_buffer(&self) -> ModuleResult<Vec<(DBKey, Option<DBValue>)>>;
-	/// apply meter
+	/// apply meta
 	fn meta_apply(&self, items: Vec<(DBKey, Option<DBValue>)>) -> ModuleResult<()>;
 	/// get payload state
 	fn payload_get(&self, key: &[u8]) -> ModuleResult<Option<DBValue>>;

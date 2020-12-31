@@ -17,7 +17,8 @@ params = '''
 {
     "chain_id": "${CHAIN_ID}",
     "timestamp": "${TIME}",
-    "until_gap": 20
+    "max_until_gap": 20,
+    "max_execution_gap": 8
 }
 '''
 

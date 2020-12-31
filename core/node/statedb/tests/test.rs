@@ -102,7 +102,7 @@ fn test_statedb_512() {
 fn test_statedb_256_reopen() {
 	use tempfile::tempdir;
 
-	let path = tempdir().expect("could not create a temp dir");
+	let path = tempdir().expect("Could not create a temp dir");
 	let path = path.into_path();
 
 	let db = Arc::new(DB::open(&path).unwrap());
@@ -164,7 +164,7 @@ fn test_statedb_256_reopen() {
 fn test_statedb_for_hasher(hasher: HashImpl) {
 	use tempfile::tempdir;
 
-	let path = tempdir().expect("could not create a temp dir");
+	let path = tempdir().expect("Could not create a temp dir");
 	let path = path.into_path();
 
 	let db = Arc::new(DB::open(&path).unwrap());
@@ -287,7 +287,7 @@ mod build_dep_test {
 
 		assert!(
 			path.exists(),
-			"should build first to make exist: {:?}",
+			"Should build first to make exist: {:?}",
 			path
 		);
 

@@ -17,7 +17,7 @@
 
 use std::sync::Arc;
 
-use futures::channel::mpsc::{channel, Receiver, Sender};
+use futures::channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
 use log::{debug, warn};
 
 use primitives::errors::CommonResult;
@@ -25,7 +25,7 @@ use primitives::{BlockNumber, BuildExecutionParams, FullTransaction, Hash};
 
 use crate::backend::Backend;
 use crate::errors;
-use futures::{SinkExt, StreamExt};
+use futures::StreamExt;
 
 #[derive(Debug)]
 pub struct ExecuteTask {
@@ -40,12 +40,12 @@ pub struct ExecuteTask {
 pub struct ExecuteQueue {
 	#[allow(dead_code)]
 	backend: Arc<Backend>,
-	task_tx: Sender<ExecuteTask>,
+	task_tx: UnboundedSender<ExecuteTask>,
 }
 
 impl ExecuteQueue {
 	pub fn new(backend: Arc<Backend>) -> Self {
-		let (task_tx, task_rx) = channel(32);
+		let (task_tx, task_rx) = unbounded();
 
 		let execute_queue = Self {
 			backend: backend.clone(),
@@ -58,16 +58,16 @@ impl ExecuteQueue {
 	}
 
 	/// Insert a execute task into the queue
-	pub async fn insert_task(&self, task: ExecuteTask) -> CommonResult<()> {
-		let result = self.task_tx.clone().send(task).await;
+	pub fn insert_task(&self, task: ExecuteTask) -> CommonResult<()> {
+		let result = self.task_tx.clone().unbounded_send(task);
 		result
-			.map_err(|e| errors::ErrorKind::ExecuteQueue(format!("insert task error: {:?}", e)))?;
+			.map_err(|e| errors::ErrorKind::ExecuteQueue(format!("Insert task error: {:?}", e)))?;
 		Ok(())
 	}
 }
 
 /// A loop to process execute tasks
-async fn process_tasks(mut task_rx: Receiver<ExecuteTask>, backend: Arc<Backend>) {
+async fn process_tasks(mut task_rx: UnboundedReceiver<ExecuteTask>, backend: Arc<Backend>) {
 	loop {
 		let task = task_rx.next().await;
 		match task {

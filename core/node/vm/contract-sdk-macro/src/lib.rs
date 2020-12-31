@@ -252,7 +252,7 @@ pub fn contract(_attr: TokenStream, item: TokenStream) -> TokenStream {
 fn get_module_ident(impl_item: &ItemImpl) -> Ident {
 	match &*impl_item.self_ty {
 		Type::Path(type_path) => type_path.path.segments[0].ident.clone(),
-		_ => panic!("module ident not found"),
+		_ => panic!("Module ident not found"),
 	}
 }
 
@@ -294,7 +294,7 @@ fn get_module_methods_by_name(impl_item: &ItemImpl, name: &str) -> Vec<ModuleMet
 									{
 										match &nv.lit {
 											syn::Lit::Bool(value) => Some(value.value),
-											_ => panic!("payable should have a bool value"),
+											_ => panic!("Payable should have a bool value"),
 										}
 									}
 									_ => None,
@@ -369,14 +369,14 @@ fn get_method_params_ident(method: &ImplItemMethod) -> Ident {
 		let params_ident = if let Type::Path(path) = &*pat_type.ty {
 			path.path
 				.get_ident()
-				.expect("no params ident found")
+				.expect("No params ident found")
 				.clone()
 		} else {
-			panic!("no params type found")
+			panic!("No params type found")
 		};
 		params_ident
 	} else {
-		panic!("call method args should be (&self, params: Type)");
+		panic!("Call method args should be (&self, params: Type)");
 	}
 }
 

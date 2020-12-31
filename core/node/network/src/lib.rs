@@ -13,27 +13,28 @@
 // limitations under the License.
 
 use std::num::NonZeroUsize;
+use std::time::Duration;
 
 use futures::channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
 use futures::channel::oneshot;
-use futures_codec::BytesMut;
 use libp2p::core::connection::ConnectionLimits;
 use libp2p::core::transport::upgrade;
-use libp2p::core::{ConnectedPoint, Multiaddr};
-use libp2p::identity::Keypair;
+use libp2p::core::ConnectedPoint;
 use libp2p::swarm::{AddressScore, SwarmBuilder};
-use libp2p::{PeerId, Swarm};
-use linked_hash_map::LinkedHashMap;
+use libp2p::Swarm;
 use log::info;
+use parking_lot::RwLock;
+
 use node_peer_manager::{PeerManager, PeerManagerConfig};
 use primitives::errors::CommonResult;
+pub use {
+	crate::stream::NetworkState, futures_codec::BytesMut, libp2p::core::Multiaddr,
+	libp2p::identity::Keypair, libp2p::multiaddr::Protocol, libp2p::PeerId,
+	linked_hash_map::LinkedHashMap, node_peer_manager::InMessage as PMInMessage,
+};
 
 use crate::behaviour::{Behaviour, BehaviourConfig};
-
-pub use crate::stream::NetworkState;
 use crate::stream::{start, NetworkStream};
-pub use node_peer_manager::InMessage as PMInMessage;
-use std::time::Duration;
 
 mod behaviour;
 mod discovery;
@@ -83,6 +84,7 @@ pub enum NetworkOutMessage {
 		connected_point: ConnectedPoint,
 	},
 	Message {
+		peer_id: PeerId,
 		message: BytesMut,
 	},
 }
@@ -90,7 +92,7 @@ pub enum NetworkOutMessage {
 pub struct Network {
 	peer_manager_tx: UnboundedSender<PMInMessage>,
 	network_tx: UnboundedSender<NetworkInMessage>,
-	network_rx: Option<UnboundedReceiver<NetworkOutMessage>>,
+	network_rx: RwLock<Option<UnboundedReceiver<NetworkOutMessage>>>,
 }
 
 impl Network {
@@ -168,7 +170,7 @@ impl Network {
 		let network = Network {
 			peer_manager_tx,
 			network_tx: in_tx,
-			network_rx: Some(out_rx),
+			network_rx: RwLock::new(Some(out_rx)),
 		};
 
 		info!("Initializing network");
@@ -183,7 +185,7 @@ impl Network {
 		self.network_tx.clone()
 	}
 
-	pub fn network_rx(&mut self) -> Option<UnboundedReceiver<NetworkOutMessage>> {
-		self.network_rx.take()
+	pub fn network_rx(&self) -> Option<UnboundedReceiver<NetworkOutMessage>> {
+		self.network_rx.write().take()
 	}
 }

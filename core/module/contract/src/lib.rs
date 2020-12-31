@@ -623,32 +623,32 @@ impl<C: Context, U: Util> Module<C, U> {
 			max_stack_height: self
 				.max_stack_height
 				.get()?
-				.ok_or("unexpected none")?
+				.ok_or("Unexpected none")?
 				.unwrap_or(default_vm_config.max_stack_height),
 			initial_memory_pages: self
 				.initial_memory_pages
 				.get()?
-				.ok_or("unexpected none")?
+				.ok_or("Unexpected none")?
 				.unwrap_or(default_vm_config.initial_memory_pages),
 			max_memory_pages: self
 				.max_memory_pages
 				.get()?
-				.ok_or("unexpected none")?
+				.ok_or("Unexpected none")?
 				.unwrap_or(default_vm_config.max_memory_pages),
 			max_share_value_len: self
 				.max_share_value_len
 				.get()?
-				.ok_or("unexpected none")?
+				.ok_or("Unexpected none")?
 				.unwrap_or(default_vm_config.max_share_value_len),
 			max_share_size: self
 				.max_share_size
 				.get()?
-				.ok_or("unexpected none")?
+				.ok_or("Unexpected none")?
 				.unwrap_or(default_vm_config.max_share_size),
 			max_nest_depth: self
 				.max_nest_depth
 				.get()?
-				.ok_or("unexpected none")?
+				.ok_or("Unexpected none")?
 				.unwrap_or(default_vm_config.max_nest_depth),
 		};
 		Ok(vm_config)

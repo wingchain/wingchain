@@ -64,7 +64,7 @@ fn bench_statedb_get_with_getter_2(b: &mut Bencher) {
 fn prepare_statedb(records: usize) -> (StateDB, Vec<u8>) {
 	use tempfile::tempdir;
 
-	let path = tempdir().expect("could not create a temp dir");
+	let path = tempdir().expect("Could not create a temp dir");
 	let path = path.into_path();
 
 	let db = Arc::new(DB::open(&path).unwrap());
@@ -82,7 +82,7 @@ fn prepare_statedb(records: usize) -> (StateDB, Vec<u8>) {
 			(DBKey::from_slice(b"abc"), Some(vec![1u8; 1024])),
 			(DBKey::from_slice(b"abd"), Some(vec![1u8; 1024])),
 		],
-		_ => unimplemented!(),
+		_ => unreachable!(),
 	}
 	.into_iter()
 	.collect::<HashMap<_, _>>();

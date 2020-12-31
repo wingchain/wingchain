@@ -53,6 +53,7 @@ pub enum ProtocolOut {
 		connected_point: ConnectedPoint,
 	},
 	Message {
+		peer_id: PeerId,
 		message: BytesMut,
 	},
 }
@@ -877,7 +878,10 @@ impl NetworkBehaviour for Protocol {
 				debug!("Handler({}, {:?}) => Message", source, conn);
 				debug!("External <= Message({})", source);
 				self.events.push_back(NetworkBehaviourAction::GenerateEvent(
-					ProtocolOut::Message { message },
+					ProtocolOut::Message {
+						peer_id: source,
+						message,
+					},
 				));
 			}
 		}

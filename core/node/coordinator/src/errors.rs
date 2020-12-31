@@ -16,30 +16,17 @@ use std::error::Error;
 use std::fmt::Debug;
 
 use primitives::errors::{CommonError, CommonErrorKind, Display};
-use primitives::Hash;
 
 #[derive(Debug, Display)]
 pub enum ErrorKind {
-	#[display(fmt = "Duplicated tx: tx_hash: {:?}", _0)]
-	Duplicated(Hash),
-
-	#[display(fmt = "Invalid until: tx_hash: {:?}", _0)]
-	InvalidUntil(Hash),
-
-	#[display(fmt = "Time error")]
-	TimeError,
-
 	#[display(fmt = "Data error: {}", _0)]
 	Data(String),
-
-	#[display(fmt = "{}", _0)]
-	Other(String),
 }
 
 impl Error for ErrorKind {}
 
 impl From<ErrorKind> for CommonError {
 	fn from(error: ErrorKind) -> Self {
-		CommonError::new(CommonErrorKind::Consensus, Box::new(error))
+		CommonError::new(CommonErrorKind::Coordinator, Box::new(error))
 	}
 }

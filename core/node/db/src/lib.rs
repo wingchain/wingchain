@@ -140,7 +140,7 @@ impl DB {
 
 	fn get_cf(db: &RocksDB, col: u32) -> &ColumnFamily {
 		let col_name = columns::COLUMN_NAMES[col as usize];
-		let cf = db.cf_handle(col_name).expect("col name should exist");
+		let cf = db.cf_handle(col_name).expect("Col name should exist");
 		cf
 	}
 }

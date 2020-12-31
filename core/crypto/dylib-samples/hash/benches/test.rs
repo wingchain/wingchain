@@ -37,7 +37,7 @@ fn bench_hash_dylib(b: &mut Bencher) {
 
 	assert!(
 		path.exists(),
-		"should build first to make exist: {:?}",
+		"Should build first to make exist: {:?}",
 		path
 	);
 
@@ -63,7 +63,7 @@ fn bench_name_dylib(b: &mut Bencher) {
 
 	assert!(
 		path.exists(),
-		"should build --release first to make exist: {:?}",
+		"Should build --release first to make exist: {:?}",
 		path
 	);
 
@@ -86,7 +86,7 @@ fn bench_key_length_dylib(b: &mut Bencher) {
 
 	assert!(
 		path.exists(),
-		"should build --release first to make exist: {:?}",
+		"Should build --release first to make exist: {:?}",
 		path
 	);
 

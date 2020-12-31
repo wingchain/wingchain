@@ -12,36 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::HashSet;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use node_chain::{Basic, Chain, ChainCommitBlockParams, CommitBlockResult};
-use node_txpool::support::TxPoolSupport;
-use node_txpool::TxPool;
+use futures::channel::mpsc::UnboundedReceiver;
+
+use node_chain::{Chain, ChainCommitBlockParams, ChainOutMessage, CommitBlockResult};
 use primitives::codec::{Decode, Encode};
 use primitives::errors::CommonResult;
-use primitives::types::CallResult;
 use primitives::{
-	Address, BlockNumber, BuildBlockParams, FullTransaction, Hash, Header, Transaction,
+	Address, BlockNumber, Body, BuildBlockParams, CallResult, Hash, Header, Transaction,
 };
 
 #[async_trait]
-pub trait ConsensusSupport {
+pub trait CoordinatorSupport {
+	fn chain_rx(&self) -> Option<UnboundedReceiver<ChainOutMessage>>;
 	fn get_confirmed_number(&self) -> CommonResult<Option<BlockNumber>>;
 	fn get_execution_number(&self) -> CommonResult<Option<BlockNumber>>;
 	fn get_block_hash(&self, number: &BlockNumber) -> CommonResult<Option<Hash>>;
 	fn get_header(&self, block_hash: &Hash) -> CommonResult<Option<Header>>;
+	fn get_body(&self, block_hash: &Hash) -> CommonResult<Option<Body>>;
 	fn get_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Transaction>>;
-	fn execute_call_with_block_number<P: Encode, R: Decode>(
-		&self,
-		block_number: &BlockNumber,
-		sender: Option<&Address>,
-		module: String,
-		method: String,
-		params: P,
-	) -> CommonResult<CallResult<R>>;
-	fn is_meta_tx(&self, tx: &Transaction) -> CommonResult<bool>;
 	fn build_block(
 		&self,
 		build_block_params: BuildBlockParams,
@@ -50,33 +41,32 @@ pub trait ConsensusSupport {
 		&self,
 		commit_block_params: ChainCommitBlockParams,
 	) -> CommonResult<CommitBlockResult>;
-	fn get_transactions_in_txpool(&self) -> CommonResult<Vec<Arc<FullTransaction>>>;
-	fn remove_transactions_in_txpool(&self, tx_hash_set: &HashSet<Hash>) -> CommonResult<()>;
-	fn get_basic(&self) -> CommonResult<Arc<Basic>>;
+	fn hash_transaction(&self, tx: &Transaction) -> CommonResult<Hash>;
+	fn validate_transaction(&self, tx: &Transaction, witness_required: bool) -> CommonResult<()>;
+	fn execute_call_with_block_number<P: Encode, R: Decode>(
+		&self,
+		block_number: &BlockNumber,
+		sender: Option<&Address>,
+		module: String,
+		method: String,
+		params: P,
+	) -> CommonResult<CallResult<R>>;
 }
 
-pub struct DefaultConsensusSupport<TS>
-where
-	TS: TxPoolSupport,
-{
+pub struct DefaultCoordinatorSupport {
 	chain: Arc<Chain>,
-	txpool: Arc<TxPool<TS>>,
 }
 
-impl<TS> DefaultConsensusSupport<TS>
-where
-	TS: TxPoolSupport,
-{
-	pub fn new(chain: Arc<Chain>, txpool: Arc<TxPool<TS>>) -> Self {
-		Self { chain, txpool }
+impl DefaultCoordinatorSupport {
+	pub fn new(chain: Arc<Chain>) -> Self {
+		Self { chain }
 	}
 }
 
-#[async_trait]
-impl<TS> ConsensusSupport for DefaultConsensusSupport<TS>
-where
-	TS: TxPoolSupport + Send + Sync,
-{
+impl CoordinatorSupport for DefaultCoordinatorSupport {
+	fn chain_rx(&self) -> Option<UnboundedReceiver<ChainOutMessage>> {
+		self.chain.message_rx()
+	}
 	fn get_confirmed_number(&self) -> CommonResult<Option<BlockNumber>> {
 		self.chain.get_confirmed_number()
 	}
@@ -89,22 +79,11 @@ where
 	fn get_header(&self, block_hash: &Hash) -> CommonResult<Option<Header>> {
 		self.chain.get_header(block_hash)
 	}
+	fn get_body(&self, block_hash: &Hash) -> CommonResult<Option<Body>> {
+		self.chain.get_body(block_hash)
+	}
 	fn get_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Transaction>> {
 		self.chain.get_transaction(tx_hash)
-	}
-	fn execute_call_with_block_number<P: Encode, R: Decode>(
-		&self,
-		block_number: &BlockNumber,
-		sender: Option<&Address>,
-		module: String,
-		method: String,
-		params: P,
-	) -> CommonResult<CallResult<R>> {
-		self.chain
-			.execute_call_with_block_number(block_number, sender, module, method, params)
-	}
-	fn is_meta_tx(&self, tx: &Transaction) -> CommonResult<bool> {
-		self.chain.is_meta_tx(tx)
 	}
 	fn build_block(
 		&self,
@@ -118,14 +97,21 @@ where
 	) -> CommonResult<CommitBlockResult> {
 		self.chain.commit_block(commit_block_params)
 	}
-	fn get_transactions_in_txpool(&self) -> CommonResult<Vec<Arc<FullTransaction>>> {
-		let txs = (*self.txpool.get_queue().read()).clone();
-		Ok(txs)
+	fn hash_transaction(&self, tx: &Transaction) -> CommonResult<Hash> {
+		self.chain.hash_transaction(tx)
 	}
-	fn remove_transactions_in_txpool(&self, tx_hash_set: &HashSet<Hash>) -> CommonResult<()> {
-		self.txpool.remove(tx_hash_set)
+	fn validate_transaction(&self, tx: &Transaction, witness_required: bool) -> CommonResult<()> {
+		self.chain.validate_transaction(tx, witness_required)
 	}
-	fn get_basic(&self) -> CommonResult<Arc<Basic>> {
-		Ok(self.chain.get_basic())
+	fn execute_call_with_block_number<P: Encode, R: Decode>(
+		&self,
+		block_number: &BlockNumber,
+		sender: Option<&Address>,
+		module: String,
+		method: String,
+		params: P,
+	) -> CommonResult<CallResult<R>> {
+		self.chain
+			.execute_call_with_block_number(block_number, sender, module, method, params)
 	}
 }
