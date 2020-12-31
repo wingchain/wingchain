@@ -59,6 +59,9 @@ use primitives::errors::CommonResult;
 
 use crate::config::get_config;
 use crate::errors::ErrorKind;
+use node_coordinator::support::DefaultCoordinatorSupport;
+use node_coordinator::Coordinator;
+use tokio::time::Duration;
 
 mod config;
 pub mod errors;
@@ -66,6 +69,8 @@ pub mod errors;
 pub struct ServiceConfig {
 	/// Home path
 	pub home: PathBuf,
+	/// Agent version
+	pub agent_version: String,
 }
 
 pub struct Service {
@@ -79,6 +84,8 @@ pub struct Service {
 	api: Arc<Api<DefaultApiSupport<Chain>>>,
 	#[allow(dead_code)]
 	consensus: Arc<Poa<DefaultConsensusSupport<Chain>>>,
+	#[allow(dead_code)]
+	coordinator: Arc<Coordinator<DefaultCoordinatorSupport>>,
 }
 
 impl Service {
@@ -89,7 +96,7 @@ impl Service {
 		};
 		let chain = Arc::new(Chain::new(chain_config)?);
 
-		let global_config = get_config(&config.home, chain.get_basic())?;
+		let global_config = get_config(&config, chain.get_basic())?;
 
 		// init txpool
 		let txpool = Arc::new(TxPool::new(global_config.txpool, chain.clone())?);
@@ -103,12 +110,20 @@ impl Service {
 			Arc::new(DefaultConsensusSupport::new(chain.clone(), txpool.clone()));
 		let consensus = Arc::new(Poa::new(global_config.poa, consensus_support)?);
 
+		// init coordinator
+		let coordinator_support = Arc::new(DefaultCoordinatorSupport::new(chain.clone()));
+		let coordinator = Arc::new(Coordinator::new(
+			global_config.coordinator,
+			coordinator_support,
+		)?);
+
 		Ok(Self {
 			config,
 			chain,
 			txpool,
 			api,
 			consensus,
+			coordinator,
 		})
 	}
 }
@@ -121,8 +136,10 @@ pub fn start(config: ServiceConfig) -> CommonResult<()> {
 }
 
 async fn start_service(config: ServiceConfig) -> CommonResult<()> {
-	Service::new(config)?;
+	let service = Service::new(config)?;
 	wait_shutdown().await;
+	drop(service);
+	tokio::time::sleep(Duration::from_millis(50)).await;
 	Ok(())
 }
 

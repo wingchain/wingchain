@@ -29,8 +29,8 @@ use node_peer_manager::{PeerManager, PeerManagerConfig};
 use primitives::errors::CommonResult;
 pub use {
 	crate::stream::NetworkState, futures_codec::BytesMut, libp2p::core::Multiaddr,
-	libp2p::identity::Keypair, libp2p::multiaddr::Protocol, libp2p::PeerId,
-	linked_hash_map::LinkedHashMap, node_peer_manager::InMessage as PMInMessage,
+	libp2p::identity::ed25519, libp2p::identity::Keypair, libp2p::multiaddr::Protocol,
+	libp2p::PeerId, linked_hash_map::LinkedHashMap, node_peer_manager::InMessage as PMInMessage,
 };
 
 use crate::behaviour::{Behaviour, BehaviourConfig};
@@ -158,6 +158,9 @@ impl Network {
 
 		let (in_tx, in_rx) = unbounded();
 		let (out_tx, out_rx) = unbounded();
+
+		let peer_id = Swarm::local_peer_id(&swarm);
+		info!("Local peer id: {}", peer_id);
 
 		let stream = NetworkStream {
 			swarm,

@@ -163,7 +163,9 @@ impl PeerManager {
 				self.send(OutMessage::Accept(incoming_id));
 				self.send(OutMessage::Drop(removed));
 			}
-			InsertPeerResult::Exist(_peer_id) => {}
+			InsertPeerResult::Exist(_peer_id) => {
+				self.send(OutMessage::Accept(incoming_id));
+			}
 			InsertPeerResult::Full(peer_id) => {
 				self.inactive.insert_peer(peer_id);
 				self.send(OutMessage::Reject(incoming_id));

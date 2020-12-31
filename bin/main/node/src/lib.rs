@@ -25,6 +25,8 @@ use crate::cli::NodeOpt;
 pub mod cli;
 pub mod errors;
 
+const AGENT_NAME: &str = "Wingchain";
+
 pub fn run(opt: NodeOpt) -> CommonResult<()> {
 	let home = match opt.shared_params.home {
 		Some(home) => home,
@@ -35,7 +37,12 @@ pub fn run(opt: NodeOpt) -> CommonResult<()> {
 		return Err(errors::ErrorKind::NotInited(home).into());
 	}
 
-	let config = ServiceConfig { home };
+	let agent_version = format!("{}/{}", AGENT_NAME, env!("CARGO_PKG_VERSION"));
+
+	let config = ServiceConfig {
+		home,
+		agent_version,
+	};
 
 	service::start(config)?;
 

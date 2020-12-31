@@ -22,6 +22,7 @@ pub struct Config {
 	pub txpool: TxPoolConfig,
 	pub api: ApiConfig,
 	pub validator: ValidatorConfig,
+	pub network: NetworkConfig,
 }
 
 #[derive(Deserialize, Debug)]
@@ -39,5 +40,17 @@ pub struct ApiConfig {
 
 #[derive(Deserialize, Debug)]
 pub struct ValidatorConfig {
+	pub secret_key_file: PathBuf,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct NetworkConfig {
+	pub max_in_peers: u32,
+	pub max_out_peers: u32,
+	pub listen_addresses: Vec<String>,
+	pub external_addresses: Vec<String>,
+	pub bootnodes: Vec<String>,
+	pub reserved_nodes: Vec<String>,
+	pub reserved_only: bool,
 	pub secret_key_file: PathBuf,
 }
