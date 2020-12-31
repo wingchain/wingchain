@@ -24,4 +24,5 @@ node-txpool = { path = "../txpool" }
 node-api = { path = "../api" }
 node-consensus = { path = "../consensus" }
 node-consensus-poa = { path = "../consensus/poa" }
+node-coordinator = { path = "../coordinator" }
 main-base = { path = "../../../bin/main/base" }

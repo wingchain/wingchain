@@ -3195,6 +3195,7 @@ dependencies = [
  "node-chain",
  "node-consensus",
  "node-consensus-poa",
+ "node-coordinator",
  "node-db",
  "node-executor",
  "node-statedb",

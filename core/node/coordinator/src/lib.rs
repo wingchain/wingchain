@@ -14,7 +14,9 @@
 
 use std::sync::Arc;
 
-use node_network::{Network, NetworkConfig};
+pub use node_network::{
+	ed25519, Keypair, LinkedHashMap, Multiaddr, Network, NetworkConfig, PeerId, Protocol,
+};
 use primitives::codec::Encode;
 use primitives::errors::CommonResult;
 
