@@ -3006,6 +3006,7 @@ dependencies = [
  "num_cpus",
  "primitives",
  "serde",
+ "serde_json",
  "surf",
  "tempfile",
  "tokio 1.0.0",
