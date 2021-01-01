@@ -20,6 +20,7 @@ use crypto::address::AddressImpl;
 use crypto::dsa::DsaImpl;
 use node_api::support::DefaultApiSupport;
 use node_api::{Api, ApiConfig};
+use node_api_rt::tokio::time::Duration;
 use node_chain::module;
 use node_coordinator::{Keypair, LinkedHashMap, Multiaddr, PeerId, Protocol};
 use primitives::codec::Encode;
@@ -79,13 +80,18 @@ async fn test_api() {
 	let chain0 = &services[0].0;
 	let txpool0 = &services[0].1;
 	let poa0 = &services[0].2;
+	let coordinator0 = &services[0].3;
 	let config = ApiConfig {
 		rpc_addr: "0.0.0.0:3109".to_string(),
 		rpc_workers: 1,
 		rpc_maxconn: 100,
 	};
 
-	let support = Arc::new(DefaultApiSupport::new(chain0.clone(), txpool0.clone()));
+	let support = Arc::new(DefaultApiSupport::new(
+		chain0.clone(),
+		txpool0.clone(),
+		coordinator0.clone(),
+	));
 
 	let _api = Api::new(config, support);
 
@@ -180,6 +186,28 @@ async fn test_api() {
 	let expected = r#"{"jsonrpc":"2.0","result":"0x0900000000000000","id":1}"#;
 	info!("chain_executeCall response: {}", response);
 	assert_eq!(response, expected);
+
+	// wait chain1 to sync
+	let chain1 = &services[1].0;
+	loop {
+		{
+			let number = chain1.get_execution_number().unwrap().unwrap();
+			if number == 1 {
+				break;
+			}
+		}
+		futures_timer::Delay::new(Duration::from_millis(10)).await;
+	}
+
+	// network_getState
+	let request =
+		format!(r#"{{"jsonrpc": "2.0", "method": "network_getState", "params": [], "id": 1}}"#);
+	let response = call_rpc(&request).await;
+	info!("network_getState response: {}", response);
+	let response: serde_json::Value = serde_json::from_str(&response).unwrap();
+	let opened_peers = &response["result"]["opened_peers"];
+	let opened_peer_count = opened_peers.as_array().unwrap().len();
+	assert_eq!(opened_peer_count, 1);
 }
 
 async fn call_rpc(request: &str) -> String {

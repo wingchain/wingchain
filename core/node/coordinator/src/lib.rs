@@ -15,7 +15,8 @@
 use std::sync::Arc;
 
 pub use node_network::{
-	ed25519, Keypair, LinkedHashMap, Multiaddr, Network, NetworkConfig, PeerId, Protocol,
+	ed25519, Keypair, LinkedHashMap, Multiaddr, Network, NetworkConfig, NetworkInMessage,
+	NetworkState, OpenedPeer, PeerId, Protocol, UnopenedPeer,
 };
 use primitives::codec::Encode;
 use primitives::errors::CommonResult;
@@ -23,6 +24,7 @@ use primitives::errors::CommonResult;
 use crate::protocol::{Handshake, ProtocolMessage};
 use crate::stream::{start, CoordinatorStream};
 use crate::support::CoordinatorSupport;
+use futures::channel::mpsc::{unbounded, UnboundedSender};
 
 mod errors;
 mod protocol;
@@ -34,6 +36,10 @@ pub struct CoordinatorConfig {
 	pub network_config: NetworkConfig,
 }
 
+pub enum CoordinatorInMessage {
+	Network(NetworkInMessage),
+}
+
 pub struct Coordinator<S>
 where
 	S: CoordinatorSupport + Send + Sync + 'static,
@@ -42,6 +48,7 @@ where
 	network: Arc<Network>,
 	#[allow(dead_code)]
 	support: Arc<S>,
+	coordinator_tx: UnboundedSender<CoordinatorInMessage>,
 }
 
 impl<S> Coordinator<S>
@@ -69,12 +76,15 @@ where
 
 		let chain_rx = support.chain_rx().expect("Coordinator is the only taker");
 
+		let (in_tx, in_rx) = unbounded();
+
 		let stream = CoordinatorStream::new(
 			genesis_hash,
 			chain_rx,
 			peer_manager_tx,
 			network_tx,
 			network_rx,
+			in_rx,
 			support.clone(),
 		)?;
 
@@ -83,8 +93,13 @@ where
 		let coordinator = Coordinator {
 			network: Arc::new(network),
 			support,
+			coordinator_tx: in_tx,
 		};
 
 		Ok(coordinator)
+	}
+
+	pub fn coordinator_tx(&self) -> UnboundedSender<CoordinatorInMessage> {
+		self.coordinator_tx.clone()
 	}
 }

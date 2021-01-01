@@ -59,17 +59,17 @@ pub struct NetworkState {
 
 #[derive(Debug)]
 pub struct OpenedPeer {
-	peer_id: PeerId,
-	connected_point: ConnectedPoint,
-	known_addresses: HashSet<Multiaddr>,
-	agent_version: Option<String>,
-	latest_ping: Option<Duration>,
+	pub peer_id: PeerId,
+	pub connected_point: ConnectedPoint,
+	pub known_addresses: HashSet<Multiaddr>,
+	pub agent_version: Option<String>,
+	pub latest_ping: Option<Duration>,
 }
 
 #[derive(Debug)]
 pub struct UnopenedPeer {
-	peer_id: PeerId,
-	known_addresses: HashSet<Multiaddr>,
+	pub peer_id: PeerId,
+	pub known_addresses: HashSet<Multiaddr>,
 }
 
 impl NetworkStream {
