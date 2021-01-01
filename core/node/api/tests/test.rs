@@ -12,185 +12,182 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::fs;
-use std::path::PathBuf;
 use std::sync::Arc;
 
-use tempfile::tempdir;
+use log::info;
 
 use crypto::address::AddressImpl;
 use crypto::dsa::DsaImpl;
 use node_api::support::DefaultApiSupport;
 use node_api::{Api, ApiConfig};
-use node_chain::{module, Chain, ChainConfig};
-use node_txpool::support::DefaultTxPoolSupport;
-use node_txpool::{TxPool, TxPoolConfig};
-use primitives::{codec, Address, Transaction};
+use node_chain::module;
+use node_coordinator::{Keypair, LinkedHashMap, Multiaddr, PeerId, Protocol};
+use primitives::codec::Encode;
 use utils_test::test_accounts;
+
+mod base;
 
 #[tokio::test]
 async fn test_api() {
+	let _ = env_logger::try_init();
+
+	let dsa = Arc::new(DsaImpl::Ed25519);
+	let address = Arc::new(AddressImpl::Blake2b160);
+
+	let (account1, account2) = test_accounts(dsa, address);
+
+	let account1 = (account1.0, account1.1, account1.3);
+	let account2 = (account2.0, account2.1, account2.3);
+
+	let specs = vec![
+		(
+			account1.clone(),
+			account1.clone(),
+			Keypair::generate_ed25519(),
+			3509,
+		),
+		(
+			account1.clone(),
+			account2.clone(),
+			Keypair::generate_ed25519(),
+			3510,
+		),
+	];
+
+	let bootnodes = {
+		let bootnodes_spec = &specs[0];
+		let bootnodes = (
+			bootnodes_spec.2.public().into_peer_id(),
+			Multiaddr::empty()
+				.with(Protocol::Ip4([127, 0, 0, 1].into()))
+				.with(Protocol::Tcp(bootnodes_spec.3)),
+		);
+		let bootnodes =
+			std::iter::once((bootnodes, ())).collect::<LinkedHashMap<(PeerId, Multiaddr), ()>>();
+		bootnodes
+	};
+
+	for spec in &specs {
+		info!("peer id: {}", spec.2.public().into_peer_id());
+	}
+
+	let services = specs
+		.iter()
+		.map(|x| base::get_service(&x.0, &x.1, x.2.clone(), x.3, bootnodes.clone()))
+		.collect::<Vec<_>>();
+
+	let chain0 = &services[0].0;
+	let txpool0 = &services[0].1;
+	let poa0 = &services[0].2;
 	let config = ApiConfig {
 		rpc_addr: "0.0.0.0:3109".to_string(),
 		rpc_workers: 1,
 		rpc_maxconn: 100,
 	};
 
-	let dsa = Arc::new(DsaImpl::Ed25519);
-	let address = Arc::new(AddressImpl::Blake2b160);
-
-	let (account1, _account2) = test_accounts(dsa, address);
-
-	let chain = get_chain(&account1.3);
-
-	let txpool_config = TxPoolConfig {
-		pool_capacity: 32,
-		buffer_capacity: 32,
-	};
-
-	let txpool_support = Arc::new(DefaultTxPoolSupport::new(chain.clone()));
-	let txpool = Arc::new(TxPool::new(txpool_config, txpool_support).unwrap());
-
-	let support = Arc::new(DefaultApiSupport::new(chain.clone(), txpool));
+	let support = Arc::new(DefaultApiSupport::new(chain0.clone(), txpool0.clone()));
 
 	let _api = Api::new(config, support);
 
-	for (request, expected_response) in get_cases(&chain) {
-		let mut res = surf::post("http://127.0.0.1:3109")
-			.body(request)
-			.send()
-			.await
-			.unwrap();
-		let response = res.body_string().await.unwrap();
-		assert_eq!(response, expected_response);
-	}
-}
+	// chain_getBlockByNumber
+	let request = r#"{"jsonrpc": "2.0", "method": "chain_getBlockByNumber", "params": ["confirmed"], "id": 1}"#;
+	let response = call_rpc(request).await;
+	let expected = r#"{"jsonrpc":"2.0","result":{"hash":"0x958cec447c1a3a06135e91500b38554e9322c461558e8f5c881ac988e61b0d67","header":{"number":"0x0000000000000000","timestamp":"0x00000171c4eb7136","parent_hash":"0x0000000000000000000000000000000000000000000000000000000000000000","meta_txs_root":"0x02f1c52412bdfac67715f6558498a6cd920b81945b86b1ac2d547b7bc21289b4","meta_state_root":"0x338f35dc428e0fd0da8e885980e1e1e7aa39c1aeb9d992b5f2cb7c410224b925","meta_receipts_root":"0xe6c79028e5a20c619a5faa0dde88df82f378ca796a717570ef329de275ca1282","payload_txs_root":"0xcbe666e1dff8590ccfad41047bb4a6b8a682b52d1899e3f6a1c40c9eae65e363","payload_execution_gap":"0x00","payload_execution_state_root":"0x0000000000000000000000000000000000000000000000000000000000000000","payload_execution_receipts_root":"0x0000000000000000000000000000000000000000000000000000000000000000"},"body":{"meta_txs":["0x91b00eaf36abb6c89954e1ddc7933ed55373859de12bfdf24abc7c0abb327904","0x51fbd78a099eaad87565e79c617c112a7615ef7e8d41d24facdd90ebee720dda"],"payload_txs":["0x6745417d545c3e0f7d610cadfd1ee8d450a92e89fa74bb75777950a779f2aa94","0xa0faf0ea2a0c3bf69ae5c1124199c76336b36a159826e823a9fc1cd2d7b5ff55"]}},"id":1}"#;
+	info!("chain_getBlockByNumber response: {}", response);
+	assert_eq!(response, expected);
 
-fn get_cases(chain: &Arc<Chain>) -> Vec<(String, String)> {
-	let tx = get_tx(chain);
-
-	let tx_hash = chain.hash_transaction(&tx).unwrap();
-
-	let tx_hex = hex::encode(codec::encode(&tx).unwrap());
-
-	let tx_hash_hex = hex::encode(tx_hash.0);
-	let tx_public_key_hex = hex::encode(&tx.witness.clone().unwrap().public_key.0);
-	let tx_sig_hex = hex::encode(&tx.witness.clone().unwrap().signature.0);
-	let nonce_hex = hex::encode(tx.witness.clone().unwrap().nonce.to_be_bytes());
-	let until_hex = hex::encode(tx.witness.clone().unwrap().until.to_be_bytes());
-	let params_hex = hex::encode(&tx.call.params.0);
-
-	vec![
-        (
-            r#"{"jsonrpc": "2.0", "method": "chain_getBlockByNumber", "params": ["confirmed"], "id": 1}"#
-                .to_string(),
-            format!(r#"{{"jsonrpc":"2.0","result":{{"hash":"0x75f3a28816f3eab0079a734b4f275cd9a1c012d523c86203ee8bff08188f1318","header":{{"number":"0x0000000000000000","timestamp":"0x00000171c4eb7136","parent_hash":"0x0000000000000000000000000000000000000000000000000000000000000000","meta_txs_root":"0x41236f2124e3af09facc6908a9b2befbb3f0614b88e5cf580130cbe657043f29","meta_state_root":"0xaeda7d48b84f094ee0fd8e31aaf5b7d19995b613df19efccbb03e7ee5787ce12","meta_receipts_root":"0x46f793ce72de14b7eecae2b4524658a09cb9cbaa313cf9b27a0dd1274e7caf28","payload_txs_root":"0xc73b1740e53645a26e1926f9d910e560a99a601d14680deb6dc31eb26f321edc","payload_execution_gap":"0x00","payload_execution_state_root":"0x0000000000000000000000000000000000000000000000000000000000000000","payload_execution_receipts_root":"0x0000000000000000000000000000000000000000000000000000000000000000"}},"body":{{"meta_txs":["0x91b00eaf36abb6c89954e1ddc7933ed55373859de12bfdf24abc7c0abb327904"],"payload_txs":["0x6745417d545c3e0f7d610cadfd1ee8d450a92e89fa74bb75777950a779f2aa94"]}}}},"id":1}}"#, ),
-        ),
-        (
-            r#"{"jsonrpc": "2.0", "method": "chain_getTransactionByHash", "params": ["0x91b00eaf36abb6c89954e1ddc7933ed55373859de12bfdf24abc7c0abb327904"], "id": 1}"#
-                .to_string(),
-            r#"{"jsonrpc":"2.0","result":{"hash":"0x91b00eaf36abb6c89954e1ddc7933ed55373859de12bfdf24abc7c0abb327904","witness":null,"call":{"module":"system","method":"init","params":"0x28636861696e2d746573743671ebc471010000140000000000000008"}},"id":1}"#.to_string(),
-        ),
-        (
-            r#"{"jsonrpc": "2.0", "method": "chain_getRawTransactionByHash", "params": ["0x91b00eaf36abb6c89954e1ddc7933ed55373859de12bfdf24abc7c0abb327904"], "id": 1}"#.to_string(),
-            r#"{"jsonrpc":"2.0","result":"0x001873797374656d10696e69747028636861696e2d746573743671ebc471010000140000000000000008","id":1}"#.to_string(),
-        ),
-        (
-            r#"{"jsonrpc": "2.0", "method": "chain_getReceiptByHash", "params": ["0x91b00eaf36abb6c89954e1ddc7933ed55373859de12bfdf24abc7c0abb327904"], "id": 1}"#
-                .to_string(),
-            r#"{"jsonrpc":"2.0","result":{"hash":"0x91b00eaf36abb6c89954e1ddc7933ed55373859de12bfdf24abc7c0abb327904","block_number":"0x0000000000000000","events":[],"result":"0x0000"},"id":1}"#.to_string(),
-        ),
-        (
-            format!(r#"{{"jsonrpc": "2.0", "method": "chain_sendRawTransaction", "params": ["0x{}"], "id": 1}}"#, tx_hex),
-            format!(r#"{{"jsonrpc":"2.0","result":"0x{}","id":1}}"#, tx_hash_hex),
-        ),
-        (
-            format!(r#"{{"jsonrpc": "2.0", "method": "chain_getTransactionInTxPool", "params": ["{}"], "id": 1}}"#, tx_hash_hex),
-            format!(r#"{{"jsonrpc":"2.0","result":{{"hash":"0x{}","witness":{{"public_key":"0x{}","signature":"0x{}","nonce":"0x{}","until":"0x{}"}},"call":{{"module":"balance","method":"transfer","params":"0x{}"}}}},"id":1}}"#,
-                    tx_hash_hex, tx_public_key_hex, tx_sig_hex, nonce_hex, until_hex, params_hex),
-        ),
-        (
-            format!(r#"{{"jsonrpc": "2.0", "method": "chain_executeCall", "params": {{ "block_hash": "0x75f3a28816f3eab0079a734b4f275cd9a1c012d523c86203ee8bff08188f1318", "sender": "0xb4decd5a5f8f2ba708f8ced72eec89f44f3be96a", "call": {{ "module":"balance", "method":"get_balance", "params": "" }} }}, "id": 1}}"#),
-            format!(r#"{{"jsonrpc":"2.0","result":"0x0a00000000000000","id":1}}"#),
-        )
-    ]
-}
-
-fn get_tx(chain: &Arc<Chain>) -> Transaction {
-	let (account1, account2) = test_accounts(
-		chain.get_basic().dsa.clone(),
-		chain.get_basic().address.clone(),
-	);
-
-	let nonce = 0u32;
-	let until = 1u64;
-	let tx = chain
+	// chain_sendRawTransaction
+	let tx0 = chain0
 		.build_transaction(
-			Some((account1.0, nonce, until)),
+			Some((account1.0.clone(), 0, 10)),
 			"balance".to_string(),
 			"transfer".to_string(),
 			module::balance::TransferParams {
-				recipient: account2.3,
-				value: 2,
+				recipient: account2.2.clone(),
+				value: 1,
 			},
 		)
 		.unwrap();
-	chain.validate_transaction(&tx, true).unwrap();
-	tx
-}
+	let tx0_hash = chain0.hash_transaction(&tx0).unwrap();
+	let tx0_raw = hex::encode(tx0.encode());
 
-fn get_chain(address: &Address) -> Arc<Chain> {
-	let path = tempdir().expect("Could not create a temp dir");
-	let home = path.into_path();
-
-	init(&home, address);
-
-	let chain_config = ChainConfig { home };
-
-	let chain = Arc::new(Chain::new(chain_config).unwrap());
-
-	chain
-}
-
-fn init(home: &PathBuf, address: &Address) {
-	let config_path = home.join("config");
-
-	fs::create_dir_all(&config_path).unwrap();
-
-	let spec = format!(
-		r#"
-[basic]
-hash = "blake2b_256"
-dsa = "ed25519"
-address = "blake2b_160"
-
-[genesis]
-
-[[genesis.txs]]
-module = "system"
-method = "init"
-params = '''
-{{
-    "chain_id": "chain-test",
-    "timestamp": "2020-04-29T15:51:36.502+08:00",
-    "max_until_gap": 20,
-    "max_execution_gap": 8
-}}
-'''
-
-[[genesis.txs]]
-module = "balance"
-method = "init"
-params = '''
-{{
-    "endow": [
-    	["{}", 10]
-    ]
-}}
-'''
-	"#,
-		address
+	let request = format!(
+		r#"{{"jsonrpc": "2.0", "method": "chain_sendRawTransaction", "params": ["0x{}"], "id": 1}}"#,
+		tx0_raw
 	);
+	let response = call_rpc(&request).await;
+	let expected = format!(
+		r#"{{"jsonrpc":"2.0","result":"0x{}","id":1}}"#,
+		hex::encode(&tx0_hash.0)
+	);
+	info!("chain_sendRawTransaction response: {}", response);
+	assert_eq!(response, expected);
 
-	fs::write(config_path.join("spec.toml"), &spec).unwrap();
+	// chain_getTransactionInTxPool
+	base::wait_txpool(&txpool0, 1).await;
+
+	let request = format!(
+		r#"{{"jsonrpc": "2.0", "method": "chain_getTransactionInTxPool", "params": ["0x{}"], "id": 1}}"#,
+		hex::encode(&tx0_hash.0)
+	);
+	let response = call_rpc(&request).await;
+	let expected = r#"{"jsonrpc":"2.0","result":{"hash":"0x8ece9a3e63a339d854f762ff45e2b19ce110a43efe57d2499fc2c13749c1018f","witness":{"public_key":"0x8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","signature":"0xd3b0a9ccf9d20cf4dd03b756d8236e9ace3a632f55a65f9a8539ef7f23a4ec1da05be158e75c1d8b784e669000aac5780e5d8ef904641d630ecbc0fe9e4f9b09","nonce":"0x00000000","until":"0x000000000000000a"},"call":{"module":"balance","method":"transfer","params":"0x5043346e326b6721be4a070bfb2eb49127322fa5e40100000000000000"}},"id":1}"#;
+	info!("chain_getTransactionInTxPool response: {}", response);
+	assert_eq!(response, expected);
+
+	// generate block 1
+	poa0.generate_block().await.unwrap();
+	base::wait_block_execution(&chain0).await;
+
+	// chain_getTransactionByHash
+	let request = format!(
+		r#"{{"jsonrpc": "2.0", "method": "chain_getTransactionByHash", "params": ["0x{}"], "id": 1}}"#,
+		hex::encode(&tx0_hash.0)
+	);
+	let response = call_rpc(&request).await;
+	let expected = r#"{"jsonrpc":"2.0","result":{"hash":"0x8ece9a3e63a339d854f762ff45e2b19ce110a43efe57d2499fc2c13749c1018f","witness":{"public_key":"0x8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","signature":"0xd3b0a9ccf9d20cf4dd03b756d8236e9ace3a632f55a65f9a8539ef7f23a4ec1da05be158e75c1d8b784e669000aac5780e5d8ef904641d630ecbc0fe9e4f9b09","nonce":"0x00000000","until":"0x000000000000000a"},"call":{"module":"balance","method":"transfer","params":"0x5043346e326b6721be4a070bfb2eb49127322fa5e40100000000000000"}},"id":1}"#;
+	info!("chain_getTransactionByHash response: {}", response);
+	assert_eq!(response, expected);
+
+	// chain_getRawTransactionByHash
+	let request = format!(
+		r#"{{"jsonrpc": "2.0", "method": "chain_getRawTransactionByHash", "params": ["0x{}"], "id": 1}}"#,
+		hex::encode(&tx0_hash.0)
+	);
+	let response = call_rpc(&request).await;
+	let expected = format!(r#"{{"jsonrpc":"2.0","result":"0x{}","id":1}}"#, tx0_raw);
+	info!("chain_getRawTransactionByHash response: {}", response);
+	assert_eq!(response, expected);
+
+	// chain_getReceiptByHash
+	let request = format!(
+		r#"{{"jsonrpc": "2.0", "method": "chain_getReceiptByHash", "params": ["0x{}"], "id": 1}}"#,
+		hex::encode(&tx0_hash.0)
+	);
+	let response = call_rpc(&request).await;
+	let expected = r#"{"jsonrpc":"2.0","result":{"hash":"0x8ece9a3e63a339d854f762ff45e2b19ce110a43efe57d2499fc2c13749c1018f","block_number":"0x0000000000000001","events":[{"data":{"recipient":"43346e326b6721be4a070bfb2eb49127322fa5e4","sender":"b4decd5a5f8f2ba708f8ced72eec89f44f3be96a","value":1},"name":"Transferred"}],"result":{"Ok":"0x"}},"id":1}"#;
+	info!("chain_getReceiptByHash response: {}", response);
+	assert_eq!(response, expected);
+
+	// chain_executeCall
+	let block1_hash = chain0.get_block_hash(&1).unwrap().unwrap();
+	let request = format!(
+		r#"{{"jsonrpc": "2.0", "method": "chain_executeCall", "params": {{ "block_hash": "0x{}", "sender": "0x{}", "call": {{ "module":"balance", "method":"get_balance", "params": "" }} }}, "id": 1}}"#,
+		hex::encode(&block1_hash.0),
+		hex::encode(&account1.2 .0),
+	);
+	let response = call_rpc(&request).await;
+	let expected = r#"{"jsonrpc":"2.0","result":"0x0900000000000000","id":1}"#;
+	info!("chain_executeCall response: {}", response);
+	assert_eq!(response, expected);
+}
+
+async fn call_rpc(request: &str) -> String {
+	let mut res = surf::post("http://127.0.0.1:3109")
+		.body(request)
+		.send()
+		.await
+		.unwrap();
+	let response = res.body_string().await.unwrap();
+	response
 }

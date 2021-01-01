@@ -27,11 +27,11 @@ use tempfile::tempdir;
 use crypto::address::AddressImpl;
 use crypto::dsa::{DsaImpl, KeyPairImpl};
 use node_chain::{module, Chain, ChainConfig};
+use node_txpool::support::DefaultTxPoolSupport;
 use node_txpool::{TxPool, TxPoolConfig};
 use primitives::{Address, PublicKey, SecretKey, Transaction};
 use tokio::runtime::Runtime;
 use utils_test::test_accounts;
-use node_txpool::support::DefaultTxPoolSupport;
 
 const TXS_SIZE: usize = 2000;
 

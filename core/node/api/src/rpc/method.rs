@@ -308,8 +308,8 @@ pub struct Receipt {
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub hash: Option<Hash>,
 	pub block_number: Hex,
-	pub events: Vec<Hex>,
-	pub result: Hex,
+	pub events: Vec<serde_json::Value>,
+	pub result: Result<Hex, String>,
 }
 
 #[derive(Deserialize)]
@@ -392,8 +392,12 @@ impl From<primitives::Receipt> for Receipt {
 		Self {
 			hash: None,
 			block_number: receipt.block_number.into(),
-			events: receipt.events.into_iter().map(Into::into).collect(),
-			result: receipt.result.into(),
+			events: receipt
+				.events
+				.into_iter()
+				.map(|x| serde_json::from_slice(&x.0).unwrap_or(serde_json::Value::Null))
+				.collect(),
+			result: receipt.result.map(Into::into),
 		}
 	}
 }
@@ -443,15 +447,6 @@ impl From<primitives::Params> for Hex {
 impl From<primitives::Event> for Hex {
 	fn from(event: primitives::Event) -> Self {
 		Hex(format!("0x{}", hex::encode(event.0)))
-	}
-}
-
-impl From<primitives::OpaqueCallResult> for Hex {
-	fn from(result: primitives::OpaqueCallResult) -> Self {
-		Hex(format!(
-			"0x{}",
-			hex::encode(codec::encode(&result).expect("qed"))
-		))
 	}
 }
 

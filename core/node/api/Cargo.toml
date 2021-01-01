@@ -13,6 +13,7 @@ actix-rt = "1.1.0"
 jsonrpc-v2 = "0.5.3"
 hex = "0.4.2"
 serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 erased-serde = "0.3.11"
 num_cpus = "1.13.0"
 log = "0.4.8"
@@ -29,3 +30,9 @@ tempfile = "3.1.0"
 surf = "2.1.0"
 crypto = { path = "../../crypto" }
 utils-test = { path = "../../../utils/test" }
+futures-timer = "3.0.2"
+env_logger = "0.7.1"
+
+node-consensus = { path = "../consensus" }
+node-consensus-poa = { path = "../consensus/poa" }
+node-coordinator = { path = "../coordinator" }
