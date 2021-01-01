@@ -103,10 +103,6 @@ impl Service {
 		let txpool_support = Arc::new(DefaultTxPoolSupport::new(chain.clone()));
 		let txpool = Arc::new(TxPool::new(global_config.txpool, txpool_support)?);
 
-		// init api
-		let api_support = Arc::new(DefaultApiSupport::new(chain.clone(), txpool.clone()));
-		let api = Arc::new(Api::new(global_config.api, api_support));
-
 		// init consensus poa
 		let consensus_support =
 			Arc::new(DefaultConsensusSupport::new(chain.clone(), txpool.clone()));
@@ -118,6 +114,14 @@ impl Service {
 			global_config.coordinator,
 			coordinator_support,
 		)?);
+
+		// init api
+		let api_support = Arc::new(DefaultApiSupport::new(
+			chain.clone(),
+			txpool.clone(),
+			coordinator.clone(),
+		));
+		let api = Arc::new(Api::new(global_config.api, api_support));
 
 		Ok(Self {
 			config,

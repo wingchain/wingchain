@@ -15,6 +15,7 @@
 use std::convert::{TryFrom, TryInto};
 use std::sync::Arc;
 
+use futures::channel::oneshot;
 use jsonrpc_v2::{Data, ErrorLike, Params};
 use serde::{Deserialize, Serialize};
 
@@ -23,7 +24,10 @@ use primitives::errors::Display;
 use primitives::errors::{CommonError, CommonResult};
 
 use crate::errors;
+use crate::errors::ErrorKind;
 use crate::support::ApiSupport;
+use node_coordinator::{CoordinatorInMessage, NetworkInMessage};
+use std::collections::HashSet;
 
 pub async fn chain_get_header_by_number<S: ApiSupport>(
 	data: Data<Arc<S>>,
@@ -228,6 +232,24 @@ pub async fn chain_execute_call<S: ApiSupport>(
 	Ok(result)
 }
 
+pub async fn network_get_state<S: ApiSupport>(
+	data: Data<Arc<S>>,
+	Params(_request): Params<EmptyRequest>,
+) -> CustomResult<NetworkState> {
+	let co_tx = data.0.coordinator_tx().await?;
+	let (tx, rx) = oneshot::channel();
+	co_tx
+		.unbounded_send(CoordinatorInMessage::Network(
+			NetworkInMessage::GetNetworkState { tx },
+		))
+		.map_err(|e| CommonError::from(ErrorKind::CallError(format!("{}", e))))?;
+	let network_state = rx
+		.await
+		.map_err(|e| CommonError::from(ErrorKind::CallError(format!("{}", e))))?;
+	let network_state = network_state.into();
+	Ok(network_state)
+}
+
 /// Number input: number, hex or tag (best, execution)
 #[derive(Deserialize)]
 pub struct BlockNumber(String);
@@ -317,6 +339,82 @@ pub struct ExecuteTransactionRequest {
 	pub block_hash: Hash,
 	pub sender: Option<Address>,
 	pub call: Call,
+}
+
+#[derive(Deserialize)]
+pub struct EmptyRequest {}
+
+#[derive(Serialize)]
+pub struct NetworkState {
+	pub peer_id: String,
+	pub listened_addresses: HashSet<String>,
+	pub external_addresses: HashSet<String>,
+	pub opened_peers: Vec<OpenedPeer>,
+	pub unopened_peers: Vec<UnopenedPeer>,
+}
+
+#[derive(Serialize)]
+pub struct OpenedPeer {
+	peer_id: String,
+	connected_point: String,
+	known_addresses: HashSet<String>,
+	agent_version: Option<String>,
+	latest_ping: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct UnopenedPeer {
+	peer_id: String,
+	known_addresses: HashSet<String>,
+}
+
+impl From<node_coordinator::NetworkState> for NetworkState {
+	fn from(v: node_coordinator::NetworkState) -> Self {
+		Self {
+			peer_id: v.peer_id.to_string(),
+			listened_addresses: v
+				.listened_addresses
+				.into_iter()
+				.map(|v| v.to_string())
+				.collect(),
+			external_addresses: v
+				.external_addresses
+				.into_iter()
+				.map(|v| v.to_string())
+				.collect(),
+			opened_peers: v.opened_peers.into_iter().map(Into::into).collect(),
+			unopened_peers: v.unopened_peers.into_iter().map(Into::into).collect(),
+		}
+	}
+}
+
+impl From<node_coordinator::OpenedPeer> for OpenedPeer {
+	fn from(v: node_coordinator::OpenedPeer) -> Self {
+		Self {
+			peer_id: v.peer_id.to_string(),
+			connected_point: format!("{:?}", v.connected_point),
+			known_addresses: v
+				.known_addresses
+				.into_iter()
+				.map(|v| v.to_string())
+				.collect(),
+			agent_version: v.agent_version,
+			latest_ping: v.latest_ping.map(|x| format!("{:?}", x)),
+		}
+	}
+}
+
+impl From<node_coordinator::UnopenedPeer> for UnopenedPeer {
+	fn from(v: node_coordinator::UnopenedPeer) -> Self {
+		Self {
+			peer_id: v.peer_id.to_string(),
+			known_addresses: v
+				.known_addresses
+				.into_iter()
+				.map(|v| v.to_string())
+				.collect(),
+		}
+	}
 }
 
 impl From<primitives::Header> for Header {

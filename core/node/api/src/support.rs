@@ -15,7 +15,10 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use futures::channel::mpsc::UnboundedSender;
 use node_chain::Chain;
+use node_coordinator::support::DefaultCoordinatorSupport;
+use node_coordinator::{Coordinator, CoordinatorInMessage};
 use node_txpool::support::DefaultTxPoolSupport;
 use node_txpool::TxPool;
 use primitives::errors::CommonResult;
@@ -42,16 +45,26 @@ pub trait ApiSupport {
 		sender: Option<&Address>,
 		call: &Call,
 	) -> CommonResult<OpaqueCallResult>;
+	async fn coordinator_tx(&self) -> CommonResult<UnboundedSender<CoordinatorInMessage>>;
 }
 
 pub struct DefaultApiSupport {
 	chain: Arc<Chain>,
 	txpool: Arc<TxPool<DefaultTxPoolSupport>>,
+	coordinator: Arc<Coordinator<DefaultCoordinatorSupport>>,
 }
 
 impl DefaultApiSupport {
-	pub fn new(chain: Arc<Chain>, txpool: Arc<TxPool<DefaultTxPoolSupport>>) -> Self {
-		Self { chain, txpool }
+	pub fn new(
+		chain: Arc<Chain>,
+		txpool: Arc<TxPool<DefaultTxPoolSupport>>,
+		coordinator: Arc<Coordinator<DefaultCoordinatorSupport>>,
+	) -> Self {
+		Self {
+			chain,
+			txpool,
+			coordinator,
+		}
 	}
 }
 
@@ -101,5 +114,9 @@ impl ApiSupport for DefaultApiSupport {
 		call: &Call,
 	) -> CommonResult<OpaqueCallResult> {
 		self.chain.execute_call(block_hash, sender, call)
+	}
+
+	async fn coordinator_tx(&self) -> CommonResult<UnboundedSender<CoordinatorInMessage>> {
+		Ok(self.coordinator.coordinator_tx())
 	}
 }

@@ -27,12 +27,12 @@ use primitives::codec::Decode;
 use primitives::errors::CommonResult;
 use primitives::{BlockNumber, Body, BuildBlockParams, FullTransaction, Hash, Header, Transaction};
 
-use crate::errors;
 use crate::protocol::{
 	BlockAnnounce, BlockData, BlockRequest, BlockResponse, BodyData, ProtocolMessage,
 };
 use crate::support::CoordinatorSupport;
 use crate::sync::ChainSync;
+use crate::{errors, CoordinatorInMessage};
 
 pub struct CoordinatorStream<S>
 where
@@ -40,6 +40,7 @@ where
 {
 	chain_rx: UnboundedReceiver<ChainOutMessage>,
 	network_rx: UnboundedReceiver<NetworkOutMessage>,
+	in_rx: UnboundedReceiver<CoordinatorInMessage>,
 	sync: ChainSync<S>,
 	support: Arc<StreamSupport<S>>,
 }
@@ -54,6 +55,7 @@ where
 		peer_manager_tx: UnboundedSender<PMInMessage>,
 		network_tx: UnboundedSender<NetworkInMessage>,
 		network_rx: UnboundedReceiver<NetworkOutMessage>,
+		in_rx: UnboundedReceiver<CoordinatorInMessage>,
 		support: Arc<S>,
 	) -> CommonResult<Self> {
 		let support = Arc::new(StreamSupport::new(
@@ -68,6 +70,7 @@ where
 		let stream = Self {
 			chain_rx,
 			network_rx,
+			in_rx,
 			support,
 			sync,
 		};
@@ -93,6 +96,13 @@ where
 			NetworkOutMessage::ProtocolClose { peer_id, .. } => self.on_protocol_close(peer_id),
 			NetworkOutMessage::Message { peer_id, message } => self.on_message(peer_id, message),
 		}
+	}
+
+	fn on_in_message(&mut self, message: CoordinatorInMessage) -> CommonResult<()> {
+		match message {
+			CoordinatorInMessage::Network(message) => self.support.network_send_message(message),
+		}
+		Ok(())
 	}
 }
 
@@ -635,6 +645,14 @@ where
 				};
 				stream.on_network_message(network_message)
 					.unwrap_or_else(|e| error!("Coordinator handle network message error: {}", e));
+			}
+			in_message = stream.in_rx.next() => {
+				let in_message = match in_message {
+					Some(v) => v,
+					None => return,
+				};
+				stream.on_in_message(in_message)
+					.unwrap_or_else(|e| error!("Coordinator handle in message error: {}", e));
 			}
 		}
 	}
