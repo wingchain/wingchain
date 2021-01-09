@@ -19,9 +19,9 @@ use futures::channel::oneshot;
 use jsonrpc_v2::{Data, ErrorLike, Params};
 use serde::{Deserialize, Serialize};
 
-use primitives::codec;
 use primitives::errors::Display;
 use primitives::errors::{CommonError, CommonResult};
+use primitives::{codec, SecretKey};
 
 use crate::errors;
 use crate::errors::ErrorKind;
@@ -232,6 +232,23 @@ pub async fn chain_execute_call<S: ApiSupport>(
 	Ok(result)
 }
 
+pub async fn build_transaction<S: ApiSupport>(
+	data: Data<Arc<S>>,
+	Params(request): Params<BuildTransactionRequest>,
+) -> CustomResult<Hex> {
+	let witness = match request.witness {
+		Some((secret_key, nonce, until)) => {
+			let secret_key: Vec<u8> = secret_key.try_into()?;
+			Some((SecretKey(secret_key), nonce.try_into()?, until.try_into()?))
+		}
+		None => None,
+	};
+	let call: primitives::Call = request.call.try_into()?;
+	let result = data.build_transaction(witness, call).await?;
+	let result = codec::encode(&result)?.into();
+	Ok(result)
+}
+
 pub async fn network_get_state<S: ApiSupport>(
 	data: Data<Arc<S>>,
 	Params(_request): Params<EmptyRequest>,
@@ -262,7 +279,7 @@ pub struct Hash(String);
 #[derive(Serialize, Deserialize)]
 pub struct Address(String);
 
-/// Hex format for number, public key, signature, params
+/// Hex format for number, private key, public key, signature, params
 #[derive(Serialize, Deserialize)]
 pub struct Hex(String);
 
@@ -338,6 +355,12 @@ pub struct Receipt {
 pub struct ExecuteTransactionRequest {
 	pub block_hash: Hash,
 	pub sender: Option<Address>,
+	pub call: Call,
+}
+
+#[derive(Deserialize)]
+pub struct BuildTransactionRequest {
+	pub witness: Option<(Hex, Hex, Hex)>,
 	pub call: Call,
 }
 
@@ -584,6 +607,46 @@ impl TryInto<Vec<u8>> for Hex {
 		let hex = hex::decode(hex)
 			.map_err(|_| errors::ErrorKind::InvalidParams(format!("Invalid hex: {}", hex)))?;
 		Ok(hex)
+	}
+}
+
+impl TryInto<u64> for Hex {
+	type Error = CommonError;
+	fn try_into(self) -> Result<u64, Self::Error> {
+		let number = self.0;
+		let number = if number.starts_with("0x") {
+			let hex = number.trim_start_matches("0x");
+			let number = u64::from_str_radix(hex, 16).map_err(|_| {
+				errors::ErrorKind::InvalidParams(format!("Invalid hex: {}", number))
+			})?;
+			number
+		} else {
+			let number = number.parse::<u64>().map_err(|_| {
+				errors::ErrorKind::InvalidParams(format!("Invalid number: {}", number))
+			})?;
+			number
+		};
+		Ok(number)
+	}
+}
+
+impl TryInto<u32> for Hex {
+	type Error = CommonError;
+	fn try_into(self) -> Result<u32, Self::Error> {
+		let number = self.0;
+		let number = if number.starts_with("0x") {
+			let hex = number.trim_start_matches("0x");
+			let number = u32::from_str_radix(hex, 16).map_err(|_| {
+				errors::ErrorKind::InvalidParams(format!("Invalid hex: {}", number))
+			})?;
+			number
+		} else {
+			let number = number.parse::<u32>().map_err(|_| {
+				errors::ErrorKind::InvalidParams(format!("Invalid number: {}", number))
+			})?;
+			number
+		};
+		Ok(number)
 	}
 }
 

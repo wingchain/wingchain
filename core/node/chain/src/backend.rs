@@ -116,6 +116,8 @@ impl Backend {
 
 		backend.executor.set_genesis_hash(genesis_hash);
 
+		backend.update_current_context_essence()?;
+
 		Ok(backend)
 	}
 
