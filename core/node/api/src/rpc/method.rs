@@ -641,7 +641,7 @@ type BoxedSerialize = Box<dyn erased_serde::Serialize + Send>;
 
 impl ErrorLike for CustomError {
 	fn code(&self) -> i64 {
-		32000
+		-32000
 	}
 
 	fn message(&self) -> String {
