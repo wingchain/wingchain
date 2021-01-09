@@ -43,14 +43,14 @@ async fn test_poa_contract_token_read() {
         chain
             .build_transaction(
                 Some((account1.0.clone(), 0, 10)),
-                "contract".to_string(),
+				chain.build_call("contract".to_string(),
                 "create".to_string(),
                 module::contract::CreateParams {
                     code: ori_code.clone(),
                     init_pay_value: 0,
                     init_method: "init".to_string(),
                     init_params: r#"{"name":"Bitcoin","symbol":"BTC","decimals":8,"total_supply":2100000000000000}"#.as_bytes().to_vec(),
-                },
+                }).unwrap(),
             )
             .unwrap(),
     )
@@ -190,14 +190,14 @@ async fn test_poa_contract_token_transfer() {
         chain
             .build_transaction(
                 Some((account1.0.clone(), 0, 10)),
-                "contract".to_string(),
+				chain.build_call("contract".to_string(),
                 "create".to_string(),
                 module::contract::CreateParams {
                     code: ori_code.clone(),
                     init_pay_value: 0,
                     init_method: "init".to_string(),
                     init_params: r#"{"name":"Bitcoin","symbol":"BTC","decimals":8,"total_supply":2100000000000000}"#.as_bytes().to_vec(),
-                },
+                }).unwrap(),
             )
             .unwrap(),
     )
@@ -219,19 +219,23 @@ async fn test_poa_contract_token_transfer() {
 		chain
 			.build_transaction(
 				Some((account1.0.clone(), 0, 10)),
-				"contract".to_string(),
-				"execute".to_string(),
-				module::contract::ExecuteParams {
-					contract_address: contract_address.clone(),
-					pay_value: 0,
-					method: "transfer".to_string(),
-					params: format!(
-						r#"{{"recipient":"{}","value":100000000000000}}"#,
-						Address((account2.3).0.clone())
+				chain
+					.build_call(
+						"contract".to_string(),
+						"execute".to_string(),
+						module::contract::ExecuteParams {
+							contract_address: contract_address.clone(),
+							pay_value: 0,
+							method: "transfer".to_string(),
+							params: format!(
+								r#"{{"recipient":"{}","value":100000000000000}}"#,
+								Address((account2.3).0.clone())
+							)
+							.as_bytes()
+							.to_vec(),
+						},
 					)
-					.as_bytes()
-					.to_vec(),
-				},
+					.unwrap(),
 			)
 			.unwrap(),
 	)
@@ -308,14 +312,14 @@ async fn test_poa_contract_token_transfer_from() {
         chain
             .build_transaction(
                 Some((account1.0.clone(), 0, 10)),
-                "contract".to_string(),
+				chain.build_call("contract".to_string(),
                 "create".to_string(),
                 module::contract::CreateParams {
                     code: ori_code.clone(),
                     init_pay_value: 0,
                     init_method: "init".to_string(),
                     init_params: r#"{"name":"Bitcoin","symbol":"BTC","decimals":8,"total_supply":2100000000000000}"#.as_bytes().to_vec(),
-                },
+                }).unwrap(),
             )
             .unwrap(),
     )
@@ -337,19 +341,23 @@ async fn test_poa_contract_token_transfer_from() {
 		chain
 			.build_transaction(
 				Some((account1.0.clone(), 0, 10)),
-				"contract".to_string(),
-				"execute".to_string(),
-				module::contract::ExecuteParams {
-					contract_address: contract_address.clone(),
-					pay_value: 0,
-					method: "approve".to_string(),
-					params: format!(
-						r#"{{"spender":"{}","value":100000000000000}}"#,
-						Address((account2.3).0.clone())
+				chain
+					.build_call(
+						"contract".to_string(),
+						"execute".to_string(),
+						module::contract::ExecuteParams {
+							contract_address: contract_address.clone(),
+							pay_value: 0,
+							method: "approve".to_string(),
+							params: format!(
+								r#"{{"spender":"{}","value":100000000000000}}"#,
+								Address((account2.3).0.clone())
+							)
+							.as_bytes()
+							.to_vec(),
+						},
 					)
-					.as_bytes()
-					.to_vec(),
-				},
+					.unwrap(),
 			)
 			.unwrap(),
 	)
@@ -392,20 +400,24 @@ async fn test_poa_contract_token_transfer_from() {
 		chain
 			.build_transaction(
 				Some((account2.0.clone(), 0, 10)),
-				"contract".to_string(),
-				"execute".to_string(),
-				module::contract::ExecuteParams {
-					contract_address: contract_address.clone(),
-					pay_value: 0,
-					method: "transfer_from".to_string(),
-					params: format!(
-						r#"{{"sender":"{}","recipient":"{}","value":100000000}}"#,
-						Address((account1.3).0.clone()),
-						Address((account2.3).0.clone())
+				chain
+					.build_call(
+						"contract".to_string(),
+						"execute".to_string(),
+						module::contract::ExecuteParams {
+							contract_address: contract_address.clone(),
+							pay_value: 0,
+							method: "transfer_from".to_string(),
+							params: format!(
+								r#"{{"sender":"{}","recipient":"{}","value":100000000}}"#,
+								Address((account1.3).0.clone()),
+								Address((account2.3).0.clone())
+							)
+							.as_bytes()
+							.to_vec(),
+						},
 					)
-					.as_bytes()
-					.to_vec(),
-				},
+					.unwrap(),
 			)
 			.unwrap(),
 	)
@@ -529,14 +541,14 @@ async fn test_poa_contract_build_tx_create() {
 	let tx = chain
         .build_transaction(
             Some((account1.0.clone(), nonce, until)),
-            "contract".to_string(),
+			chain.build_call("contract".to_string(),
             "create".to_string(),
             module::contract::CreateParams {
                 code: ori_code.clone(),
                 init_pay_value: 0,
                 init_method: "init".to_string(),
                 init_params: r#"{"name":"Bitcoin","symbol":"BTC","decimals":8,"total_supply":2100000000000000}"#.as_bytes().to_vec(),
-            },
+            }).unwrap(),
         ).unwrap();
 	let tx = tx.encode();
 	let tx = hex::encode(tx);
@@ -571,16 +583,20 @@ async fn test_poa_contract_build_call_balance() {
 	let tx = chain
 		.build_transaction(
 			Some((account1.0.clone(), 0, 0)),
-			"contract".to_string(),
-			"execute".to_string(),
-			module::contract::ExecuteParams {
-				contract_address,
-				method: "balance".to_string(),
-				params: format!(r#"{{"address":"{}"}}"#, Address((account1.3).0.clone()))
-					.as_bytes()
-					.to_vec(),
-				pay_value: 0,
-			},
+			chain
+				.build_call(
+					"contract".to_string(),
+					"execute".to_string(),
+					module::contract::ExecuteParams {
+						contract_address,
+						method: "balance".to_string(),
+						params: format!(r#"{{"address":"{}"}}"#, Address((account1.3).0.clone()))
+							.as_bytes()
+							.to_vec(),
+						pay_value: 0,
+					},
+				)
+				.unwrap(),
 		)
 		.unwrap();
 

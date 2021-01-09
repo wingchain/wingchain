@@ -18,121 +18,120 @@ use async_trait::async_trait;
 use futures::channel::mpsc::UnboundedSender;
 
 use node_chain::Chain;
-use node_coordinator::{Coordinator, CoordinatorInMessage};
 use node_coordinator::support::DefaultCoordinatorSupport;
+use node_coordinator::{Coordinator, CoordinatorInMessage};
 use node_txpool::support::DefaultTxPoolSupport;
 use node_txpool::TxPool;
-use primitives::{Address, Block, BlockNumber, Call, Hash, Header, Nonce, OpaqueCallResult, Params, Receipt, SecretKey, Transaction};
 use primitives::errors::CommonResult;
+use primitives::{
+	Address, Block, BlockNumber, Call, Hash, Header, Nonce, OpaqueCallResult, Receipt, SecretKey,
+	Transaction,
+};
 
 #[async_trait]
 pub trait ApiSupport {
-    async fn hash_transaction(&self, tx: &Transaction) -> CommonResult<Hash>;
-    async fn get_confirmed_number(&self) -> CommonResult<Option<BlockNumber>>;
-    async fn get_confirmed_executed_number(&self) -> CommonResult<Option<BlockNumber>>;
-    async fn get_block_hash(&self, number: &BlockNumber) -> CommonResult<Option<Hash>>;
-    async fn get_block(&self, block_hash: &Hash) -> CommonResult<Option<Block>>;
-    async fn get_header(&self, block_hash: &Hash) -> CommonResult<Option<Header>>;
-    async fn get_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Transaction>>;
-    async fn get_raw_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Vec<u8>>>;
-    async fn get_receipt(&self, tx_hash: &Hash) -> CommonResult<Option<Receipt>>;
-    async fn insert_transaction(&self, transaction: Transaction) -> CommonResult<()>;
-    async fn get_transaction_in_txpool(&self, tx_hash: &Hash) -> CommonResult<Option<Transaction>>;
-    async fn execute_call(
-        &self,
-        block_hash: &Hash,
-        sender: Option<&Address>,
-        call: &Call,
-    ) -> CommonResult<OpaqueCallResult>;
-    async fn build_transaction(
-        &self,
-        witness: Option<(SecretKey, Nonce, BlockNumber)>,
-        module: String,
-        method: String,
-        params: Params,
-    ) -> CommonResult<Transaction>;
-    async fn coordinator_tx(&self) -> CommonResult<UnboundedSender<CoordinatorInMessage>>;
+	async fn hash_transaction(&self, tx: &Transaction) -> CommonResult<Hash>;
+	async fn get_confirmed_number(&self) -> CommonResult<Option<BlockNumber>>;
+	async fn get_confirmed_executed_number(&self) -> CommonResult<Option<BlockNumber>>;
+	async fn get_block_hash(&self, number: &BlockNumber) -> CommonResult<Option<Hash>>;
+	async fn get_block(&self, block_hash: &Hash) -> CommonResult<Option<Block>>;
+	async fn get_header(&self, block_hash: &Hash) -> CommonResult<Option<Header>>;
+	async fn get_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Transaction>>;
+	async fn get_raw_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Vec<u8>>>;
+	async fn get_receipt(&self, tx_hash: &Hash) -> CommonResult<Option<Receipt>>;
+	async fn insert_transaction(&self, transaction: Transaction) -> CommonResult<()>;
+	async fn get_transaction_in_txpool(&self, tx_hash: &Hash) -> CommonResult<Option<Transaction>>;
+	async fn execute_call(
+		&self,
+		block_hash: &Hash,
+		sender: Option<&Address>,
+		call: &Call,
+	) -> CommonResult<OpaqueCallResult>;
+	async fn build_transaction(
+		&self,
+		witness: Option<(SecretKey, Nonce, BlockNumber)>,
+		call: Call,
+	) -> CommonResult<Transaction>;
+	async fn coordinator_tx(&self) -> CommonResult<UnboundedSender<CoordinatorInMessage>>;
 }
 
 pub struct DefaultApiSupport {
-    chain: Arc<Chain>,
-    txpool: Arc<TxPool<DefaultTxPoolSupport>>,
-    coordinator: Arc<Coordinator<DefaultCoordinatorSupport>>,
+	chain: Arc<Chain>,
+	txpool: Arc<TxPool<DefaultTxPoolSupport>>,
+	coordinator: Arc<Coordinator<DefaultCoordinatorSupport>>,
 }
 
 impl DefaultApiSupport {
-    pub fn new(
-        chain: Arc<Chain>,
-        txpool: Arc<TxPool<DefaultTxPoolSupport>>,
-        coordinator: Arc<Coordinator<DefaultCoordinatorSupport>>,
-    ) -> Self {
-        Self {
-            chain,
-            txpool,
-            coordinator,
-        }
-    }
+	pub fn new(
+		chain: Arc<Chain>,
+		txpool: Arc<TxPool<DefaultTxPoolSupport>>,
+		coordinator: Arc<Coordinator<DefaultCoordinatorSupport>>,
+	) -> Self {
+		Self {
+			chain,
+			txpool,
+			coordinator,
+		}
+	}
 }
 
 #[async_trait]
 impl ApiSupport for DefaultApiSupport {
-    async fn hash_transaction(&self, tx: &Transaction) -> CommonResult<Hash> {
-        self.chain.hash_transaction(tx)
-    }
-    async fn get_confirmed_number(&self) -> CommonResult<Option<BlockNumber>> {
-        self.chain.get_confirmed_number()
-    }
-    async fn get_confirmed_executed_number(&self) -> CommonResult<Option<BlockNumber>> {
-        self.chain.get_confirmed_executed_number()
-    }
-    async fn get_block_hash(&self, number: &BlockNumber) -> CommonResult<Option<Hash>> {
-        self.chain.get_block_hash(number)
-    }
-    async fn get_block(&self, block_hash: &Hash) -> CommonResult<Option<Block>> {
-        self.chain.get_block(block_hash)
-    }
-    async fn get_header(&self, block_hash: &Hash) -> CommonResult<Option<Header>> {
-        self.chain.get_header(block_hash)
-    }
-    async fn get_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Transaction>> {
-        self.chain.get_transaction(tx_hash)
-    }
-    async fn get_raw_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Vec<u8>>> {
-        self.chain.get_raw_transaction(tx_hash)
-    }
-    async fn get_receipt(&self, tx_hash: &Hash) -> CommonResult<Option<Receipt>> {
-        self.chain.get_receipt(tx_hash)
-    }
-    async fn insert_transaction(&self, tx: Transaction) -> CommonResult<()> {
-        self.txpool.insert(tx).await
-    }
-    async fn get_transaction_in_txpool(&self, tx_hash: &Hash) -> CommonResult<Option<Transaction>> {
-        let tx = match self.txpool.get_map().get(tx_hash) {
-            Some(tx) => tx.tx.clone(),
-            None => return Ok(None),
-        };
-        Ok(Some(tx))
-    }
-    async fn execute_call(
-        &self,
-        block_hash: &Hash,
-        sender: Option<&Address>,
-        call: &Call,
-    ) -> CommonResult<OpaqueCallResult> {
-        self.chain.execute_call(block_hash, sender, call)
-    }
+	async fn hash_transaction(&self, tx: &Transaction) -> CommonResult<Hash> {
+		self.chain.hash_transaction(tx)
+	}
+	async fn get_confirmed_number(&self) -> CommonResult<Option<BlockNumber>> {
+		self.chain.get_confirmed_number()
+	}
+	async fn get_confirmed_executed_number(&self) -> CommonResult<Option<BlockNumber>> {
+		self.chain.get_confirmed_executed_number()
+	}
+	async fn get_block_hash(&self, number: &BlockNumber) -> CommonResult<Option<Hash>> {
+		self.chain.get_block_hash(number)
+	}
+	async fn get_block(&self, block_hash: &Hash) -> CommonResult<Option<Block>> {
+		self.chain.get_block(block_hash)
+	}
+	async fn get_header(&self, block_hash: &Hash) -> CommonResult<Option<Header>> {
+		self.chain.get_header(block_hash)
+	}
+	async fn get_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Transaction>> {
+		self.chain.get_transaction(tx_hash)
+	}
+	async fn get_raw_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Vec<u8>>> {
+		self.chain.get_raw_transaction(tx_hash)
+	}
+	async fn get_receipt(&self, tx_hash: &Hash) -> CommonResult<Option<Receipt>> {
+		self.chain.get_receipt(tx_hash)
+	}
+	async fn insert_transaction(&self, tx: Transaction) -> CommonResult<()> {
+		self.txpool.insert(tx).await
+	}
+	async fn get_transaction_in_txpool(&self, tx_hash: &Hash) -> CommonResult<Option<Transaction>> {
+		let tx = match self.txpool.get_map().get(tx_hash) {
+			Some(tx) => tx.tx.clone(),
+			None => return Ok(None),
+		};
+		Ok(Some(tx))
+	}
+	async fn execute_call(
+		&self,
+		block_hash: &Hash,
+		sender: Option<&Address>,
+		call: &Call,
+	) -> CommonResult<OpaqueCallResult> {
+		self.chain.execute_call(block_hash, sender, call)
+	}
 
-    async fn build_transaction(
-        &self,
-        witness: Option<(SecretKey, Nonce, BlockNumber)>,
-        module: String,
-        method: String,
-        params: Params,
-    ) -> CommonResult<Transaction> {
-        self.chain.build_transaction(witness, module, method, params)
-    }
+	async fn build_transaction(
+		&self,
+		witness: Option<(SecretKey, Nonce, BlockNumber)>,
+		call: Call,
+	) -> CommonResult<Transaction> {
+		self.chain.build_transaction(witness, call)
+	}
 
-    async fn coordinator_tx(&self) -> CommonResult<UnboundedSender<CoordinatorInMessage>> {
-        Ok(self.coordinator.coordinator_tx())
-    }
+	async fn coordinator_tx(&self) -> CommonResult<UnboundedSender<CoordinatorInMessage>> {
+		Ok(self.coordinator.coordinator_tx())
+	}
 }

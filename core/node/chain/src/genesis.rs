@@ -110,14 +110,13 @@ fn build_validate_tx<P: Encode>(
 	module_params: P,
 	params: &str,
 ) -> CommonResult<Transaction> {
-	let tx = executor
-		.build_tx(None, module.to_string(), method.to_string(), module_params)
-		.map_err(|e| {
-			errors::ErrorKind::Spec(format!(
-				"Invalid params for {}.{}: \n{} \ncause: {}",
-				module, method, params, e
-			))
-		})?;
+	let call = executor.build_call(module.to_string(), method.to_string(), module_params)?;
+	let tx = executor.build_tx(None, call).map_err(|e| {
+		errors::ErrorKind::Spec(format!(
+			"Invalid params for {}.{}: \n{} \ncause: {}",
+			module, method, params, e
+		))
+	})?;
 
 	executor.validate_tx(context, &tx, false).map_err(|e| {
 		errors::ErrorKind::Spec(format!(

@@ -43,14 +43,18 @@ async fn test_poa_contract_hw_read() {
 		chain
 			.build_transaction(
 				Some((account1.0.clone(), 0, 10)),
-				"contract".to_string(),
-				"create".to_string(),
-				module::contract::CreateParams {
-					code: ori_code.clone(),
-					init_pay_value: 0,
-					init_method: "init".to_string(),
-					init_params: r#"{"value":"abc"}"#.as_bytes().to_vec(),
-				},
+				chain
+					.build_call(
+						"contract".to_string(),
+						"create".to_string(),
+						module::contract::CreateParams {
+							code: ori_code.clone(),
+							init_pay_value: 0,
+							init_method: "init".to_string(),
+							init_params: r#"{"value":"abc"}"#.as_bytes().to_vec(),
+						},
+					)
+					.unwrap(),
 			)
 			.unwrap(),
 	)
@@ -327,14 +331,18 @@ async fn test_poa_contract_hw_write() {
 		chain
 			.build_transaction(
 				Some((account1.0.clone(), 0, 10)),
-				"contract".to_string(),
-				"create".to_string(),
-				module::contract::CreateParams {
-					code: ori_code.clone(),
-					init_pay_value: 0,
-					init_method: "init".to_string(),
-					init_params: r#"{"value":"abc"}"#.as_bytes().to_vec(),
-				},
+				chain
+					.build_call(
+						"contract".to_string(),
+						"create".to_string(),
+						module::contract::CreateParams {
+							code: ori_code.clone(),
+							init_pay_value: 0,
+							init_method: "init".to_string(),
+							init_params: r#"{"value":"abc"}"#.as_bytes().to_vec(),
+						},
+					)
+					.unwrap(),
 			)
 			.unwrap(),
 	)
@@ -356,14 +364,18 @@ async fn test_poa_contract_hw_write() {
 		chain
 			.build_transaction(
 				Some((account1.0.clone(), 0, 10)),
-				"contract".to_string(),
-				"execute".to_string(),
-				module::contract::ExecuteParams {
-					contract_address: contract_address.clone(),
-					pay_value: 0,
-					method: "event".to_string(),
-					params: r#""#.as_bytes().to_vec(),
-				},
+				chain
+					.build_call(
+						"contract".to_string(),
+						"execute".to_string(),
+						module::contract::ExecuteParams {
+							contract_address: contract_address.clone(),
+							pay_value: 0,
+							method: "event".to_string(),
+							params: r#""#.as_bytes().to_vec(),
+						},
+					)
+					.unwrap(),
 			)
 			.unwrap(),
 	)
@@ -374,14 +386,18 @@ async fn test_poa_contract_hw_write() {
 		chain
 			.build_transaction(
 				Some((account1.0.clone(), 0, 10)),
-				"contract".to_string(),
-				"execute".to_string(),
-				module::contract::ExecuteParams {
-					contract_address: contract_address.clone(),
-					pay_value: 0,
-					method: "set_value".to_string(),
-					params: r#"{"value":"abc"}"#.as_bytes().to_vec(),
-				},
+				chain
+					.build_call(
+						"contract".to_string(),
+						"execute".to_string(),
+						module::contract::ExecuteParams {
+							contract_address: contract_address.clone(),
+							pay_value: 0,
+							method: "set_value".to_string(),
+							params: r#"{"value":"abc"}"#.as_bytes().to_vec(),
+						},
+					)
+					.unwrap(),
 			)
 			.unwrap(),
 	)
@@ -392,14 +408,18 @@ async fn test_poa_contract_hw_write() {
 		chain
 			.build_transaction(
 				Some((account1.0.clone(), 0, 10)),
-				"contract".to_string(),
-				"execute".to_string(),
-				module::contract::ExecuteParams {
-					contract_address: contract_address.clone(),
-					pay_value: 0,
-					method: "set_map".to_string(),
-					params: r#"{"key":[1,2,3],"value":"abc"}"#.as_bytes().to_vec(),
-				},
+				chain
+					.build_call(
+						"contract".to_string(),
+						"execute".to_string(),
+						module::contract::ExecuteParams {
+							contract_address: contract_address.clone(),
+							pay_value: 0,
+							method: "set_map".to_string(),
+							params: r#"{"key":[1,2,3],"value":"abc"}"#.as_bytes().to_vec(),
+						},
+					)
+					.unwrap(),
 			)
 			.unwrap(),
 	)
@@ -484,14 +504,18 @@ async fn test_poa_contract_hw_transfer_success() {
 		chain
 			.build_transaction(
 				Some((account1.0.clone(), 0, 10)),
-				"contract".to_string(),
-				"create".to_string(),
-				module::contract::CreateParams {
-					code: ori_code.clone(),
-					init_pay_value: 0,
-					init_method: "init".to_string(),
-					init_params: r#"{"value":"abc"}"#.as_bytes().to_vec(),
-				},
+				chain
+					.build_call(
+						"contract".to_string(),
+						"create".to_string(),
+						module::contract::CreateParams {
+							code: ori_code.clone(),
+							init_pay_value: 0,
+							init_method: "init".to_string(),
+							init_params: r#"{"value":"abc"}"#.as_bytes().to_vec(),
+						},
+					)
+					.unwrap(),
 			)
 			.unwrap(),
 	)
@@ -513,19 +537,23 @@ async fn test_poa_contract_hw_transfer_success() {
 		chain
 			.build_transaction(
 				Some((account1.0.clone(), 0, 10)),
-				"contract".to_string(),
-				"execute".to_string(),
-				module::contract::ExecuteParams {
-					contract_address: contract_address.clone(),
-					pay_value: 4,
-					method: "balance_transfer".to_string(),
-					params: format!(
-						r#"{{"recipient":"{}", "value": 1}}"#,
-						Address((account2.3).0.clone())
+				chain
+					.build_call(
+						"contract".to_string(),
+						"execute".to_string(),
+						module::contract::ExecuteParams {
+							contract_address: contract_address.clone(),
+							pay_value: 4,
+							method: "balance_transfer".to_string(),
+							params: format!(
+								r#"{{"recipient":"{}", "value": 1}}"#,
+								Address((account2.3).0.clone())
+							)
+							.as_bytes()
+							.to_vec(),
+						},
 					)
-					.as_bytes()
-					.to_vec(),
-				},
+					.unwrap(),
 			)
 			.unwrap(),
 	)
@@ -621,14 +649,18 @@ async fn test_poa_contract_hw_transfer_failed() {
 		chain
 			.build_transaction(
 				Some((account1.0.clone(), 0, 10)),
-				"contract".to_string(),
-				"create".to_string(),
-				module::contract::CreateParams {
-					code: ori_code.clone(),
-					init_pay_value: 0,
-					init_method: "init".to_string(),
-					init_params: r#"{"value":"abc"}"#.as_bytes().to_vec(),
-				},
+				chain
+					.build_call(
+						"contract".to_string(),
+						"create".to_string(),
+						module::contract::CreateParams {
+							code: ori_code.clone(),
+							init_pay_value: 0,
+							init_method: "init".to_string(),
+							init_params: r#"{"value":"abc"}"#.as_bytes().to_vec(),
+						},
+					)
+					.unwrap(),
 			)
 			.unwrap(),
 	)
@@ -650,19 +682,23 @@ async fn test_poa_contract_hw_transfer_failed() {
 		chain
 			.build_transaction(
 				Some((account1.0.clone(), 0, 10)),
-				"contract".to_string(),
-				"execute".to_string(),
-				module::contract::ExecuteParams {
-					contract_address: contract_address.clone(),
-					pay_value: 4,
-					method: "balance_transfer".to_string(),
-					params: format!(
-						r#"{{"recipient":"{}", "value": 5}}"#,
-						Address((account2.3).0.clone())
+				chain
+					.build_call(
+						"contract".to_string(),
+						"execute".to_string(),
+						module::contract::ExecuteParams {
+							contract_address: contract_address.clone(),
+							pay_value: 4,
+							method: "balance_transfer".to_string(),
+							params: format!(
+								r#"{{"recipient":"{}", "value": 5}}"#,
+								Address((account2.3).0.clone())
+							)
+							.as_bytes()
+							.to_vec(),
+						},
 					)
-					.as_bytes()
-					.to_vec(),
-				},
+					.unwrap(),
 			)
 			.unwrap(),
 	)
@@ -744,14 +780,18 @@ async fn test_poa_contract_hw_transfer_partial_failed() {
 		chain
 			.build_transaction(
 				Some((account1.0.clone(), 0, 10)),
-				"contract".to_string(),
-				"create".to_string(),
-				module::contract::CreateParams {
-					code: ori_code.clone(),
-					init_pay_value: 0,
-					init_method: "init".to_string(),
-					init_params: r#"{"value":"abc"}"#.as_bytes().to_vec(),
-				},
+				chain
+					.build_call(
+						"contract".to_string(),
+						"create".to_string(),
+						module::contract::CreateParams {
+							code: ori_code.clone(),
+							init_pay_value: 0,
+							init_method: "init".to_string(),
+							init_params: r#"{"value":"abc"}"#.as_bytes().to_vec(),
+						},
+					)
+					.unwrap(),
 			)
 			.unwrap(),
 	)
@@ -773,19 +813,23 @@ async fn test_poa_contract_hw_transfer_partial_failed() {
 		chain
 			.build_transaction(
 				Some((account1.0.clone(), 0, 10)),
-				"contract".to_string(),
-				"execute".to_string(),
-				module::contract::ExecuteParams {
-					contract_address: contract_address.clone(),
-					pay_value: 4,
-					method: "balance_transfer_ea".to_string(),
-					params: format!(
-						r#"{{"recipient":"{}", "value": 5}}"#,
-						Address((account2.3).0.clone())
+				chain
+					.build_call(
+						"contract".to_string(),
+						"execute".to_string(),
+						module::contract::ExecuteParams {
+							contract_address: contract_address.clone(),
+							pay_value: 4,
+							method: "balance_transfer_ea".to_string(),
+							params: format!(
+								r#"{{"recipient":"{}", "value": 5}}"#,
+								Address((account2.3).0.clone())
+							)
+							.as_bytes()
+							.to_vec(),
+						},
 					)
-					.as_bytes()
-					.to_vec(),
-				},
+					.unwrap(),
 			)
 			.unwrap(),
 	)
@@ -874,14 +918,18 @@ async fn test_poa_contract_hw_nested_contract() {
 		chain
 			.build_transaction(
 				Some((account1.0.clone(), 0, 10)),
-				"contract".to_string(),
-				"create".to_string(),
-				module::contract::CreateParams {
-					code: ori_code.clone(),
-					init_pay_value: 0,
-					init_method: "init".to_string(),
-					init_params: r#"{"value":"abc"}"#.as_bytes().to_vec(),
-				},
+				chain
+					.build_call(
+						"contract".to_string(),
+						"create".to_string(),
+						module::contract::CreateParams {
+							code: ori_code.clone(),
+							init_pay_value: 0,
+							init_method: "init".to_string(),
+							init_params: r#"{"value":"abc"}"#.as_bytes().to_vec(),
+						},
+					)
+					.unwrap(),
 			)
 			.unwrap(),
 	)
@@ -903,14 +951,18 @@ async fn test_poa_contract_hw_nested_contract() {
 		chain
 			.build_transaction(
 				Some((account1.0.clone(), 0, 10)),
-				"contract".to_string(),
-				"execute".to_string(),
-				module::contract::ExecuteParams {
-					contract_address: contract_address.clone(),
-					pay_value: 0,
-					method: "nested_contract_execute".to_string(),
-					params: "".as_bytes().to_vec(),
-				},
+				chain
+					.build_call(
+						"contract".to_string(),
+						"execute".to_string(),
+						module::contract::ExecuteParams {
+							contract_address: contract_address.clone(),
+							pay_value: 0,
+							method: "nested_contract_execute".to_string(),
+							params: "".as_bytes().to_vec(),
+						},
+					)
+					.unwrap(),
 			)
 			.unwrap(),
 	)

@@ -142,15 +142,23 @@ impl Backend {
 		self.executor.validate_tx(&context, tx, witness_required)
 	}
 
-	/// Build a transaction
-	pub fn build_transaction<P: Encode>(
+	/// Build a call
+	pub fn build_call<P: Encode>(
 		&self,
-		witness: Option<(SecretKey, Nonce, BlockNumber)>,
 		module: String,
 		method: String,
 		params: P,
+	) -> CommonResult<Call> {
+		self.executor.build_call(module, method, params)
+	}
+
+	/// Build a transaction
+	pub fn build_transaction(
+		&self,
+		witness: Option<(SecretKey, Nonce, BlockNumber)>,
+		call: Call,
 	) -> CommonResult<Transaction> {
-		self.executor.build_tx(witness, module, method, params)
+		self.executor.build_tx(witness, call)
 	}
 
 	/// Get the basic algorithms: das, hash and address
@@ -372,7 +380,7 @@ impl Backend {
 		method: String,
 		params: P,
 	) -> CommonResult<CallResult<R>> {
-		let call = self.build_transaction(None, module, method, params)?.call;
+		let call = self.build_call(module, method, params)?;
 		let result = self.execute_call(&block_hash, sender, &call)?;
 		let result: CallResult<R> = match result {
 			Ok(result) => Ok(codec::decode(&result)?),

@@ -39,12 +39,16 @@ async fn test_poa_balance() {
 		chain
 			.build_transaction(
 				Some((account1.0.clone(), 0, 10)),
-				"balance".to_string(),
-				"transfer".to_string(),
-				module::balance::TransferParams {
-					recipient: account2.3.clone(),
-					value: 1,
-				},
+				chain
+					.build_call(
+						"balance".to_string(),
+						"transfer".to_string(),
+						module::balance::TransferParams {
+							recipient: account2.3.clone(),
+							value: 1,
+						},
+					)
+					.unwrap(),
 			)
 			.unwrap(),
 	)
@@ -61,12 +65,16 @@ async fn test_poa_balance() {
 		chain
 			.build_transaction(
 				Some((account1.0.clone(), 0, 11)),
-				"balance".to_string(),
-				"transfer".to_string(),
-				module::balance::TransferParams {
-					recipient: account2.3.clone(),
-					value: 2,
-				},
+				chain
+					.build_call(
+						"balance".to_string(),
+						"transfer".to_string(),
+						module::balance::TransferParams {
+							recipient: account2.3.clone(),
+							value: 2,
+						},
+					)
+					.unwrap(),
 			)
 			.unwrap(),
 	)
@@ -83,12 +91,16 @@ async fn test_poa_balance() {
 		chain
 			.build_transaction(
 				Some((account1.0, 0, 12)),
-				"balance".to_string(),
-				"transfer".to_string(),
-				module::balance::TransferParams {
-					recipient: account2.3.clone(),
-					value: 3,
-				},
+				chain
+					.build_call(
+						"balance".to_string(),
+						"transfer".to_string(),
+						module::balance::TransferParams {
+							recipient: account2.3.clone(),
+							value: 3,
+						},
+					)
+					.unwrap(),
 			)
 			.unwrap(),
 	)

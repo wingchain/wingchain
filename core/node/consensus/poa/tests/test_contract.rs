@@ -43,14 +43,18 @@ async fn test_poa_contract_create() {
 		chain
 			.build_transaction(
 				Some((account1.0.clone(), 0, 10)),
-				"contract".to_string(),
-				"create".to_string(),
-				module::contract::CreateParams {
-					code: ori_code.clone(),
-					init_pay_value: 0,
-					init_method: "init".to_string(),
-					init_params: r#"{"value":"abc"}"#.as_bytes().to_vec(),
-				},
+				chain
+					.build_call(
+						"contract".to_string(),
+						"create".to_string(),
+						module::contract::CreateParams {
+							code: ori_code.clone(),
+							init_pay_value: 0,
+							init_method: "init".to_string(),
+							init_params: r#"{"value":"abc"}"#.as_bytes().to_vec(),
+						},
+					)
+					.unwrap(),
 			)
 			.unwrap(),
 	)
@@ -137,39 +141,51 @@ async fn test_poa_contract_create_fail() {
 	let tx1 = chain
 		.build_transaction(
 			Some((account1.0.clone(), 0, 10)),
-			"contract".to_string(),
-			"create".to_string(),
-			module::contract::CreateParams {
-				code: ori_code.clone(),
-				init_pay_value: 0,
-				init_method: "init".to_string(),
-				init_params: r#"{"value1":"abc"}"#.as_bytes().to_vec(),
-			},
+			chain
+				.build_call(
+					"contract".to_string(),
+					"create".to_string(),
+					module::contract::CreateParams {
+						code: ori_code.clone(),
+						init_pay_value: 0,
+						init_method: "init".to_string(),
+						init_params: r#"{"value1":"abc"}"#.as_bytes().to_vec(),
+					},
+				)
+				.unwrap(),
 		)
 		.unwrap();
 
 	let tx1_error = chain.validate_transaction(&tx1, true).unwrap_err();
 	assert_eq!(
 		tx1_error.to_string(),
-		"[CommonError] Kind: Executor, Error: ContractError: InvalidParams".to_string()
+		"Executor Error: ContractError: InvalidParams".to_string()
 	);
 
 	let tx1 = chain
 		.build_transaction(
 			Some((account1.0.clone(), 0, 10)),
-			"contract".to_string(),
-			"create".to_string(),
-			module::contract::CreateParams {
-				code: vec![1; 1024],
-				init_pay_value: 0,
-				init_method: "init".to_string(),
-				init_params: r#"{"value":"abc"}"#.as_bytes().to_vec(),
-			},
+			chain
+				.build_call(
+					"contract".to_string(),
+					"create".to_string(),
+					module::contract::CreateParams {
+						code: vec![1; 1024],
+						init_pay_value: 0,
+						init_method: "init".to_string(),
+						init_params: r#"{"value":"abc"}"#.as_bytes().to_vec(),
+					},
+				)
+				.unwrap(),
 		)
 		.unwrap();
 	let tx1_error = chain.validate_transaction(&tx1, true).unwrap_err();
 
-	assert_eq!(tx1_error.to_string(), "[CommonError] Kind: Executor, Error: PreCompileError: ValidationError: Bad magic number (at offset 0)".to_string());
+	assert_eq!(
+		tx1_error.to_string(),
+		"Executor Error: PreCompileError: ValidationError: Bad magic number (at offset 0)"
+			.to_string()
+	);
 
 	base::safe_close(chain, txpool, poa).await;
 }
@@ -193,14 +209,18 @@ async fn test_poa_contract_update_admin() {
 		chain
 			.build_transaction(
 				Some((account1.0.clone(), 0, 10)),
-				"contract".to_string(),
-				"create".to_string(),
-				module::contract::CreateParams {
-					code: ori_code.clone(),
-					init_pay_value: 0,
-					init_method: "init".to_string(),
-					init_params: r#"{"value":"abc"}"#.as_bytes().to_vec(),
-				},
+				chain
+					.build_call(
+						"contract".to_string(),
+						"create".to_string(),
+						module::contract::CreateParams {
+							code: ori_code.clone(),
+							init_pay_value: 0,
+							init_method: "init".to_string(),
+							init_params: r#"{"value":"abc"}"#.as_bytes().to_vec(),
+						},
+					)
+					.unwrap(),
 			)
 			.unwrap(),
 	)
@@ -247,15 +267,19 @@ async fn test_poa_contract_update_admin() {
 		chain
 			.build_transaction(
 				Some((account1.0.clone(), 0, 10)),
-				"contract".to_string(),
-				"update_admin".to_string(),
-				module::contract::UpdateAdminParams {
-					contract_address: contract_address.clone(),
-					admin: module::contract::Admin {
-						threshold: 2,
-						members: vec![(account1.3.clone(), 1), (account2.3.clone(), 1)],
-					},
-				},
+				chain
+					.build_call(
+						"contract".to_string(),
+						"update_admin".to_string(),
+						module::contract::UpdateAdminParams {
+							contract_address: contract_address.clone(),
+							admin: module::contract::Admin {
+								threshold: 2,
+								members: vec![(account1.3.clone(), 1), (account2.3.clone(), 1)],
+							},
+						},
+					)
+					.unwrap(),
 			)
 			.unwrap(),
 	)
@@ -306,15 +330,19 @@ async fn test_poa_contract_update_admin() {
 		chain
 			.build_transaction(
 				Some((account2.0.clone(), 0, 10)),
-				"contract".to_string(),
-				"update_admin".to_string(),
-				module::contract::UpdateAdminParams {
-					contract_address: contract_address.clone(),
-					admin: module::contract::Admin {
-						threshold: 1,
-						members: vec![(account2.3.clone(), 1)],
-					},
-				},
+				chain
+					.build_call(
+						"contract".to_string(),
+						"update_admin".to_string(),
+						module::contract::UpdateAdminParams {
+							contract_address: contract_address.clone(),
+							admin: module::contract::Admin {
+								threshold: 1,
+								members: vec![(account2.3.clone(), 1)],
+							},
+						},
+					)
+					.unwrap(),
 			)
 			.unwrap(),
 	)
@@ -326,12 +354,16 @@ async fn test_poa_contract_update_admin() {
 		chain
 			.build_transaction(
 				Some((account1.0.clone(), 0, 10)),
-				"contract".to_string(),
-				"update_admin_vote".to_string(),
-				module::contract::UpdateAdminVoteParams {
-					contract_address: contract_address.clone(),
-					proposal_id: 2,
-				},
+				chain
+					.build_call(
+						"contract".to_string(),
+						"update_admin_vote".to_string(),
+						module::contract::UpdateAdminVoteParams {
+							contract_address: contract_address.clone(),
+							proposal_id: 2,
+						},
+					)
+					.unwrap(),
 			)
 			.unwrap(),
 	)
@@ -410,14 +442,18 @@ async fn test_poa_contract_update_code() {
 		chain
 			.build_transaction(
 				Some((account1.0.clone(), 0, 10)),
-				"contract".to_string(),
-				"create".to_string(),
-				module::contract::CreateParams {
-					code: ori_code.clone(),
-					init_pay_value: 0,
-					init_method: "init".to_string(),
-					init_params: r#"{"value":"abc"}"#.as_bytes().to_vec(),
-				},
+				chain
+					.build_call(
+						"contract".to_string(),
+						"create".to_string(),
+						module::contract::CreateParams {
+							code: ori_code.clone(),
+							init_pay_value: 0,
+							init_method: "init".to_string(),
+							init_params: r#"{"value":"abc"}"#.as_bytes().to_vec(),
+						},
+					)
+					.unwrap(),
 			)
 			.unwrap(),
 	)
@@ -479,15 +515,19 @@ async fn test_poa_contract_update_code() {
 		chain
 			.build_transaction(
 				Some((account1.0.clone(), 0, 10)),
-				"contract".to_string(),
-				"update_admin".to_string(),
-				module::contract::UpdateAdminParams {
-					contract_address: contract_address.clone(),
-					admin: module::contract::Admin {
-						threshold: 2,
-						members: vec![(account1.3.clone(), 1), (account2.3.clone(), 1)],
-					},
-				},
+				chain
+					.build_call(
+						"contract".to_string(),
+						"update_admin".to_string(),
+						module::contract::UpdateAdminParams {
+							contract_address: contract_address.clone(),
+							admin: module::contract::Admin {
+								threshold: 2,
+								members: vec![(account1.3.clone(), 1), (account2.3.clone(), 1)],
+							},
+						},
+					)
+					.unwrap(),
 			)
 			.unwrap(),
 	)
@@ -539,12 +579,16 @@ async fn test_poa_contract_update_code() {
 		chain
 			.build_transaction(
 				Some((account2.0.clone(), 0, 10)),
-				"contract".to_string(),
-				"update_code".to_string(),
-				module::contract::UpdateCodeParams {
-					contract_address: contract_address.clone(),
-					code: new_code.clone(),
-				},
+				chain
+					.build_call(
+						"contract".to_string(),
+						"update_code".to_string(),
+						module::contract::UpdateCodeParams {
+							contract_address: contract_address.clone(),
+							code: new_code.clone(),
+						},
+					)
+					.unwrap(),
 			)
 			.unwrap(),
 	)
@@ -556,12 +600,16 @@ async fn test_poa_contract_update_code() {
 		chain
 			.build_transaction(
 				Some((account1.0.clone(), 0, 10)),
-				"contract".to_string(),
-				"update_code_vote".to_string(),
-				module::contract::UpdateCodeVoteParams {
-					contract_address: contract_address.clone(),
-					proposal_id: 1,
-				},
+				chain
+					.build_call(
+						"contract".to_string(),
+						"update_code_vote".to_string(),
+						module::contract::UpdateCodeVoteParams {
+							contract_address: contract_address.clone(),
+							proposal_id: 1,
+						},
+					)
+					.unwrap(),
 			)
 			.unwrap(),
 	)
