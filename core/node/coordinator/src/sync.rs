@@ -110,6 +110,7 @@ where
 				_ => (),
 			}
 		}
+		self.sync()?;
 		Ok(())
 	}
 
@@ -449,6 +450,7 @@ where
 				}
 			}
 		}
+		self.sync()?;
 
 		Ok(())
 	}

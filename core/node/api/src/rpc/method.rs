@@ -239,7 +239,9 @@ pub async fn build_transaction<S: ApiSupport>(
 	let witness = match request.witness {
 		Some((secret_key, nonce, until)) => {
 			let secret_key: Vec<u8> = secret_key.try_into()?;
-			Some((SecretKey(secret_key), nonce.try_into()?, until.try_into()?))
+			let nonce: u32 = nonce.try_into()?;
+			let until: u64 = until.try_into()?;
+			Some((SecretKey(secret_key), nonce, until))
 		}
 		None => None,
 	};
@@ -267,9 +269,21 @@ pub async fn network_get_state<S: ApiSupport>(
 	Ok(network_state)
 }
 
-/// Number input: number, hex or tag (best, execution)
+/// Number input: number, hex or tag (confirmed, confirmed_executed)
 #[derive(Deserialize)]
-pub struct BlockNumber(String);
+#[serde(untagged)]
+pub enum BlockNumber {
+	Number(primitives::types::BlockNumber),
+	String(String),
+}
+
+/// Number input: number or hex
+#[derive(Deserialize)]
+#[serde(untagged)]
+pub enum NumberOrHex {
+	Number(u64),
+	String(String),
+}
 
 /// Hash
 #[derive(Serialize, Deserialize, Clone)]
@@ -360,7 +374,7 @@ pub struct ExecuteTransactionRequest {
 
 #[derive(Deserialize)]
 pub struct BuildTransactionRequest {
-	pub witness: Option<(Hex, Hex, Hex)>,
+	pub witness: Option<(Hex, NumberOrHex, NumberOrHex)>,
 	pub call: Call,
 }
 
@@ -668,24 +682,67 @@ impl TryFrom<BlockNumber> for BlockNumberEnum {
 	type Error = CommonError;
 
 	fn try_from(value: BlockNumber) -> Result<Self, Self::Error> {
-		let result = match value.0.as_str() {
-			"confirmed" => BlockNumberEnum::Confirmed,
-			"confirmed_executed" => BlockNumberEnum::ConfirmedExecuted,
-			number if number.starts_with("0x") => {
-				let hex = number.trim_start_matches("0x");
-				let number = u64::from_str_radix(hex, 16).map_err(|_| {
-					errors::ErrorKind::InvalidParams(format!("Invalid hex: {}", number))
-				})?;
-				BlockNumberEnum::Number(number)
+		match value {
+			BlockNumber::Number(number) => Ok(BlockNumberEnum::Number(number)),
+			BlockNumber::String(str) => {
+				let result = match str.as_str() {
+					"confirmed" => BlockNumberEnum::Confirmed,
+					"confirmed_executed" => BlockNumberEnum::ConfirmedExecuted,
+					number if number.starts_with("0x") => {
+						let hex = number.trim_start_matches("0x");
+						let number = u64::from_str_radix(hex, 16).map_err(|_| {
+							errors::ErrorKind::InvalidParams(format!("Invalid hex: {}", number))
+						})?;
+						BlockNumberEnum::Number(number)
+					}
+					number => {
+						let number = number.parse::<u64>().map_err(|_| {
+							errors::ErrorKind::InvalidParams(format!("Invalid number: {}", number))
+						})?;
+						BlockNumberEnum::Number(number)
+					}
+				};
+				Ok(result)
 			}
-			number => {
-				let number = number.parse::<u64>().map_err(|_| {
-					errors::ErrorKind::InvalidParams(format!("Invalid number: {}", number))
-				})?;
-				BlockNumberEnum::Number(number)
+		}
+	}
+}
+
+impl TryInto<u64> for NumberOrHex {
+	type Error = CommonError;
+	fn try_into(self) -> Result<u64, Self::Error> {
+		match self {
+			NumberOrHex::Number(number) => Ok(number),
+			NumberOrHex::String(str) => {
+				let result = match str.as_str() {
+					number if number.starts_with("0x") => {
+						let hex = number.trim_start_matches("0x");
+						let number = u64::from_str_radix(hex, 16).map_err(|_| {
+							errors::ErrorKind::InvalidParams(format!("Invalid hex: {}", number))
+						})?;
+						number
+					}
+					number => {
+						let number = number.parse::<u64>().map_err(|_| {
+							errors::ErrorKind::InvalidParams(format!("Invalid number: {}", number))
+						})?;
+						number
+					}
+				};
+				Ok(result)
 			}
-		};
-		Ok(result)
+		}
+	}
+}
+
+impl TryInto<u32> for NumberOrHex {
+	type Error = CommonError;
+	fn try_into(self) -> Result<u32, Self::Error> {
+		let number: u64 = self.try_into()?;
+		let number: u32 = number
+			.try_into()
+			.map_err(|_| errors::ErrorKind::InvalidParams(format!("Invalid number: {}", number)))?;
+		Ok(number)
 	}
 }
 
