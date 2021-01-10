@@ -59,24 +59,32 @@ fn test_executor() {
 	let block_0_meta_txs = vec![executor
 		.build_tx(
 			None,
-			"system".to_string(),
-			"init".to_string(),
-			module::system::InitParams {
-				chain_id: "chain-test".to_string(),
-				timestamp,
-				max_until_gap: 20,
-				max_execution_gap: 8,
-			},
+			executor
+				.build_call(
+					"system".to_string(),
+					"init".to_string(),
+					module::system::InitParams {
+						chain_id: "chain-test".to_string(),
+						timestamp,
+						max_until_gap: 20,
+						max_execution_gap: 8,
+					},
+				)
+				.unwrap(),
 		)
 		.unwrap()];
 	let block_0_payload_txs = vec![executor
 		.build_tx(
 			None,
-			"balance".to_string(),
-			"init".to_string(),
-			module::balance::InitParams {
-				endow: vec![(account1.3.clone(), 10)],
-			},
+			executor
+				.build_call(
+					"balance".to_string(),
+					"init".to_string(),
+					module::balance::InitParams {
+						endow: vec![(account1.3.clone(), 10)],
+					},
+				)
+				.unwrap(),
 		)
 		.unwrap()];
 
@@ -174,12 +182,16 @@ fn test_executor() {
 	let tx = executor
 		.build_tx(
 			Some((account1.0.clone(), nonce, until)),
-			"balance".to_string(),
-			"transfer".to_string(),
-			module::balance::TransferParams {
-				recipient: account2.3.clone(),
-				value: 2,
-			},
+			executor
+				.build_call(
+					"balance".to_string(),
+					"transfer".to_string(),
+					module::balance::TransferParams {
+						recipient: account2.3.clone(),
+						value: 2,
+					},
+				)
+				.unwrap(),
 		)
 		.unwrap();
 	executor.validate_tx(&context, &tx, true).unwrap();
@@ -273,43 +285,59 @@ fn test_executor_validate_tx() {
 
 	let tx = executor.build_tx(
 		Some((account1.0.clone(), nonce, until)),
-		"unknown".to_string(),
-		"transfer".to_string(),
-		module::balance::TransferParams {
-			recipient: Address(vec![1u8]),
-			value: 2,
-		},
+		executor
+			.build_call(
+				"unknown".to_string(),
+				"transfer".to_string(),
+				module::balance::TransferParams {
+					recipient: Address(vec![1u8]),
+					value: 2,
+				},
+			)
+			.unwrap(),
 	);
 	assert!(format!("{}", tx.unwrap_err()).contains("Error: Invalid tx module"));
 
 	let tx = executor.build_tx(
 		Some((account1.0.clone(), nonce, until)),
-		"balance".to_string(),
-		"unknown".to_string(),
-		module::balance::TransferParams {
-			recipient: Address(vec![1u8]),
-			value: 2,
-		},
+		executor
+			.build_call(
+				"balance".to_string(),
+				"unknown".to_string(),
+				module::balance::TransferParams {
+					recipient: Address(vec![1u8]),
+					value: 2,
+				},
+			)
+			.unwrap(),
 	);
 	assert!(format!("{}", tx.unwrap_err()).contains("Error: Invalid tx method"));
 
 	let tx = executor.build_tx(
 		Some((account1.0.clone(), nonce, until)),
-		"balance".to_string(),
-		"transfer".to_string(),
-		Params(vec![0u8]),
+		executor
+			.build_call(
+				"balance".to_string(),
+				"transfer".to_string(),
+				Params(vec![0u8]),
+			)
+			.unwrap(),
 	);
 	assert!(format!("{}", tx.unwrap_err()).contains("Error: Invalid tx params"));
 
 	let tx = executor
 		.build_tx(
 			Some((account1.0.clone(), nonce, until)),
-			"balance".to_string(),
-			"transfer".to_string(),
-			module::balance::TransferParams {
-				recipient: Address(vec![1u8]),
-				value: 2,
-			},
+			executor
+				.build_call(
+					"balance".to_string(),
+					"transfer".to_string(),
+					module::balance::TransferParams {
+						recipient: Address(vec![1u8]),
+						value: 2,
+					},
+				)
+				.unwrap(),
 		)
 		.unwrap();
 	let result = executor.validate_tx(&context, &tx, true);
@@ -319,12 +347,16 @@ fn test_executor_validate_tx() {
 		let mut tx = executor
 			.build_tx(
 				Some((account1.0.clone(), nonce, until)),
-				"balance".to_string(),
-				"transfer".to_string(),
-				module::balance::TransferParams {
-					recipient: account2.3.clone(),
-					value: 2,
-				},
+				executor
+					.build_call(
+						"balance".to_string(),
+						"transfer".to_string(),
+						module::balance::TransferParams {
+							recipient: account2.3.clone(),
+							value: 2,
+						},
+					)
+					.unwrap(),
 			)
 			.unwrap();
 		let mut witness = tx.witness.unwrap().clone();

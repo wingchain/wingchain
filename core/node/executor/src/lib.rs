@@ -377,21 +377,27 @@ impl Executor {
 		self.genesis_hash = genesis_hash;
 	}
 
-	/// Build a transaction
-	pub fn build_tx<P: Encode>(
+	/// Build a call
+	pub fn build_call<P: Encode>(
 		&self,
-		witness: Option<(SecretKey, Nonce, BlockNumber)>,
 		module: String,
 		method: String,
 		params: P,
-	) -> CommonResult<Transaction> {
-		let params = Params(codec::encode(&params)?);
-
-		let call = Call {
-			module: module.clone(),
+	) -> CommonResult<Call> {
+		Ok(Call {
+			module,
 			method,
-			params,
-		};
+			params: Params(params.encode()),
+		})
+	}
+
+	/// Build a transaction
+	pub fn build_tx(
+		&self,
+		witness: Option<(SecretKey, Nonce, BlockNumber)>,
+		call: Call,
+	) -> CommonResult<Transaction> {
+		let module = &call.module;
 
 		Dispatcher::check_call::<Context, Util>(&module, &call)?;
 

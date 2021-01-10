@@ -106,12 +106,16 @@ async fn test_api() {
 	let tx0 = chain0
 		.build_transaction(
 			Some((account1.0.clone(), 0, 10)),
-			"balance".to_string(),
-			"transfer".to_string(),
-			module::balance::TransferParams {
-				recipient: account2.2.clone(),
-				value: 1,
-			},
+			chain0
+				.build_call(
+					"balance".to_string(),
+					"transfer".to_string(),
+					module::balance::TransferParams {
+						recipient: account2.2.clone(),
+						value: 1,
+					},
+				)
+				.unwrap(),
 		)
 		.unwrap();
 	let tx0_hash = chain0.hash_transaction(&tx0).unwrap();

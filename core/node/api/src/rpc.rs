@@ -89,6 +89,7 @@ where
 			method::chain_get_transaction_in_txpool::<S>,
 		)
 		.with_method("chain_executeCall", method::chain_execute_call::<S>)
+		.with_method("chain_buildTransaction", method::build_transaction::<S>)
 		.with_method("network_getState", method::network_get_state::<S>)
 		.finish();
 

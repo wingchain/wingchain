@@ -43,14 +43,14 @@ async fn test_poa_contract_tb_success() {
         chain
             .build_transaction(
                 Some((account1.0.clone(), 0, 10)),
-                "contract".to_string(),
-                "create".to_string(),
-                module::contract::CreateParams {
-                    code: token_code.clone(),
-                    init_pay_value: 0,
-                    init_method: "init".to_string(),
-                    init_params: r#"{"name":"Bitcoin","symbol":"BTC","decimals":8,"total_supply":2100000000000000}"#.as_bytes().to_vec(),
-                },
+                chain.build_call("contract".to_string(),
+                                 "create".to_string(),
+                                 module::contract::CreateParams {
+                                     code: token_code.clone(),
+                                     init_pay_value: 0,
+                                     init_method: "init".to_string(),
+                                     init_params: r#"{"name":"Bitcoin","symbol":"BTC","decimals":8,"total_supply":2100000000000000}"#.as_bytes().to_vec(),
+                                 }).unwrap(),
             )
             .unwrap(),
     )
@@ -75,19 +75,23 @@ async fn test_poa_contract_tb_success() {
 		chain
 			.build_transaction(
 				Some((account1.0.clone(), 0, 10)),
-				"contract".to_string(),
-				"create".to_string(),
-				module::contract::CreateParams {
-					code: token_bank_code.clone(),
-					init_pay_value: 0,
-					init_method: "init".to_string(),
-					init_params: format!(
-						r#"{{"token_contract_address":"{}"}}"#,
-						token_contract_address
+				chain
+					.build_call(
+						"contract".to_string(),
+						"create".to_string(),
+						module::contract::CreateParams {
+							code: token_bank_code.clone(),
+							init_pay_value: 0,
+							init_method: "init".to_string(),
+							init_params: format!(
+								r#"{{"token_contract_address":"{}"}}"#,
+								token_contract_address
+							)
+							.as_bytes()
+							.to_vec(),
+						},
 					)
-					.as_bytes()
-					.to_vec(),
-				},
+					.unwrap(),
 			)
 			.unwrap(),
 	)
@@ -113,19 +117,23 @@ async fn test_poa_contract_tb_success() {
 		chain
 			.build_transaction(
 				Some((account1.0.clone(), 0, 10)),
-				"contract".to_string(),
-				"execute".to_string(),
-				module::contract::ExecuteParams {
-					contract_address: token_contract_address.clone(),
-					pay_value: 0,
-					method: "approve".to_string(),
-					params: format!(
-						r#"{{"spender":"{}","value":100}}"#,
-						token_bank_contract_address
+				chain
+					.build_call(
+						"contract".to_string(),
+						"execute".to_string(),
+						module::contract::ExecuteParams {
+							contract_address: token_contract_address.clone(),
+							pay_value: 0,
+							method: "approve".to_string(),
+							params: format!(
+								r#"{{"spender":"{}","value":100}}"#,
+								token_bank_contract_address
+							)
+							.as_bytes()
+							.to_vec(),
+						},
 					)
-					.as_bytes()
-					.to_vec(),
-				},
+					.unwrap(),
 			)
 			.unwrap(),
 	)
@@ -143,14 +151,18 @@ async fn test_poa_contract_tb_success() {
 		chain
 			.build_transaction(
 				Some((account1.0.clone(), 0, 10)),
-				"contract".to_string(),
-				"execute".to_string(),
-				module::contract::ExecuteParams {
-					contract_address: token_bank_contract_address.clone(),
-					pay_value: 0,
-					method: "deposit".to_string(),
-					params: format!(r#"{{"value":90}}"#).as_bytes().to_vec(),
-				},
+				chain
+					.build_call(
+						"contract".to_string(),
+						"execute".to_string(),
+						module::contract::ExecuteParams {
+							contract_address: token_bank_contract_address.clone(),
+							pay_value: 0,
+							method: "deposit".to_string(),
+							params: format!(r#"{{"value":90}}"#).as_bytes().to_vec(),
+						},
+					)
+					.unwrap(),
 			)
 			.unwrap(),
 	)
@@ -252,14 +264,18 @@ async fn test_poa_contract_tb_success() {
 		chain
 			.build_transaction(
 				Some((account1.0.clone(), 0, 10)),
-				"contract".to_string(),
-				"execute".to_string(),
-				module::contract::ExecuteParams {
-					contract_address: token_bank_contract_address.clone(),
-					pay_value: 0,
-					method: "withdraw".to_string(),
-					params: format!(r#"{{"value":50}}"#).as_bytes().to_vec(),
-				},
+				chain
+					.build_call(
+						"contract".to_string(),
+						"execute".to_string(),
+						module::contract::ExecuteParams {
+							contract_address: token_bank_contract_address.clone(),
+							pay_value: 0,
+							method: "withdraw".to_string(),
+							params: format!(r#"{{"value":50}}"#).as_bytes().to_vec(),
+						},
+					)
+					.unwrap(),
 			)
 			.unwrap(),
 	)
@@ -366,23 +382,23 @@ async fn test_poa_contract_tb_failed() {
 	let token_code = get_token_code().to_vec();
 
 	let tx1_hash = base::insert_tx(
-		&chain,
-		&txpool,
-		chain
-			.build_transaction(
-				Some((account1.0.clone(), 0, 10)),
-				"contract".to_string(),
-				"create".to_string(),
-				module::contract::CreateParams {
-					code: token_code.clone(),
-					init_pay_value: 0,
-					init_method: "init".to_string(),
-					init_params: r#"{"name":"Bitcoin","symbol":"BTC","decimals":8,"total_supply":2100000000000000}"#.as_bytes().to_vec(),
-				},
-			)
-			.unwrap(),
-	)
-		.await;
+        &chain,
+        &txpool,
+        chain
+            .build_transaction(
+                Some((account1.0.clone(), 0, 10)),
+                chain.build_call("contract".to_string(),
+                                 "create".to_string(),
+                                 module::contract::CreateParams {
+                                     code: token_code.clone(),
+                                     init_pay_value: 0,
+                                     init_method: "init".to_string(),
+                                     init_params: r#"{"name":"Bitcoin","symbol":"BTC","decimals":8,"total_supply":2100000000000000}"#.as_bytes().to_vec(),
+                                 }).unwrap(),
+            )
+            .unwrap(),
+    )
+        .await;
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 1
@@ -403,19 +419,23 @@ async fn test_poa_contract_tb_failed() {
 		chain
 			.build_transaction(
 				Some((account1.0.clone(), 0, 10)),
-				"contract".to_string(),
-				"create".to_string(),
-				module::contract::CreateParams {
-					code: token_bank_code.clone(),
-					init_pay_value: 0,
-					init_method: "init".to_string(),
-					init_params: format!(
-						r#"{{"token_contract_address":"{}"}}"#,
-						token_contract_address
+				chain
+					.build_call(
+						"contract".to_string(),
+						"create".to_string(),
+						module::contract::CreateParams {
+							code: token_bank_code.clone(),
+							init_pay_value: 0,
+							init_method: "init".to_string(),
+							init_params: format!(
+								r#"{{"token_contract_address":"{}"}}"#,
+								token_contract_address
+							)
+							.as_bytes()
+							.to_vec(),
+						},
 					)
-					.as_bytes()
-					.to_vec(),
-				},
+					.unwrap(),
 			)
 			.unwrap(),
 	)
@@ -441,19 +461,23 @@ async fn test_poa_contract_tb_failed() {
 		chain
 			.build_transaction(
 				Some((account1.0.clone(), 0, 10)),
-				"contract".to_string(),
-				"execute".to_string(),
-				module::contract::ExecuteParams {
-					contract_address: token_contract_address.clone(),
-					pay_value: 0,
-					method: "approve".to_string(),
-					params: format!(
-						r#"{{"spender":"{}","value":100}}"#,
-						token_bank_contract_address
+				chain
+					.build_call(
+						"contract".to_string(),
+						"execute".to_string(),
+						module::contract::ExecuteParams {
+							contract_address: token_contract_address.clone(),
+							pay_value: 0,
+							method: "approve".to_string(),
+							params: format!(
+								r#"{{"spender":"{}","value":100}}"#,
+								token_bank_contract_address
+							)
+							.as_bytes()
+							.to_vec(),
+						},
 					)
-					.as_bytes()
-					.to_vec(),
-				},
+					.unwrap(),
 			)
 			.unwrap(),
 	)
@@ -471,14 +495,18 @@ async fn test_poa_contract_tb_failed() {
 		chain
 			.build_transaction(
 				Some((account1.0.clone(), 0, 10)),
-				"contract".to_string(),
-				"execute".to_string(),
-				module::contract::ExecuteParams {
-					contract_address: token_bank_contract_address.clone(),
-					pay_value: 0,
-					method: "deposit".to_string(),
-					params: format!(r#"{{"value":110}}"#).as_bytes().to_vec(),
-				},
+				chain
+					.build_call(
+						"contract".to_string(),
+						"execute".to_string(),
+						module::contract::ExecuteParams {
+							contract_address: token_bank_contract_address.clone(),
+							pay_value: 0,
+							method: "deposit".to_string(),
+							params: format!(r#"{{"value":110}}"#).as_bytes().to_vec(),
+						},
+					)
+					.unwrap(),
 			)
 			.unwrap(),
 	)
@@ -531,23 +559,23 @@ async fn test_poa_contract_tb_ea() {
 	let token_code = get_token_code().to_vec();
 
 	let tx1_hash = base::insert_tx(
-		&chain,
-		&txpool,
-		chain
-			.build_transaction(
-				Some((account1.0.clone(), 0, 10)),
-				"contract".to_string(),
-				"create".to_string(),
-				module::contract::CreateParams {
-					code: token_code.clone(),
-					init_pay_value: 0,
-					init_method: "init".to_string(),
-					init_params: r#"{"name":"Bitcoin","symbol":"BTC","decimals":8,"total_supply":2100000000000000}"#.as_bytes().to_vec(),
-				},
-			)
-			.unwrap(),
-	)
-		.await;
+        &chain,
+        &txpool,
+        chain
+            .build_transaction(
+                Some((account1.0.clone(), 0, 10)),
+                chain.build_call("contract".to_string(),
+                                 "create".to_string(),
+                                 module::contract::CreateParams {
+                                     code: token_code.clone(),
+                                     init_pay_value: 0,
+                                     init_method: "init".to_string(),
+                                     init_params: r#"{"name":"Bitcoin","symbol":"BTC","decimals":8,"total_supply":2100000000000000}"#.as_bytes().to_vec(),
+                                 }).unwrap(),
+            )
+            .unwrap(),
+    )
+        .await;
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 1
@@ -568,19 +596,23 @@ async fn test_poa_contract_tb_ea() {
 		chain
 			.build_transaction(
 				Some((account1.0.clone(), 0, 10)),
-				"contract".to_string(),
-				"create".to_string(),
-				module::contract::CreateParams {
-					code: token_bank_code.clone(),
-					init_pay_value: 0,
-					init_method: "init".to_string(),
-					init_params: format!(
-						r#"{{"token_contract_address":"{}"}}"#,
-						token_contract_address
+				chain
+					.build_call(
+						"contract".to_string(),
+						"create".to_string(),
+						module::contract::CreateParams {
+							code: token_bank_code.clone(),
+							init_pay_value: 0,
+							init_method: "init".to_string(),
+							init_params: format!(
+								r#"{{"token_contract_address":"{}"}}"#,
+								token_contract_address
+							)
+							.as_bytes()
+							.to_vec(),
+						},
 					)
-					.as_bytes()
-					.to_vec(),
-				},
+					.unwrap(),
 			)
 			.unwrap(),
 	)
@@ -606,19 +638,23 @@ async fn test_poa_contract_tb_ea() {
 		chain
 			.build_transaction(
 				Some((account1.0.clone(), 0, 10)),
-				"contract".to_string(),
-				"execute".to_string(),
-				module::contract::ExecuteParams {
-					contract_address: token_contract_address.clone(),
-					pay_value: 0,
-					method: "approve".to_string(),
-					params: format!(
-						r#"{{"spender":"{}","value":100}}"#,
-						token_bank_contract_address
+				chain
+					.build_call(
+						"contract".to_string(),
+						"execute".to_string(),
+						module::contract::ExecuteParams {
+							contract_address: token_contract_address.clone(),
+							pay_value: 0,
+							method: "approve".to_string(),
+							params: format!(
+								r#"{{"spender":"{}","value":100}}"#,
+								token_bank_contract_address
+							)
+							.as_bytes()
+							.to_vec(),
+						},
 					)
-					.as_bytes()
-					.to_vec(),
-				},
+					.unwrap(),
 			)
 			.unwrap(),
 	)
@@ -636,14 +672,18 @@ async fn test_poa_contract_tb_ea() {
 		chain
 			.build_transaction(
 				Some((account1.0.clone(), 0, 10)),
-				"contract".to_string(),
-				"execute".to_string(),
-				module::contract::ExecuteParams {
-					contract_address: token_bank_contract_address.clone(),
-					pay_value: 0,
-					method: "deposit_ea".to_string(),
-					params: format!(r#"{{"value":110}}"#).as_bytes().to_vec(),
-				},
+				chain
+					.build_call(
+						"contract".to_string(),
+						"execute".to_string(),
+						module::contract::ExecuteParams {
+							contract_address: token_bank_contract_address.clone(),
+							pay_value: 0,
+							method: "deposit_ea".to_string(),
+							params: format!(r#"{{"value":110}}"#).as_bytes().to_vec(),
+						},
+					)
+					.unwrap(),
 			)
 			.unwrap(),
 	)

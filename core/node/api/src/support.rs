@@ -16,6 +16,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use futures::channel::mpsc::UnboundedSender;
+
 use node_chain::Chain;
 use node_coordinator::support::DefaultCoordinatorSupport;
 use node_coordinator::{Coordinator, CoordinatorInMessage};
@@ -23,7 +24,8 @@ use node_txpool::support::DefaultTxPoolSupport;
 use node_txpool::TxPool;
 use primitives::errors::CommonResult;
 use primitives::{
-	Address, Block, BlockNumber, Call, Hash, Header, OpaqueCallResult, Receipt, Transaction,
+	Address, Block, BlockNumber, Call, Hash, Header, Nonce, OpaqueCallResult, Receipt, SecretKey,
+	Transaction,
 };
 
 #[async_trait]
@@ -45,6 +47,11 @@ pub trait ApiSupport {
 		sender: Option<&Address>,
 		call: &Call,
 	) -> CommonResult<OpaqueCallResult>;
+	async fn build_transaction(
+		&self,
+		witness: Option<(SecretKey, Nonce, BlockNumber)>,
+		call: Call,
+	) -> CommonResult<Transaction>;
 	async fn coordinator_tx(&self) -> CommonResult<UnboundedSender<CoordinatorInMessage>>;
 }
 
@@ -114,6 +121,14 @@ impl ApiSupport for DefaultApiSupport {
 		call: &Call,
 	) -> CommonResult<OpaqueCallResult> {
 		self.chain.execute_call(block_hash, sender, call)
+	}
+
+	async fn build_transaction(
+		&self,
+		witness: Option<(SecretKey, Nonce, BlockNumber)>,
+		call: Call,
+	) -> CommonResult<Transaction> {
+		self.chain.build_transaction(witness, call)
 	}
 
 	async fn coordinator_tx(&self) -> CommonResult<UnboundedSender<CoordinatorInMessage>> {

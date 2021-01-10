@@ -167,9 +167,9 @@ async fn test_chain_execute_call() {
 	let call = chain
 		.build_transaction(
 			None,
-			"balance".to_string(),
-			"get_balance".to_string(),
-			params,
+			chain
+				.build_call("balance".to_string(), "get_balance".to_string(), params)
+				.unwrap(),
 		)
 		.unwrap()
 		.call;
@@ -221,14 +221,18 @@ fn expected_data(
 	let meta_txs = vec![chain
 		.build_transaction(
 			None,
-			"system".to_string(),
-			"init".to_string(),
-			module::system::InitParams {
-				chain_id: "chain-test".to_string(),
-				timestamp,
-				max_until_gap: 20,
-				max_execution_gap: 8,
-			},
+			chain
+				.build_call(
+					"system".to_string(),
+					"init".to_string(),
+					module::system::InitParams {
+						chain_id: "chain-test".to_string(),
+						timestamp,
+						max_until_gap: 20,
+						max_execution_gap: 8,
+					},
+				)
+				.unwrap(),
 		)
 		.unwrap()];
 
@@ -248,11 +252,15 @@ fn expected_data(
 	let payload_txs = vec![chain
 		.build_transaction(
 			None,
-			"balance".to_string(),
-			"init".to_string(),
-			module::balance::InitParams {
-				endow: vec![(account.clone(), 10)],
-			},
+			chain
+				.build_call(
+					"balance".to_string(),
+					"init".to_string(),
+					module::balance::InitParams {
+						endow: vec![(account.clone(), 10)],
+					},
+				)
+				.unwrap(),
 		)
 		.unwrap()];
 

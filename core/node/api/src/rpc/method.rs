@@ -19,9 +19,9 @@ use futures::channel::oneshot;
 use jsonrpc_v2::{Data, ErrorLike, Params};
 use serde::{Deserialize, Serialize};
 
-use primitives::codec;
 use primitives::errors::Display;
 use primitives::errors::{CommonError, CommonResult};
+use primitives::{codec, SecretKey};
 
 use crate::errors;
 use crate::errors::ErrorKind;
@@ -232,6 +232,25 @@ pub async fn chain_execute_call<S: ApiSupport>(
 	Ok(result)
 }
 
+pub async fn build_transaction<S: ApiSupport>(
+	data: Data<Arc<S>>,
+	Params(request): Params<BuildTransactionRequest>,
+) -> CustomResult<Hex> {
+	let witness = match request.witness {
+		Some((secret_key, nonce, until)) => {
+			let secret_key: Vec<u8> = secret_key.try_into()?;
+			let nonce: u32 = nonce.try_into()?;
+			let until: u64 = until.try_into()?;
+			Some((SecretKey(secret_key), nonce, until))
+		}
+		None => None,
+	};
+	let call: primitives::Call = request.call.try_into()?;
+	let result = data.build_transaction(witness, call).await?;
+	let result = codec::encode(&result)?.into();
+	Ok(result)
+}
+
 pub async fn network_get_state<S: ApiSupport>(
 	data: Data<Arc<S>>,
 	Params(_request): Params<EmptyRequest>,
@@ -250,9 +269,21 @@ pub async fn network_get_state<S: ApiSupport>(
 	Ok(network_state)
 }
 
-/// Number input: number, hex or tag (best, execution)
+/// Number input: number, hex or tag (confirmed, confirmed_executed)
 #[derive(Deserialize)]
-pub struct BlockNumber(String);
+#[serde(untagged)]
+pub enum BlockNumber {
+	Number(primitives::types::BlockNumber),
+	String(String),
+}
+
+/// Number input: number or hex
+#[derive(Deserialize)]
+#[serde(untagged)]
+pub enum NumberOrHex {
+	Number(u64),
+	String(String),
+}
 
 /// Hash
 #[derive(Serialize, Deserialize, Clone)]
@@ -262,7 +293,7 @@ pub struct Hash(String);
 #[derive(Serialize, Deserialize)]
 pub struct Address(String);
 
-/// Hex format for number, public key, signature, params
+/// Hex format for number, private key, public key, signature, params
 #[derive(Serialize, Deserialize)]
 pub struct Hex(String);
 
@@ -338,6 +369,12 @@ pub struct Receipt {
 pub struct ExecuteTransactionRequest {
 	pub block_hash: Hash,
 	pub sender: Option<Address>,
+	pub call: Call,
+}
+
+#[derive(Deserialize)]
+pub struct BuildTransactionRequest {
+	pub witness: Option<(Hex, NumberOrHex, NumberOrHex)>,
 	pub call: Call,
 }
 
@@ -587,6 +624,46 @@ impl TryInto<Vec<u8>> for Hex {
 	}
 }
 
+impl TryInto<u64> for Hex {
+	type Error = CommonError;
+	fn try_into(self) -> Result<u64, Self::Error> {
+		let number = self.0;
+		let number = if number.starts_with("0x") {
+			let hex = number.trim_start_matches("0x");
+			let number = u64::from_str_radix(hex, 16).map_err(|_| {
+				errors::ErrorKind::InvalidParams(format!("Invalid hex: {}", number))
+			})?;
+			number
+		} else {
+			let number = number.parse::<u64>().map_err(|_| {
+				errors::ErrorKind::InvalidParams(format!("Invalid number: {}", number))
+			})?;
+			number
+		};
+		Ok(number)
+	}
+}
+
+impl TryInto<u32> for Hex {
+	type Error = CommonError;
+	fn try_into(self) -> Result<u32, Self::Error> {
+		let number = self.0;
+		let number = if number.starts_with("0x") {
+			let hex = number.trim_start_matches("0x");
+			let number = u32::from_str_radix(hex, 16).map_err(|_| {
+				errors::ErrorKind::InvalidParams(format!("Invalid hex: {}", number))
+			})?;
+			number
+		} else {
+			let number = number.parse::<u32>().map_err(|_| {
+				errors::ErrorKind::InvalidParams(format!("Invalid number: {}", number))
+			})?;
+			number
+		};
+		Ok(number)
+	}
+}
+
 impl TryInto<primitives::Call> for Call {
 	type Error = CommonError;
 
@@ -605,24 +682,67 @@ impl TryFrom<BlockNumber> for BlockNumberEnum {
 	type Error = CommonError;
 
 	fn try_from(value: BlockNumber) -> Result<Self, Self::Error> {
-		let result = match value.0.as_str() {
-			"confirmed" => BlockNumberEnum::Confirmed,
-			"confirmed_executed" => BlockNumberEnum::ConfirmedExecuted,
-			number if number.starts_with("0x") => {
-				let hex = number.trim_start_matches("0x");
-				let number = u64::from_str_radix(hex, 16).map_err(|_| {
-					errors::ErrorKind::InvalidParams(format!("Invalid hex: {}", number))
-				})?;
-				BlockNumberEnum::Number(number)
+		match value {
+			BlockNumber::Number(number) => Ok(BlockNumberEnum::Number(number)),
+			BlockNumber::String(str) => {
+				let result = match str.as_str() {
+					"confirmed" => BlockNumberEnum::Confirmed,
+					"confirmed_executed" => BlockNumberEnum::ConfirmedExecuted,
+					number if number.starts_with("0x") => {
+						let hex = number.trim_start_matches("0x");
+						let number = u64::from_str_radix(hex, 16).map_err(|_| {
+							errors::ErrorKind::InvalidParams(format!("Invalid hex: {}", number))
+						})?;
+						BlockNumberEnum::Number(number)
+					}
+					number => {
+						let number = number.parse::<u64>().map_err(|_| {
+							errors::ErrorKind::InvalidParams(format!("Invalid number: {}", number))
+						})?;
+						BlockNumberEnum::Number(number)
+					}
+				};
+				Ok(result)
 			}
-			number => {
-				let number = number.parse::<u64>().map_err(|_| {
-					errors::ErrorKind::InvalidParams(format!("Invalid number: {}", number))
-				})?;
-				BlockNumberEnum::Number(number)
+		}
+	}
+}
+
+impl TryInto<u64> for NumberOrHex {
+	type Error = CommonError;
+	fn try_into(self) -> Result<u64, Self::Error> {
+		match self {
+			NumberOrHex::Number(number) => Ok(number),
+			NumberOrHex::String(str) => {
+				let result = match str.as_str() {
+					number if number.starts_with("0x") => {
+						let hex = number.trim_start_matches("0x");
+						let number = u64::from_str_radix(hex, 16).map_err(|_| {
+							errors::ErrorKind::InvalidParams(format!("Invalid hex: {}", number))
+						})?;
+						number
+					}
+					number => {
+						let number = number.parse::<u64>().map_err(|_| {
+							errors::ErrorKind::InvalidParams(format!("Invalid number: {}", number))
+						})?;
+						number
+					}
+				};
+				Ok(result)
 			}
-		};
-		Ok(result)
+		}
+	}
+}
+
+impl TryInto<u32> for NumberOrHex {
+	type Error = CommonError;
+	fn try_into(self) -> Result<u32, Self::Error> {
+		let number: u64 = self.try_into()?;
+		let number: u32 = number
+			.try_into()
+			.map_err(|_| errors::ErrorKind::InvalidParams(format!("Invalid number: {}", number)))?;
+		Ok(number)
 	}
 }
 
@@ -641,7 +761,7 @@ type BoxedSerialize = Box<dyn erased_serde::Serialize + Send>;
 
 impl ErrorLike for CustomError {
 	fn code(&self) -> i64 {
-		32000
+		-32000
 	}
 
 	fn message(&self) -> String {

@@ -50,12 +50,16 @@ async fn test_txpool() {
 	let tx = chain
 		.build_transaction(
 			Some((account1.0, 0, 1)),
-			"balance".to_string(),
-			"transfer".to_string(),
-			module::balance::TransferParams {
-				recipient: account2.3.clone(),
-				value: 2,
-			},
+			chain
+				.build_call(
+					"balance".to_string(),
+					"transfer".to_string(),
+					module::balance::TransferParams {
+						recipient: account2.3.clone(),
+						value: 2,
+					},
+				)
+				.unwrap(),
 		)
 		.unwrap();
 
@@ -103,12 +107,16 @@ async fn test_txpool_dup() {
 	let tx = chain
 		.build_transaction(
 			Some((account1.0, 0, 1)),
-			"balance".to_string(),
-			"transfer".to_string(),
-			module::balance::TransferParams {
-				recipient: account2.3.clone(),
-				value: 2,
-			},
+			chain
+				.build_call(
+					"balance".to_string(),
+					"transfer".to_string(),
+					module::balance::TransferParams {
+						recipient: account2.3.clone(),
+						value: 2,
+					},
+				)
+				.unwrap(),
 		)
 		.unwrap();
 
@@ -143,12 +151,16 @@ async fn test_txpool_validate() {
 	let mut tx = chain
 		.build_transaction(
 			Some((account1.0.clone(), 0, 1)),
-			"balance".to_string(),
-			"transfer".to_string(),
-			module::balance::TransferParams {
-				recipient: account2.3.clone(),
-				value: 2,
-			},
+			chain
+				.build_call(
+					"balance".to_string(),
+					"transfer".to_string(),
+					module::balance::TransferParams {
+						recipient: account2.3.clone(),
+						value: 2,
+					},
+				)
+				.unwrap(),
 		)
 		.unwrap();
 	tx.call.module = "unknown".to_string();
@@ -159,12 +171,16 @@ async fn test_txpool_validate() {
 	let tx = chain
 		.build_transaction(
 			Some((account1.0.clone(), 0, 21)),
-			"balance".to_string(),
-			"transfer".to_string(),
-			module::balance::TransferParams {
-				recipient: account2.3.clone(),
-				value: 2,
-			},
+			chain
+				.build_call(
+					"balance".to_string(),
+					"transfer".to_string(),
+					module::balance::TransferParams {
+						recipient: account2.3.clone(),
+						value: 2,
+					},
+				)
+				.unwrap(),
 		)
 		.unwrap();
 	let result = txpool.insert(tx).await;
@@ -173,12 +189,16 @@ async fn test_txpool_validate() {
 	let tx = chain
 		.build_transaction(
 			Some((account1.0, 0, 0)),
-			"balance".to_string(),
-			"transfer".to_string(),
-			module::balance::TransferParams {
-				recipient: account2.3,
-				value: 2,
-			},
+			chain
+				.build_call(
+					"balance".to_string(),
+					"transfer".to_string(),
+					module::balance::TransferParams {
+						recipient: account2.3,
+						value: 2,
+					},
+				)
+				.unwrap(),
 		)
 		.unwrap();
 	let result = txpool.insert(tx).await;
@@ -210,36 +230,48 @@ async fn test_txpool_capacity() {
 	let tx = chain
 		.build_transaction(
 			Some((account1.0.clone(), 0, 1)),
-			"balance".to_string(),
-			"transfer".to_string(),
-			module::balance::TransferParams {
-				recipient: account2.3.clone(),
-				value: 2,
-			},
+			chain
+				.build_call(
+					"balance".to_string(),
+					"transfer".to_string(),
+					module::balance::TransferParams {
+						recipient: account2.3.clone(),
+						value: 2,
+					},
+				)
+				.unwrap(),
 		)
 		.unwrap();
 
 	let tx2 = chain
 		.build_transaction(
 			Some((account1.0.clone(), 1, 1)),
-			"balance".to_string(),
-			"transfer".to_string(),
-			module::balance::TransferParams {
-				recipient: account2.3.clone(),
-				value: 2,
-			},
+			chain
+				.build_call(
+					"balance".to_string(),
+					"transfer".to_string(),
+					module::balance::TransferParams {
+						recipient: account2.3.clone(),
+						value: 2,
+					},
+				)
+				.unwrap(),
 		)
 		.unwrap();
 
 	let tx3 = chain
 		.build_transaction(
 			Some((account1.0.clone(), 2, 1)),
-			"balance".to_string(),
-			"transfer".to_string(),
-			module::balance::TransferParams {
-				recipient: account2.3.clone(),
-				value: 2,
-			},
+			chain
+				.build_call(
+					"balance".to_string(),
+					"transfer".to_string(),
+					module::balance::TransferParams {
+						recipient: account2.3.clone(),
+						value: 2,
+					},
+				)
+				.unwrap(),
 		)
 		.unwrap();
 

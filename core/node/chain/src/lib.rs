@@ -133,16 +133,23 @@ impl Chain {
 		self.backend.validate_transaction(tx, witness_required)
 	}
 
-	/// Build a transaction by witness, module, method and params
-	pub fn build_transaction<P: Encode>(
+	/// Build a call by module, method and params
+	pub fn build_call<P: Encode>(
 		&self,
-		witness: Option<(SecretKey, Nonce, BlockNumber)>,
 		module: String,
 		method: String,
 		params: P,
+	) -> CommonResult<Call> {
+		self.backend.build_call(module, method, params)
+	}
+
+	/// Build a transaction by witness and call
+	pub fn build_transaction(
+		&self,
+		witness: Option<(SecretKey, Nonce, BlockNumber)>,
+		call: Call,
 	) -> CommonResult<Transaction> {
-		self.backend
-			.build_transaction(witness, module, method, params)
+		self.backend.build_transaction(witness, call)
 	}
 
 	/// Build a block
