@@ -37,7 +37,6 @@ async fn test_txpool() {
 	let chain = get_chain(&account1.3);
 	let config = TxPoolConfig {
 		pool_capacity: 1024,
-		buffer_capacity: 256,
 	};
 	let txpool_support = Arc::new(DefaultTxPoolSupport::new(chain.clone()));
 	let txpool = TxPool::new(config, txpool_support).unwrap();
@@ -68,7 +67,7 @@ async fn test_txpool() {
 		tx_hash: chain.hash_transaction(&tx.clone()).unwrap(),
 	})];
 
-	txpool.insert(tx).await.unwrap();
+	txpool.insert(tx).unwrap();
 
 	loop {
 		{
@@ -94,7 +93,6 @@ async fn test_txpool_dup() {
 	let chain = get_chain(&account1.3);
 	let config = TxPoolConfig {
 		pool_capacity: 1024,
-		buffer_capacity: 256,
 	};
 	let txpool_support = Arc::new(DefaultTxPoolSupport::new(chain.clone()));
 	let txpool = TxPool::new(config, txpool_support).unwrap();
@@ -120,9 +118,9 @@ async fn test_txpool_dup() {
 		)
 		.unwrap();
 
-	txpool.insert(tx.clone()).await.unwrap();
+	txpool.insert(tx.clone()).unwrap();
 
-	let result = txpool.insert(tx).await;
+	let result = txpool.insert(tx);
 	assert!(format!("{}", result.unwrap_err()).contains("Error: Duplicated tx"));
 
 	safe_close(chain, txpool).await;
@@ -138,7 +136,6 @@ async fn test_txpool_validate() {
 	let chain = get_chain(&account1.3);
 	let config = TxPoolConfig {
 		pool_capacity: 1024,
-		buffer_capacity: 256,
 	};
 	let txpool_support = Arc::new(DefaultTxPoolSupport::new(chain.clone()));
 	let txpool = TxPool::new(config, txpool_support).unwrap();
@@ -165,8 +162,11 @@ async fn test_txpool_validate() {
 		.unwrap();
 	tx.call.module = "unknown".to_string();
 
-	let result = txpool.insert(tx.clone()).await;
-	assert!(format!("{}", result.unwrap_err()).contains("Error: Invalid tx witness"));
+	let result = txpool.insert(tx.clone());
+	assert_eq!(
+		format!("{}", result.unwrap_err()),
+		"Chain Error: Validate tx error: Invalid tx witness: Invalid signature"
+	);
 
 	let tx = chain
 		.build_transaction(
@@ -183,8 +183,11 @@ async fn test_txpool_validate() {
 				.unwrap(),
 		)
 		.unwrap();
-	let result = txpool.insert(tx).await;
-	assert!(format!("{}", result.unwrap_err()).contains("Error: Exceed until"));
+	let result = txpool.insert(tx);
+	assert_eq!(
+		format!("{}", result.unwrap_err()),
+		"Chain Error: Validate tx error: Invalid tx until: Exceed max until: 21"
+	);
 
 	let tx = chain
 		.build_transaction(
@@ -201,8 +204,11 @@ async fn test_txpool_validate() {
 				.unwrap(),
 		)
 		.unwrap();
-	let result = txpool.insert(tx).await;
-	assert!(format!("{}", result.unwrap_err()).contains("Error: Invalid until"));
+	let result = txpool.insert(tx);
+	assert_eq!(
+		format!("{}", result.unwrap_err()),
+		"Chain Error: Validate tx error: Invalid tx until: Exceed min until: 0"
+	);
 
 	safe_close(chain, txpool).await;
 }
@@ -215,10 +221,7 @@ async fn test_txpool_capacity() {
 	let (account1, _account2) = test_accounts(dsa, address);
 
 	let chain = get_chain(&account1.3);
-	let config = TxPoolConfig {
-		pool_capacity: 2,
-		buffer_capacity: 256,
-	};
+	let config = TxPoolConfig { pool_capacity: 2 };
 	let txpool_support = Arc::new(DefaultTxPoolSupport::new(chain.clone()));
 	let txpool = TxPool::new(config, txpool_support).unwrap();
 
@@ -275,9 +278,9 @@ async fn test_txpool_capacity() {
 		)
 		.unwrap();
 
-	txpool.insert(tx).await.unwrap();
-	txpool.insert(tx2).await.unwrap();
-	let result = txpool.insert(tx3).await;
+	txpool.insert(tx).unwrap();
+	txpool.insert(tx2).unwrap();
+	let result = txpool.insert(tx3);
 	assert!(format!("{}", result.unwrap_err()).contains("Error: Exceed capacity"));
 
 	safe_close(chain, txpool).await;

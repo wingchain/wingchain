@@ -23,6 +23,7 @@ pub enum ProtocolMessage {
 	BlockAnnounce(BlockAnnounce),
 	BlockRequest(BlockRequest),
 	BlockResponse(BlockResponse),
+	TxPropagate(TxPropagate),
 }
 
 #[derive(Encode, Decode, Debug, PartialEq)]
@@ -49,6 +50,11 @@ pub struct BlockRequest {
 pub struct BlockResponse {
 	pub request_id: RequestId,
 	pub blocks: Vec<BlockData>,
+}
+
+#[derive(Encode, Decode, Debug, PartialEq)]
+pub struct TxPropagate {
+	pub txs: Vec<Transaction>,
 }
 
 #[derive(Encode, Decode, Debug, PartialEq, Clone)]
@@ -125,6 +131,10 @@ impl<'a> From<&'a ProtocolMessage> for ProtocolMessagePayload {
 				name: "BlockResponse".to_string(),
 				payload: v.encode(),
 			},
+			ProtocolMessage::TxPropagate(v) => ProtocolMessagePayload {
+				name: "TxPropagate".to_string(),
+				payload: v.encode(),
+			},
 		}
 	}
 }
@@ -143,6 +153,9 @@ impl TryFrom<ProtocolMessagePayload> for ProtocolMessage {
 				&mut &v.payload[..],
 			)?)),
 			"BlockResponse" => Ok(ProtocolMessage::BlockResponse(Decode::decode(
+				&mut &v.payload[..],
+			)?)),
+			"TxPropagate" => Ok(ProtocolMessage::TxPropagate(Decode::decode(
 				&mut &v.payload[..],
 			)?)),
 			_ => Err("Unknown protocol message name".into()),

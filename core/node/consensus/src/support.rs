@@ -16,7 +16,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use node_chain::{Basic, Chain, ChainCommitBlockParams, CommitBlockResult};
+use node_chain::{Basic, Chain, ChainCommitBlockParams};
 use node_txpool::support::DefaultTxPoolSupport;
 use node_txpool::TxPool;
 use primitives::codec::{Decode, Encode};
@@ -46,13 +46,10 @@ pub trait ConsensusSupport {
 		&self,
 		build_block_params: BuildBlockParams,
 	) -> CommonResult<ChainCommitBlockParams>;
-	fn commit_block(
-		&self,
-		commit_block_params: ChainCommitBlockParams,
-	) -> CommonResult<CommitBlockResult>;
-	fn get_transactions_in_txpool(&self) -> CommonResult<Vec<Arc<FullTransaction>>>;
-	fn remove_transactions_in_txpool(&self, tx_hash_set: &HashSet<Hash>) -> CommonResult<()>;
+	fn commit_block(&self, commit_block_params: ChainCommitBlockParams) -> CommonResult<()>;
 	fn get_basic(&self) -> CommonResult<Arc<Basic>>;
+	fn txpool_get_transactions(&self) -> CommonResult<Vec<Arc<FullTransaction>>>;
+	fn txpool_remove_transactions(&self, tx_hash_set: &HashSet<Hash>) -> CommonResult<()>;
 }
 
 pub struct DefaultConsensusSupport {
@@ -103,20 +100,18 @@ impl ConsensusSupport for DefaultConsensusSupport {
 	) -> CommonResult<ChainCommitBlockParams> {
 		self.chain.build_block(build_block_params)
 	}
-	fn commit_block(
-		&self,
-		commit_block_params: ChainCommitBlockParams,
-	) -> CommonResult<CommitBlockResult> {
+	fn commit_block(&self, commit_block_params: ChainCommitBlockParams) -> CommonResult<()> {
 		self.chain.commit_block(commit_block_params)
-	}
-	fn get_transactions_in_txpool(&self) -> CommonResult<Vec<Arc<FullTransaction>>> {
-		let txs = (*self.txpool.get_queue().read()).clone();
-		Ok(txs)
-	}
-	fn remove_transactions_in_txpool(&self, tx_hash_set: &HashSet<Hash>) -> CommonResult<()> {
-		self.txpool.remove(tx_hash_set)
 	}
 	fn get_basic(&self) -> CommonResult<Arc<Basic>> {
 		Ok(self.chain.get_basic())
+	}
+
+	fn txpool_get_transactions(&self) -> CommonResult<Vec<Arc<FullTransaction>>> {
+		let txs = (*self.txpool.get_queue().read()).clone();
+		Ok(txs)
+	}
+	fn txpool_remove_transactions(&self, tx_hash_set: &HashSet<Hash>) -> CommonResult<()> {
+		self.txpool.remove(tx_hash_set)
 	}
 }

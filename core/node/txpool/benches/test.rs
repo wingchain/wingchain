@@ -19,7 +19,7 @@ extern crate test;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
-use test::{Bencher, black_box};
+use test::{black_box, Bencher};
 
 use futures::future::join_all;
 use tempfile::tempdir;
@@ -27,9 +27,9 @@ use tokio::runtime::Runtime;
 
 use crypto::address::AddressImpl;
 use crypto::dsa::{DsaImpl, KeyPairImpl};
-use node_chain::{Chain, ChainConfig, module};
-use node_txpool::{TxPool, TxPoolConfig};
+use node_chain::{module, Chain, ChainConfig};
 use node_txpool::support::DefaultTxPoolSupport;
+use node_txpool::{TxPool, TxPoolConfig};
 use primitives::{Address, PublicKey, SecretKey, Transaction};
 use utils_test::test_accounts;
 
@@ -37,101 +37,105 @@ const TXS_SIZE: usize = 2000;
 
 #[bench]
 fn bench_txpool_insert_transfer(b: &mut Bencher) {
-    let dsa = Arc::new(DsaImpl::Ed25519);
-    let address = Arc::new(AddressImpl::Blake2b160);
+	let dsa = Arc::new(DsaImpl::Ed25519);
+	let address = Arc::new(AddressImpl::Blake2b160);
 
-    let (account1, account2) = test_accounts(dsa, address);
+	let (account1, account2) = test_accounts(dsa, address);
 
-    let runtime = Runtime::new().unwrap();
-    let chain = runtime.block_on(async {
-        let chain = get_chain(&account1.3);
-        chain
-    });
-    let txs = gen_transfer_txs(&chain, TXS_SIZE, &account1, &account2);
-    bench_txpool_insert_txs(b, &account1.3, txs);
+	let runtime = Runtime::new().unwrap();
+	let chain = runtime.block_on(async {
+		let chain = get_chain(&account1.3);
+		chain
+	});
+	let txs = gen_transfer_txs(&chain, TXS_SIZE, &account1, &account2);
+	bench_txpool_insert_txs(b, &account1.3, txs);
 }
 
 fn bench_txpool_insert_txs(b: &mut Bencher, address: &Address, txs: Vec<Transaction>) {
-    b.iter(|| {
-        black_box({
-            let config = TxPoolConfig {
-                pool_capacity: 10240,
-                buffer_capacity: 10240,
-            };
+	b.iter(|| {
+		black_box({
+			let config = TxPoolConfig {
+				pool_capacity: 10240,
+				buffer_capacity: 10240,
+			};
 
-            let runtime = Runtime::new().unwrap();
-            runtime.block_on(async {
-                let chain = get_chain(address);
-                let txpool_support = Arc::new(DefaultTxPoolSupport::new(chain.clone()));
+			let runtime = Runtime::new().unwrap();
+			runtime.block_on(async {
+				let chain = get_chain(address);
+				let txpool_support = Arc::new(DefaultTxPoolSupport::new(chain.clone()));
 
-                let txpool = TxPool::new(config, txpool_support).unwrap();
-                let futures = txs
-                    .iter()
-                    .map(|tx| txpool.insert(tx.clone()))
-                    .collect::<Vec<_>>();
-                let r = join_all(futures).await;
-                println!("{:?}", r);
-            });
-        })
-    });
+				let txpool = TxPool::new(config, txpool_support).unwrap();
+				let futures = txs
+					.iter()
+					.map(|tx| txpool.insert(tx.clone()))
+					.collect::<Vec<_>>();
+				let r = join_all(futures).await;
+				println!("{:?}", r);
+			});
+		})
+	});
 }
 
 fn gen_transfer_txs(
-    chain: &Arc<Chain>,
-    size: usize,
-    account1: &(SecretKey, PublicKey, KeyPairImpl, Address),
-    account2: &(SecretKey, PublicKey, KeyPairImpl, Address),
+	chain: &Arc<Chain>,
+	size: usize,
+	account1: &(SecretKey, PublicKey, KeyPairImpl, Address),
+	account2: &(SecretKey, PublicKey, KeyPairImpl, Address),
 ) -> Vec<Transaction> {
-    let mut txs = Vec::with_capacity(size);
-    for nonce in 0..size {
-        let tx = gen_transfer_tx(&chain, nonce as u32, &account1, &account2);
-        txs.push(tx);
-    }
-    txs
+	let mut txs = Vec::with_capacity(size);
+	for nonce in 0..size {
+		let tx = gen_transfer_tx(&chain, nonce as u32, &account1, &account2);
+		txs.push(tx);
+	}
+	txs
 }
 
 fn gen_transfer_tx(
-    chain: &Arc<Chain>,
-    nonce: u32,
-    account1: &(SecretKey, PublicKey, KeyPairImpl, Address),
-    account2: &(SecretKey, PublicKey, KeyPairImpl, Address),
+	chain: &Arc<Chain>,
+	nonce: u32,
+	account1: &(SecretKey, PublicKey, KeyPairImpl, Address),
+	account2: &(SecretKey, PublicKey, KeyPairImpl, Address),
 ) -> Transaction {
-    let until = 1u64;
-    let tx = chain
-        .build_transaction(
-            Some((account1.0.clone(), nonce, until)),
-            chain.build_call("balance".to_string(),
-                             "transfer".to_string(),
-                             module::balance::TransferParams {
-                                 recipient: account2.3.clone(),
-                                 value: 2,
-                             }).unwrap(),
-        )
-        .unwrap();
-    chain.validate_transaction(&tx, true).unwrap();
-    tx
+	let until = 1u64;
+	let tx = chain
+		.build_transaction(
+			Some((account1.0.clone(), nonce, until)),
+			chain
+				.build_call(
+					"balance".to_string(),
+					"transfer".to_string(),
+					module::balance::TransferParams {
+						recipient: account2.3.clone(),
+						value: 2,
+					},
+				)
+				.unwrap(),
+		)
+		.unwrap();
+	chain.validate_transaction(&tx, true).unwrap();
+	tx
 }
 
 fn get_chain(address: &Address) -> Arc<Chain> {
-    let path = tempdir().expect("Could not create a temp dir");
-    let home = path.into_path();
+	let path = tempdir().expect("Could not create a temp dir");
+	let home = path.into_path();
 
-    init(&home, address);
+	init(&home, address);
 
-    let chain_config = ChainConfig { home };
+	let chain_config = ChainConfig { home };
 
-    let chain = Arc::new(Chain::new(chain_config).unwrap());
+	let chain = Arc::new(Chain::new(chain_config).unwrap());
 
-    chain
+	chain
 }
 
 fn init(home: &PathBuf, address: &Address) {
-    let config_path = home.join("config");
+	let config_path = home.join("config");
 
-    fs::create_dir_all(&config_path).unwrap();
+	fs::create_dir_all(&config_path).unwrap();
 
-    let spec = format!(
-        r#"
+	let spec = format!(
+		r#"
 [basic]
 hash = "blake2b_256"
 dsa = "ed25519"
@@ -162,8 +166,8 @@ params = '''
 }}
 '''
 	"#,
-        address
-    );
+		address
+	);
 
-    fs::write(config_path.join("spec.toml"), &spec).unwrap();
+	fs::write(config_path.join("spec.toml"), &spec).unwrap();
 }

@@ -36,10 +36,7 @@ pub fn get_service(
 ) {
 	let chain = get_chain(&account.3);
 
-	let txpool_config = TxPoolConfig {
-		pool_capacity: 32,
-		buffer_capacity: 32,
-	};
+	let txpool_config = TxPoolConfig { pool_capacity: 32 };
 
 	let txpool_support = Arc::new(DefaultTxPoolSupport::new(chain.clone()));
 	let txpool = Arc::new(TxPool::new(txpool_config, txpool_support).unwrap());
@@ -61,7 +58,7 @@ pub async fn insert_tx(
 	tx: Transaction,
 ) -> Hash {
 	let tx_hash = chain.hash_transaction(&tx).unwrap();
-	txpool.insert(tx).await.unwrap();
+	txpool.insert(tx).unwrap();
 	tx_hash
 }
 

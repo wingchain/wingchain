@@ -84,12 +84,12 @@ where
 			"chain_sendRawTransaction",
 			method::chain_send_raw_transaction::<S>,
 		)
-		.with_method(
-			"chain_getTransactionInTxPool",
-			method::chain_get_transaction_in_txpool::<S>,
-		)
 		.with_method("chain_executeCall", method::chain_execute_call::<S>)
-		.with_method("chain_buildTransaction", method::build_transaction::<S>)
+		.with_method(
+			"chain_buildTransaction",
+			method::chain_build_transaction::<S>,
+		)
+		.with_method("txpool_getTransaction", method::txpool_get_transaction::<S>)
 		.with_method("network_getState", method::network_get_state::<S>)
 		.finish();
 

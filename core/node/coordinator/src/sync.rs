@@ -19,22 +19,23 @@ use std::sync::Arc;
 use log::{info, trace};
 use lru::LruCache;
 
+use node_chain::ChainCommitBlockParams;
 use node_network::{NetworkInMessage, PeerId};
 use primitives::codec::Encode;
-use primitives::errors::CommonResult;
-use primitives::{BlockNumber, Hash};
+use primitives::errors::{Catchable, CommonResult};
+use primitives::{BlockNumber, FullTransaction, Hash};
 
 use crate::protocol::{
 	BlockAnnounce, BlockData, BlockId, BlockRequest, BlockResponse, BodyData, Direction,
-	ProtocolMessage, RequestId, FIELDS_BODY, FIELDS_HEADER,
+	ProtocolMessage, RequestId, TxPropagate, FIELDS_BODY, FIELDS_HEADER,
 };
 use crate::stream::{StreamSupport, VerifyError, VerifyResult};
 use crate::support::CoordinatorSupport;
-use node_chain::{ChainCommitBlockParams, CommitBlockError};
 
 const PEER_KNOWN_BLOCKS_SIZE: u32 = 1024;
 const PENDING_BLOCKS_SIZE: u32 = 2560;
 const PEER_REQUEST_BLOCK_SIZE: u32 = 128;
+const PEER_KNOWN_TXS_SIZE: u32 = 10240;
 
 pub struct ChainSync<S>
 where
@@ -46,6 +47,7 @@ where
 	next_request_id: RequestId,
 }
 
+/// Handle peers open/close
 impl<S> ChainSync<S>
 where
 	S: CoordinatorSupport + Send + Sync + 'static,
@@ -64,6 +66,7 @@ where
 			peer_id.clone(),
 			PeerInfo {
 				known_blocks: LruCache::new(PEER_KNOWN_BLOCKS_SIZE as usize),
+				known_txs: LruCache::new(PEER_KNOWN_TXS_SIZE as usize),
 				confirmed_number: 0,
 				confirmed_hash: self.support.get_genesis_hash().clone(),
 				state: PeerState::Vacant,
@@ -113,7 +116,13 @@ where
 		self.sync()?;
 		Ok(())
 	}
+}
 
+/// Handle blocks syncing
+impl<S> ChainSync<S>
+where
+	S: CoordinatorSupport + Send + Sync + 'static,
+{
 	pub fn on_block_announce(
 		&mut self,
 		peer_id: PeerId,
@@ -460,13 +469,23 @@ where
 		result: VerifyResult<ChainCommitBlockParams>,
 	) -> CommonResult<VerifyAction> {
 		let action = match result {
-			Ok(v) => match self.support.commit_block(v)? {
-				Ok(_) => VerifyAction::Ok,
-				Err(e) => match e {
-					CommitBlockError::Duplicated => VerifyAction::Discard,
-					CommitBlockError::NotBest => VerifyAction::Reset,
-				},
-			},
+			Ok(v) => self
+				.support
+				.ori_support()
+				.commit_block(v)
+				.map(|_| VerifyAction::Ok)
+				.or_else_catch::<node_chain::errors::ErrorKind, _>(|e| match e {
+					node_chain::errors::ErrorKind::CommitBlockError(e) => {
+						let action = match e {
+							node_chain::errors::CommitBlockError::Duplicated => {
+								VerifyAction::Discard
+							}
+							node_chain::errors::CommitBlockError::NotBest => VerifyAction::Reset,
+						};
+						Some(Ok(action))
+					}
+					_ => None,
+				})?,
 			Err(e) => match e {
 				VerifyError::ShouldWait => VerifyAction::Wait,
 				VerifyError::Duplicated => VerifyAction::Discard,
@@ -490,6 +509,69 @@ where
 	}
 }
 
+/// Handle tx propagation
+impl<S> ChainSync<S>
+where
+	S: CoordinatorSupport + Send + Sync + 'static,
+{
+	pub fn on_tx_inserted(&mut self, tx_hash: Hash) -> CommonResult<()> {
+		if let Some(tx) = self
+			.support
+			.ori_support()
+			.txpool_get_transaction(&tx_hash)?
+		{
+			self.propagate_txs(vec![tx])?;
+		}
+		Ok(())
+	}
+
+	pub fn on_tx_propagate(
+		&mut self,
+		peer_id: PeerId,
+		tx_propagate: TxPropagate,
+	) -> CommonResult<()> {
+		let ori_support = self.support.ori_support();
+		for tx in tx_propagate.txs {
+			if let Some(peer_info) = self.peers.get_mut(&peer_id) {
+				let tx_hash = self.support.ori_support().hash_transaction(&tx)?;
+				if peer_info.known_txs.put(tx_hash, ()).is_none() {
+					let result = ori_support.txpool_insert_transaction(tx);
+					self.on_insert_result(result)?;
+				}
+			}
+		}
+		Ok(())
+	}
+
+	fn on_insert_result(&self, result: CommonResult<()>) -> CommonResult<()> {
+		unimplemented!()
+	}
+
+	fn propagate_txs<'a>(&mut self, txs: Vec<Arc<FullTransaction>>) -> CommonResult<()> {
+		for (peer_id, peer_info) in self.peers.iter_mut() {
+			let to_propagate_txs = txs
+				.iter()
+				.filter(|tx| peer_info.known_txs.put(tx.tx_hash.clone(), ()).is_none())
+				.map(|tx| tx.tx.clone())
+				.collect::<Vec<_>>();
+			trace!(
+				"Propagate txs to {}, count: {}",
+				peer_id,
+				to_propagate_txs.len(),
+			);
+			let tx_propagate = ProtocolMessage::TxPropagate(TxPropagate {
+				txs: to_propagate_txs,
+			});
+			self.support
+				.network_send_message(NetworkInMessage::SendMessage {
+					peer_id: peer_id.clone(),
+					message: tx_propagate.encode(),
+				});
+		}
+		Ok(())
+	}
+}
+
 #[derive(Debug)]
 enum VerifyAction {
 	Ok,
@@ -501,6 +583,7 @@ enum VerifyAction {
 #[derive(Debug)]
 pub struct PeerInfo {
 	known_blocks: LruCache<Hash, ()>,
+	known_txs: LruCache<Hash, ()>,
 	confirmed_number: BlockNumber,
 	confirmed_hash: Hash,
 	state: PeerState,

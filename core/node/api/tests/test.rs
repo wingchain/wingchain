@@ -137,7 +137,7 @@ async fn test_api() {
 	base::wait_txpool(&txpool0, 1).await;
 
 	let request = format!(
-		r#"{{"jsonrpc": "2.0", "method": "chain_getTransactionInTxPool", "params": ["0x{}"], "id": 1}}"#,
+		r#"{{"jsonrpc": "2.0", "method": "txpool_getTransaction", "params": ["0x{}"], "id": 1}}"#,
 		hex::encode(&tx0_hash.0)
 	);
 	let response = call_rpc(&request).await;

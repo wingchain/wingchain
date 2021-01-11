@@ -19,16 +19,15 @@ use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
 use futures::StreamExt;
 use log::{error, warn};
 
-use node_chain::{ChainCommitBlockParams, ChainOutMessage, CommitBlockResult};
-use node_executor::module;
-use node_executor_primitives::EmptyParams;
+use node_chain::{ChainCommitBlockParams, ChainOutMessage};
 use node_network::{BytesMut, NetworkInMessage, NetworkOutMessage, PMInMessage, PeerId};
+use node_txpool::TxPoolOutMessage;
 use primitives::codec::Decode;
 use primitives::errors::CommonResult;
 use primitives::{BlockNumber, Body, BuildBlockParams, FullTransaction, Hash, Header, Transaction};
 
 use crate::protocol::{
-	BlockAnnounce, BlockData, BlockRequest, BlockResponse, BodyData, ProtocolMessage,
+	BlockAnnounce, BlockData, BlockRequest, BlockResponse, BodyData, ProtocolMessage, TxPropagate,
 };
 use crate::support::CoordinatorSupport;
 use crate::sync::ChainSync;
@@ -39,6 +38,7 @@ where
 	S: CoordinatorSupport + Send + Sync + 'static,
 {
 	chain_rx: UnboundedReceiver<ChainOutMessage>,
+	txpool_rx: UnboundedReceiver<TxPoolOutMessage>,
 	network_rx: UnboundedReceiver<NetworkOutMessage>,
 	in_rx: UnboundedReceiver<CoordinatorInMessage>,
 	sync: ChainSync<S>,
@@ -52,6 +52,7 @@ where
 	pub fn new(
 		genesis_hash: Hash,
 		chain_rx: UnboundedReceiver<ChainOutMessage>,
+		txpool_rx: UnboundedReceiver<TxPoolOutMessage>,
 		peer_manager_tx: UnboundedSender<PMInMessage>,
 		network_tx: UnboundedSender<NetworkInMessage>,
 		network_rx: UnboundedReceiver<NetworkOutMessage>,
@@ -69,6 +70,7 @@ where
 
 		let stream = Self {
 			chain_rx,
+			txpool_rx,
 			network_rx,
 			in_rx,
 			support,
@@ -85,6 +87,12 @@ where
 			ChainOutMessage::ExecutionCommitted { number, hash } => {
 				self.on_execution_committed(number, hash)
 			}
+		}
+	}
+
+	fn on_txpool_message(&mut self, message: TxPoolOutMessage) -> CommonResult<()> {
+		match message {
+			TxPoolOutMessage::TxInserted { tx_hash } => self.on_tx_inserted(tx_hash),
 		}
 	}
 
@@ -185,6 +193,9 @@ where
 			ProtocolMessage::BlockResponse(block_response) => {
 				self.on_block_response(peer_id, block_response)
 			}
+			ProtocolMessage::TxPropagate(tx_propagate) => {
+				self.on_tx_propagate(peer_id, tx_propagate)
+			}
 			ProtocolMessage::Handshake(_) => Ok(()),
 		}
 	}
@@ -212,6 +223,20 @@ where
 	) -> CommonResult<()> {
 		self.sync.on_block_response(peer_id, block_response)
 	}
+
+	fn on_tx_propagate(&mut self, peer_id: PeerId, tx_propagate: TxPropagate) -> CommonResult<()> {
+		self.sync.on_tx_propagate(peer_id, tx_propagate)
+	}
+}
+
+/// methods for txpool messages
+impl<S> CoordinatorStream<S>
+where
+	S: CoordinatorSupport + Send + Sync + 'static,
+{
+	fn on_tx_inserted(&mut self, tx_hash: Hash) -> CommonResult<()> {
+		self.sync.on_tx_inserted(tx_hash)
+	}
 }
 
 pub struct StreamSupport<S>
@@ -222,7 +247,6 @@ where
 	peer_manager_tx: UnboundedSender<PMInMessage>,
 	network_tx: UnboundedSender<NetworkInMessage>,
 	support: Arc<S>,
-	system_meta: module::system::Meta,
 }
 
 impl<S> StreamSupport<S>
@@ -235,14 +259,16 @@ where
 		network_tx: UnboundedSender<NetworkInMessage>,
 		support: Arc<S>,
 	) -> CommonResult<Self> {
-		let system_meta = get_system_meta(support.clone())?;
 		Ok(Self {
 			genesis_hash,
 			peer_manager_tx,
 			network_tx,
 			support,
-			system_meta,
 		})
+	}
+
+	pub fn ori_support(&self) -> Arc<S> {
+		self.support.clone()
 	}
 
 	pub fn peer_manager_send_message(&self, message: PMInMessage) {
@@ -330,13 +356,6 @@ where
 			)))?;
 		Ok(body)
 	}
-
-	pub fn commit_block(
-		&self,
-		commit_block_params: ChainCommitBlockParams,
-	) -> CommonResult<CommitBlockResult> {
-		self.support.commit_block(commit_block_params)
-	}
 }
 
 pub enum VerifyError {
@@ -397,11 +416,10 @@ where
 
 		// the following verification need take ownership of block data
 		let block_data = block_data.take().expect("qed");
-		let confirmed_number = block_data.number - 1;
 		let header = block_data.header.expect("qed");
 		let body = block_data.body.expect("qed");
 
-		let (meta_txs, payload_txs) = match self.verify_body(body, confirmed_number)? {
+		let (meta_txs, payload_txs) = match self.verify_body(body)? {
 			Ok(v) => v,
 			Err(e) => return Ok(Err(e)),
 		};
@@ -474,11 +492,13 @@ where
 		header: &Header,
 		confirmed_header: &Header,
 	) -> CommonResult<VerifyResult<()>> {
+		let system_meta = &self.support.get_current_state().system_meta;
+
 		if header.payload_execution_gap < 1 {
 			return Ok(Err(VerifyError::InvalidExecutionGap));
 		}
 
-		if header.payload_execution_gap > self.system_meta.max_execution_gap {
+		if header.payload_execution_gap > system_meta.max_execution_gap {
 			return Ok(Err(VerifyError::InvalidExecutionGap));
 		}
 
@@ -510,7 +530,6 @@ where
 	fn verify_body(
 		&self,
 		body: BodyData,
-		confirmed_number: BlockNumber,
 	) -> CommonResult<VerifyResult<(Vec<Arc<FullTransaction>>, Vec<Arc<FullTransaction>>)>> {
 		let get_verified_txs =
 			|txs: Vec<Transaction>| -> CommonResult<VerifyResult<Vec<Arc<FullTransaction>>>> {
@@ -518,7 +537,7 @@ where
 				let mut result = Vec::with_capacity(txs.len());
 				for tx in txs {
 					let tx_hash = self.support.hash_transaction(&tx)?;
-					match self.verify_transaction(&tx_hash, &tx, confirmed_number, &mut set)? {
+					match self.verify_transaction(&tx_hash, &tx, &mut set)? {
 						Ok(()) => (),
 						Err(e) => return Ok(Err(e)),
 					}
@@ -575,7 +594,6 @@ where
 		&self,
 		tx_hash: &Hash,
 		tx: &Transaction,
-		confirmed_number: BlockNumber,
 		set: &mut HashSet<Hash>,
 	) -> CommonResult<VerifyResult<()>> {
 		if !set.insert(tx_hash.clone()) {
@@ -585,7 +603,7 @@ where
 			))));
 		}
 
-		match self.support.validate_transaction(&tx, true) {
+		match self.support.validate_transaction(tx_hash, &tx, true) {
 			Ok(()) => (),
 			Err(_) => {
 				return Ok(Err(VerifyError::InvalidTx(format!(
@@ -594,31 +612,6 @@ where
 				))));
 			}
 		};
-		let witness = tx.witness.as_ref().expect("qed");
-
-		let max_until_gap = self.system_meta.max_until_gap;
-		let max_until = confirmed_number + max_until_gap;
-
-		if witness.until > max_until {
-			return Ok(Err(VerifyError::InvalidTx(format!(
-				"Invalid until: {}, {}",
-				witness.until, tx_hash
-			))));
-		}
-
-		if witness.until <= confirmed_number {
-			return Ok(Err(VerifyError::InvalidTx(format!(
-				"Invalid until: {}, {}",
-				witness.until, tx_hash
-			))));
-		}
-
-		if self.support.get_transaction(&tx_hash)?.is_some() {
-			return Ok(Err(VerifyError::DuplicatedTx(format!(
-				"Duplicated tx: {}",
-				tx_hash
-			))));
-		}
 
 		Ok(Ok(()))
 	}
@@ -654,18 +647,14 @@ where
 				stream.on_in_message(in_message)
 					.unwrap_or_else(|e| error!("Coordinator handle in message error: {}", e));
 			}
+			txpool_message = stream.txpool_rx.next() => {
+				let txpool_message = match txpool_message {
+					Some(v) => v,
+					None => return,
+				};
+				stream.on_txpool_message(txpool_message)
+					.unwrap_or_else(|e| error!("Coordinator handle txpool message error: {}", e));
+			}
 		}
 	}
-}
-
-fn get_system_meta<S: CoordinatorSupport>(support: Arc<S>) -> CommonResult<module::system::Meta> {
-	support
-		.execute_call_with_block_number(
-			&0,
-			None,
-			"system".to_string(),
-			"get_meta".to_string(),
-			EmptyParams,
-		)
-		.map(|x| x.expect("qed"))
 }

@@ -15,6 +15,7 @@ log = "0.4.8"
 lru = "0.6.1"
 
 node-chain = { path = "../chain" }
+node-txpool = { path = "../txpool" }
 node-executor = { path = "../executor" }
 node-executor-primitives = { path = "../executor/primitives" }
 node-network = { path = "../network" }
@@ -28,6 +29,5 @@ tokio = { version = "1.0", features = ["rt-multi-thread", "time", "sync", "macro
 
 node-consensus = { path = "../consensus" }
 node-consensus-poa = { path = "../consensus/poa" }
-node-txpool = { path = "../txpool" }
 crypto = { path = "../../crypto" }
 utils-test = { path = "../../../utils/test" }

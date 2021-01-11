@@ -33,7 +33,7 @@ use node_consensus::errors::ErrorKind;
 use node_consensus::{errors, support::ConsensusSupport};
 use node_executor::module;
 use node_executor_primitives::EmptyParams;
-use primitives::errors::CommonResult;
+use primitives::errors::{Catchable, CommonResult};
 use primitives::types::ExecutionGap;
 use primitives::{Address, BlockNumber, BuildBlockParams, FullTransaction, SecretKey};
 
@@ -126,7 +126,7 @@ where
 		let number = confirmed_number + 1;
 		let timestamp = schedule_info.timestamp;
 
-		let txs = match self.support.get_transactions_in_txpool() {
+		let txs = match self.support.txpool_get_transactions() {
 			Ok(txs) => txs,
 			Err(e) => {
 				warn!("Unable to get transactions in txpool: {}", e);
@@ -183,21 +183,22 @@ where
 
 		let commit_block_params = self.support.build_block(build_block_params)?;
 
-		let result = self.support.commit_block(commit_block_params)?;
+		self.support
+			.commit_block(commit_block_params)
+			.or_else_catch::<node_chain::errors::ErrorKind, _>(|e| match e {
+				node_chain::errors::ErrorKind::CommitBlockError(e) => {
+					warn!("Commit block error: {:?}", e);
+					Some(Ok(()))
+				}
+				_ => None,
+			})?;
 
-		match result {
-			Ok(_) => {
-				let tx_hash_set = txs
-					.iter()
-					.map(|x| x.tx_hash.clone())
-					.collect::<HashSet<_>>();
+		let tx_hash_set = txs
+			.iter()
+			.map(|x| x.tx_hash.clone())
+			.collect::<HashSet<_>>();
 
-				self.support.remove_transactions_in_txpool(&tx_hash_set)?;
-			}
-			Err(e) => {
-				warn!("Commit block failed: {:?}", e);
-			}
-		}
+		self.support.txpool_remove_transactions(&tx_hash_set)?;
 
 		Ok(())
 	}
