@@ -16,7 +16,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use node_chain::{Basic, Chain, ChainCommitBlockParams};
+use node_chain::{Basic, Chain, ChainCommitBlockParams, CurrentState};
 use node_txpool::support::DefaultTxPoolSupport;
 use node_txpool::TxPool;
 use primitives::codec::{Decode, Encode};
@@ -33,6 +33,12 @@ pub trait ConsensusSupport {
 	fn get_block_hash(&self, number: &BlockNumber) -> CommonResult<Option<Hash>>;
 	fn get_header(&self, block_hash: &Hash) -> CommonResult<Option<Header>>;
 	fn get_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Transaction>>;
+	fn validate_transaction(
+		&self,
+		tx_hash: &Hash,
+		tx: &Transaction,
+		witness_required: bool,
+	) -> CommonResult<()>;
 	fn execute_call_with_block_number<P: Encode, R: Decode>(
 		&self,
 		block_number: &BlockNumber,
@@ -48,6 +54,7 @@ pub trait ConsensusSupport {
 	) -> CommonResult<ChainCommitBlockParams>;
 	fn commit_block(&self, commit_block_params: ChainCommitBlockParams) -> CommonResult<()>;
 	fn get_basic(&self) -> CommonResult<Arc<Basic>>;
+	fn get_current_state(&self) -> Arc<CurrentState>;
 	fn txpool_get_transactions(&self) -> CommonResult<Vec<Arc<FullTransaction>>>;
 	fn txpool_remove_transactions(&self, tx_hash_set: &HashSet<Hash>) -> CommonResult<()>;
 }
@@ -80,6 +87,15 @@ impl ConsensusSupport for DefaultConsensusSupport {
 	fn get_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Transaction>> {
 		self.chain.get_transaction(tx_hash)
 	}
+	fn validate_transaction(
+		&self,
+		tx_hash: &Hash,
+		tx: &Transaction,
+		witness_required: bool,
+	) -> CommonResult<()> {
+		self.chain
+			.validate_transaction(tx_hash, tx, witness_required)
+	}
 	fn execute_call_with_block_number<P: Encode, R: Decode>(
 		&self,
 		block_number: &BlockNumber,
@@ -106,7 +122,9 @@ impl ConsensusSupport for DefaultConsensusSupport {
 	fn get_basic(&self) -> CommonResult<Arc<Basic>> {
 		Ok(self.chain.get_basic())
 	}
-
+	fn get_current_state(&self) -> Arc<CurrentState> {
+		self.chain.get_current_state()
+	}
 	fn txpool_get_transactions(&self) -> CommonResult<Vec<Arc<FullTransaction>>> {
 		let txs = (*self.txpool.get_queue().read()).clone();
 		Ok(txs)

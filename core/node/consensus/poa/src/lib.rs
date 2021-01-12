@@ -35,7 +35,7 @@ use node_executor::module;
 use node_executor_primitives::EmptyParams;
 use primitives::errors::{Catchable, CommonResult};
 use primitives::types::ExecutionGap;
-use primitives::{Address, BlockNumber, BuildBlockParams, FullTransaction, SecretKey};
+use primitives::{Address, BuildBlockParams, FullTransaction, SecretKey};
 
 pub struct PoaConfig {
 	pub secret_key: SecretKey,
@@ -54,7 +54,6 @@ where
 	S: ConsensusSupport + Send + Sync + 'static,
 {
 	pub fn new(config: PoaConfig, support: Arc<S>) -> CommonResult<Self> {
-		let system_meta = get_system_meta(&support)?;
 		let poa_meta = get_poa_meta(&support)?;
 		let authority_address = get_poa_authority(&support)?;
 		let current_address = get_current_address(&config.secret_key, &support)?;
@@ -65,11 +64,7 @@ where
 			is_authority, authority_address, current_address
 		);
 
-		let stream = Arc::new(PoaStream {
-			system_meta,
-			poa_meta,
-			support,
-		});
+		let stream = Arc::new(PoaStream { poa_meta, support });
 
 		if is_authority && stream.poa_meta.block_interval.is_some() {
 			tokio::spawn(start(stream.clone()));
@@ -105,7 +100,6 @@ struct PoaStream<S>
 where
 	S: ConsensusSupport,
 {
-	system_meta: module::system::Meta,
 	poa_meta: module::poa::Meta,
 	support: Arc<S>,
 }
@@ -115,16 +109,13 @@ where
 	S: ConsensusSupport,
 {
 	async fn work(&self, schedule_info: ScheduleInfo) -> CommonResult<()> {
-		let confirmed_number = match self.support.get_confirmed_number() {
-			Ok(number) => number.expect("qed"),
-			Err(e) => {
-				warn!("Unable to get best number: {}", e);
-				return Ok(());
-			}
-		};
+		let current_state = &self.support.get_current_state();
 
-		let number = confirmed_number + 1;
+		let system_meta = &current_state.system_meta;
+
+		let number = current_state.confirmed_number + 1;
 		let timestamp = schedule_info.timestamp;
+		let execution_number = current_state.executed_number;
 
 		let txs = match self.support.txpool_get_transactions() {
 			Ok(txs) => txs,
@@ -141,7 +132,15 @@ where
 		let mut payload_txs = vec![];
 
 		for tx in &txs {
-			if self.validate_transaction(tx, number).is_err() {
+			let invalid = self
+				.validate_transaction(tx)
+				.map(|_| false)
+				.or_else_catch::<node_chain::errors::ErrorKind, _>(|e| match e {
+				node_chain::errors::ErrorKind::ValidateTxError(_e) => Some(Ok(true)),
+				_ => None,
+			})?;
+
+			if invalid {
 				invalid_txs.push(tx.clone());
 				continue;
 			}
@@ -157,18 +156,11 @@ where
 		}
 		debug!("Invalid txs count: {}", invalid_txs.len());
 
-		let execution_number =
-			self.support
-				.get_execution_number()?
-				.ok_or(errors::ErrorKind::Data(format!(
-					"Execution number not found"
-				)))?;
-
 		let block_execution_gap = (number - execution_number) as ExecutionGap;
-		if block_execution_gap > self.system_meta.max_execution_gap {
+		if block_execution_gap > system_meta.max_execution_gap {
 			warn!(
 				"execution gap exceed max: {}, max: {}",
-				block_execution_gap, self.system_meta.max_execution_gap
+				block_execution_gap, system_meta.max_execution_gap
 			);
 			return Ok(());
 		}
@@ -203,20 +195,9 @@ where
 		Ok(())
 	}
 
-	fn validate_transaction(
-		&self,
-		tx: &Arc<FullTransaction>,
-		number: BlockNumber,
-	) -> CommonResult<()> {
-		if self.support.get_transaction(&tx.tx_hash)?.is_some() {
-			return Err(errors::ErrorKind::Duplicated(tx.tx_hash.clone()).into());
-		}
-		let witness = tx.tx.witness.as_ref().expect("qed");
-
-		if witness.until < number {
-			return Err(errors::ErrorKind::InvalidUntil(tx.tx_hash.clone()).into());
-		}
-
+	fn validate_transaction(&self, tx: &Arc<FullTransaction>) -> CommonResult<()> {
+		self.support
+			.validate_transaction(&tx.tx_hash, &tx.tx, true)?;
 		Ok(())
 	}
 }
@@ -244,18 +225,6 @@ where
 	}
 
 	Ok(())
-}
-
-fn get_system_meta<S: ConsensusSupport>(support: &Arc<S>) -> CommonResult<module::system::Meta> {
-	support
-		.execute_call_with_block_number(
-			&0,
-			None,
-			"system".to_string(),
-			"get_meta".to_string(),
-			EmptyParams,
-		)
-		.map(|x| x.expect("qed"))
 }
 
 fn get_poa_meta<S: ConsensusSupport>(support: &Arc<S>) -> CommonResult<module::poa::Meta> {
