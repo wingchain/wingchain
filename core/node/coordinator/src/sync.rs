@@ -23,7 +23,7 @@ use node_chain::ChainCommitBlockParams;
 use node_network::{NetworkInMessage, PMInMessage, PeerId};
 use primitives::codec::Encode;
 use primitives::errors::{Catchable, CommonResult};
-use primitives::{BlockNumber, FullTransaction, Hash};
+use primitives::{BlockNumber, FullTransaction, Hash, Header};
 
 use crate::errors::ErrorKind;
 use crate::protocol::{
@@ -80,31 +80,14 @@ where
 		);
 
 		// announce block
-		let (block_hash, block_announce) = {
-			let (block_hash, header) = self
-				.support
-				.get_header_by_number(&self.support.get_confirmed_number()?)?;
-			(
-				block_hash.clone(),
-				ProtocolMessage::BlockAnnounce(BlockAnnounce { block_hash, header }),
-			)
-		};
-		match self.peers.get_mut(&peer_id) {
-			Some(peer) => {
-				peer.known_blocks.put(block_hash, ());
-			}
-			_ => (),
-		}
-
-		self.support
-			.network_send_message(NetworkInMessage::SendMessage {
-				peer_id: peer_id.clone(),
-				message: block_announce.encode(),
-			});
+		let (block_hash, header) = self
+			.support
+			.get_header_by_number(&self.support.get_confirmed_number()?)?;
+		self.announce_block(block_hash, header, MessageTarget::One(peer_id.clone()))?;
 
 		// propagate txs
 		let txs = self.support.ori_support().txpool_get_transactions()?;
-		self.propagate_txs(txs, PropagateTarget::One(peer_id))?;
+		self.propagate_txs(txs, MessageTarget::One(peer_id))?;
 
 		Ok(())
 	}
@@ -139,6 +122,7 @@ where
 	) -> CommonResult<()> {
 		let BlockAnnounce { block_hash, header } = block_announce;
 		if let Some(peer) = self.peers.get_mut(&peer_id) {
+			peer.known_blocks.put(block_hash.clone(), ());
 			peer.confirmed_number = header.number;
 			peer.confirmed_hash = block_hash;
 		}
@@ -274,23 +258,12 @@ where
 
 	pub fn on_block_committed(&mut self, _number: BlockNumber, hash: Hash) -> CommonResult<()> {
 		// announce to all connected peers
-		let (block_hash, block_announce) = {
+		let (block_hash, header) = {
 			let header = self.support.get_header_by_block_hash(&hash)?;
 			let block_hash = hash;
-			(
-				block_hash.clone(),
-				ProtocolMessage::BlockAnnounce(BlockAnnounce { block_hash, header }),
-			)
+			(block_hash.clone(), header)
 		};
-		let block_announce = block_announce.encode();
-		for (peer_id, peer_info) in &mut self.peers {
-			peer_info.known_blocks.put(block_hash.clone(), ());
-			self.support
-				.network_send_message(NetworkInMessage::SendMessage {
-					peer_id: peer_id.clone(),
-					message: block_announce.clone(),
-				});
-		}
+		self.announce_block(block_hash, header, MessageTarget::All)?;
 		Ok(())
 	}
 
@@ -548,6 +521,43 @@ where
 		Ok(action)
 	}
 
+	fn announce_block(
+		&mut self,
+		block_hash: Hash,
+		header: Header,
+		target: MessageTarget,
+	) -> CommonResult<()> {
+		let number = header.number;
+		let message = ProtocolMessage::BlockAnnounce(BlockAnnounce {
+			block_hash: block_hash.clone(),
+			header,
+		});
+		let message = message.encode();
+
+		let peers = self.peers.iter_mut().filter(|&(peer_id, _)| match &target {
+			MessageTarget::All => true,
+			MessageTarget::One(target_peer_id) => peer_id == target_peer_id,
+		});
+
+		for (peer_id, peer_info) in peers {
+			if peer_info.known_blocks.put(block_hash.clone(), ()).is_none() {
+				trace!(
+					"Announce block to {}, block_hash: {}, number: {}",
+					peer_id,
+					block_hash,
+					number,
+				);
+
+				self.support
+					.network_send_message(NetworkInMessage::SendMessage {
+						peer_id: peer_id.clone(),
+						message: message.clone(),
+					});
+			}
+		}
+		Ok(())
+	}
+
 	fn next_request_id(request_id: &mut RequestId) -> RequestId {
 		let new = RequestId(match request_id.0.checked_add(1) {
 			Some(v) => v,
@@ -568,7 +578,7 @@ where
 			.ori_support()
 			.txpool_get_transaction(&tx_hash)?
 		{
-			self.propagate_txs(vec![tx], PropagateTarget::All)?;
+			self.propagate_txs(vec![tx], MessageTarget::All)?;
 		}
 		Ok(())
 	}
@@ -612,11 +622,11 @@ where
 	fn propagate_txs(
 		&mut self,
 		txs: Vec<Arc<FullTransaction>>,
-		target: PropagateTarget,
+		target: MessageTarget,
 	) -> CommonResult<()> {
 		let peers = self.peers.iter_mut().filter(|&(peer_id, _)| match &target {
-			PropagateTarget::All => true,
-			PropagateTarget::One(target_peer_id) => peer_id == target_peer_id,
+			MessageTarget::All => true,
+			MessageTarget::One(target_peer_id) => peer_id == target_peer_id,
 		});
 
 		for (peer_id, peer_info) in peers {
@@ -625,25 +635,27 @@ where
 				.filter(|tx| peer_info.known_txs.put(tx.tx_hash.clone(), ()).is_none())
 				.map(|tx| tx.tx.clone())
 				.collect::<Vec<_>>();
-			trace!(
-				"Propagate txs to {}, count: {}",
-				peer_id,
-				to_propagate_txs.len(),
-			);
-			let tx_propagate = ProtocolMessage::TxPropagate(TxPropagate {
-				txs: to_propagate_txs,
-			});
-			self.support
-				.network_send_message(NetworkInMessage::SendMessage {
-					peer_id: peer_id.clone(),
-					message: tx_propagate.encode(),
+			if to_propagate_txs.len() > 0 {
+				trace!(
+					"Propagate txs to {}, count: {}",
+					peer_id,
+					to_propagate_txs.len(),
+				);
+				let tx_propagate = ProtocolMessage::TxPropagate(TxPropagate {
+					txs: to_propagate_txs,
 				});
+				self.support
+					.network_send_message(NetworkInMessage::SendMessage {
+						peer_id: peer_id.clone(),
+						message: tx_propagate.encode(),
+					});
+			}
 		}
 		Ok(())
 	}
 }
 
-enum PropagateTarget {
+enum MessageTarget {
 	All,
 	One(PeerId),
 }
