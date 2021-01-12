@@ -24,11 +24,51 @@ pub enum ErrorKind {
 	#[display(fmt = "Data error: {}", _0)]
 	Data(String),
 
+	#[display(fmt = "Call error: {}", _0)]
+	Call(String),
+
 	#[display(fmt = "Execute queue error: {}", _0)]
 	ExecuteQueue(String),
 
 	#[display(fmt = "Channel error: {:?}", _0)]
 	Channel(Box<dyn Error + Send + Sync>),
+
+	#[display(fmt = "Commit block error: {}", _0)]
+	CommitBlockError(CommitBlockError),
+
+	#[display(fmt = "Validate tx error: {}", _0)]
+	ValidateTxError(ValidateTxError),
+}
+
+#[derive(Debug, Display)]
+pub enum CommitBlockError {
+	/// Block duplicated
+	#[display(fmt = "Duplicated")]
+	Duplicated,
+	/// Block is not the best
+	#[display(fmt = "Not best")]
+	NotBest,
+}
+
+#[derive(Debug, Display)]
+pub enum ValidateTxError {
+	#[display(fmt = "Invalid tx witness: {}", _0)]
+	InvalidTxWitness(String),
+
+	#[display(fmt = "Invalid tx until: {}", _0)]
+	InvalidTxUntil(String),
+
+	#[display(fmt = "Invalid tx module: {}", _0)]
+	InvalidTxModule(String),
+
+	#[display(fmt = "Invalid tx method: {}", _0)]
+	InvalidTxMethod(String),
+
+	#[display(fmt = "Invalid tx params: {}", _0)]
+	InvalidTxParams(String),
+
+	#[display(fmt = "Duplicated tx: {}", _0)]
+	DuplicatedTx(String),
 }
 
 impl Error for ErrorKind {}

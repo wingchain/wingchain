@@ -45,10 +45,7 @@ pub fn get_service(
 ) {
 	let chain = get_chain(&authority_account.2);
 
-	let txpool_config = TxPoolConfig {
-		pool_capacity: 32,
-		buffer_capacity: 32,
-	};
+	let txpool_config = TxPoolConfig { pool_capacity: 32 };
 
 	let txpool_support = Arc::new(DefaultTxPoolSupport::new(chain.clone()));
 	let txpool = Arc::new(TxPool::new(txpool_config, txpool_support).unwrap());
@@ -61,7 +58,10 @@ pub fn get_service(
 
 	let poa = Poa::new(poa_config, support).unwrap();
 
-	let coordinator_support = Arc::new(DefaultCoordinatorSupport::new(chain.clone()));
+	let coordinator_support = Arc::new(DefaultCoordinatorSupport::new(
+		chain.clone(),
+		txpool.clone(),
+	));
 	let coordinator = get_coordinator(local_key_pair, port, bootnodes, coordinator_support);
 
 	(chain, txpool, poa, coordinator)

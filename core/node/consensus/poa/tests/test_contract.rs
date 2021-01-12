@@ -156,7 +156,9 @@ async fn test_poa_contract_create_fail() {
 		)
 		.unwrap();
 
-	let tx1_error = chain.validate_transaction(&tx1, true).unwrap_err();
+	let tx1_error = chain
+		.validate_transaction(&chain.hash_transaction(&tx1).unwrap(), &tx1, true)
+		.unwrap_err();
 	assert_eq!(
 		tx1_error.to_string(),
 		"Executor Error: ContractError: InvalidParams".to_string()
@@ -179,7 +181,9 @@ async fn test_poa_contract_create_fail() {
 				.unwrap(),
 		)
 		.unwrap();
-	let tx1_error = chain.validate_transaction(&tx1, true).unwrap_err();
+	let tx1_error = chain
+		.validate_transaction(&chain.hash_transaction(&tx1).unwrap(), &tx1, true)
+		.unwrap_err();
 
 	assert_eq!(
 		tx1_error.to_string(),

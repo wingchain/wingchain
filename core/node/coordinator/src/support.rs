@@ -17,12 +17,16 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use futures::channel::mpsc::UnboundedReceiver;
 
-use node_chain::{Chain, ChainCommitBlockParams, ChainOutMessage, CommitBlockResult};
+use node_chain::{Chain, ChainCommitBlockParams, ChainOutMessage, CurrentState};
+use node_txpool::support::DefaultTxPoolSupport;
+use node_txpool::{TxPool, TxPoolOutMessage};
 use primitives::codec::{Decode, Encode};
 use primitives::errors::CommonResult;
 use primitives::{
-	Address, BlockNumber, Body, BuildBlockParams, CallResult, Hash, Header, Transaction,
+	Address, BlockNumber, Body, BuildBlockParams, CallResult, FullTransaction, Hash, Header,
+	Transaction,
 };
+use std::collections::HashSet;
 
 #[async_trait]
 pub trait CoordinatorSupport {
@@ -37,12 +41,14 @@ pub trait CoordinatorSupport {
 		&self,
 		build_block_params: BuildBlockParams,
 	) -> CommonResult<ChainCommitBlockParams>;
-	fn commit_block(
-		&self,
-		commit_block_params: ChainCommitBlockParams,
-	) -> CommonResult<CommitBlockResult>;
+	fn commit_block(&self, commit_block_params: ChainCommitBlockParams) -> CommonResult<()>;
 	fn hash_transaction(&self, tx: &Transaction) -> CommonResult<Hash>;
-	fn validate_transaction(&self, tx: &Transaction, witness_required: bool) -> CommonResult<()>;
+	fn validate_transaction(
+		&self,
+		tx_hash: &Hash,
+		tx: &Transaction,
+		witness_required: bool,
+	) -> CommonResult<()>;
 	fn execute_call_with_block_number<P: Encode, R: Decode>(
 		&self,
 		block_number: &BlockNumber,
@@ -51,18 +57,26 @@ pub trait CoordinatorSupport {
 		method: String,
 		params: P,
 	) -> CommonResult<CallResult<R>>;
+	fn get_current_state(&self) -> Arc<CurrentState>;
+	fn txpool_rx(&self) -> Option<UnboundedReceiver<TxPoolOutMessage>>;
+	fn txpool_get_transactions(&self) -> CommonResult<Vec<Arc<FullTransaction>>>;
+	fn txpool_get_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Arc<FullTransaction>>>;
+	fn txpool_insert_transaction(&self, tx: Transaction) -> CommonResult<()>;
+	fn txpool_remove_transactions(&self, tx_hash_set: &HashSet<Hash>) -> CommonResult<()>;
 }
 
 pub struct DefaultCoordinatorSupport {
 	chain: Arc<Chain>,
+	txpool: Arc<TxPool<DefaultTxPoolSupport>>,
 }
 
 impl DefaultCoordinatorSupport {
-	pub fn new(chain: Arc<Chain>) -> Self {
-		Self { chain }
+	pub fn new(chain: Arc<Chain>, txpool: Arc<TxPool<DefaultTxPoolSupport>>) -> Self {
+		Self { chain, txpool }
 	}
 }
 
+#[async_trait]
 impl CoordinatorSupport for DefaultCoordinatorSupport {
 	fn chain_rx(&self) -> Option<UnboundedReceiver<ChainOutMessage>> {
 		self.chain.message_rx()
@@ -91,17 +105,20 @@ impl CoordinatorSupport for DefaultCoordinatorSupport {
 	) -> CommonResult<ChainCommitBlockParams> {
 		self.chain.build_block(build_block_params)
 	}
-	fn commit_block(
-		&self,
-		commit_block_params: ChainCommitBlockParams,
-	) -> CommonResult<CommitBlockResult> {
+	fn commit_block(&self, commit_block_params: ChainCommitBlockParams) -> CommonResult<()> {
 		self.chain.commit_block(commit_block_params)
 	}
 	fn hash_transaction(&self, tx: &Transaction) -> CommonResult<Hash> {
 		self.chain.hash_transaction(tx)
 	}
-	fn validate_transaction(&self, tx: &Transaction, witness_required: bool) -> CommonResult<()> {
-		self.chain.validate_transaction(tx, witness_required)
+	fn validate_transaction(
+		&self,
+		tx_hash: &Hash,
+		tx: &Transaction,
+		witness_required: bool,
+	) -> CommonResult<()> {
+		self.chain
+			.validate_transaction(tx_hash, tx, witness_required)
 	}
 	fn execute_call_with_block_number<P: Encode, R: Decode>(
 		&self,
@@ -113,5 +130,25 @@ impl CoordinatorSupport for DefaultCoordinatorSupport {
 	) -> CommonResult<CallResult<R>> {
 		self.chain
 			.execute_call_with_block_number(block_number, sender, module, method, params)
+	}
+	fn get_current_state(&self) -> Arc<CurrentState> {
+		self.chain.get_current_state()
+	}
+	fn txpool_rx(&self) -> Option<UnboundedReceiver<TxPoolOutMessage>> {
+		self.txpool.message_rx()
+	}
+	fn txpool_get_transactions(&self) -> CommonResult<Vec<Arc<FullTransaction>>> {
+		let txs = (*self.txpool.get_queue().read()).clone();
+		Ok(txs)
+	}
+	fn txpool_get_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Arc<FullTransaction>>> {
+		let tx = self.txpool.get_map().get(&tx_hash).map(|x| x.clone());
+		Ok(tx)
+	}
+	fn txpool_insert_transaction(&self, tx: Transaction) -> CommonResult<()> {
+		self.txpool.insert(tx)
+	}
+	fn txpool_remove_transactions(&self, tx_hash_set: &HashSet<Hash>) -> CommonResult<()> {
+		self.txpool.remove(tx_hash_set)
 	}
 }

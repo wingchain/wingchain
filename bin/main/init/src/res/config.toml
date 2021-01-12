@@ -3,7 +3,6 @@
 
 [txpool]
 pool_capacity = 102040
-buffer_capacity = 10240
 
 [api]
 rpc_addr = "0.0.0.0:3109"

@@ -31,6 +31,7 @@ mod protocol;
 mod stream;
 pub mod support;
 mod sync;
+mod verifier;
 
 pub struct CoordinatorConfig {
 	pub network_config: NetworkConfig,
@@ -75,12 +76,14 @@ where
 		let network_rx = network.network_rx().expect("Coordinator is the only taker");
 
 		let chain_rx = support.chain_rx().expect("Coordinator is the only taker");
+		let txpool_rx = support.txpool_rx().expect("Coordinator is the only taker");
 
 		let (in_tx, in_rx) = unbounded();
 
 		let stream = CoordinatorStream::new(
 			genesis_hash,
 			chain_rx,
+			txpool_rx,
 			peer_manager_tx,
 			network_tx,
 			network_rx,

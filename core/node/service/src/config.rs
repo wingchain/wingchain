@@ -56,7 +56,6 @@ pub fn get_config(chain_config: &ServiceConfig, basic: Arc<Basic>) -> CommonResu
 fn get_txpool_config(file_config: &FileConfig) -> CommonResult<TxPoolConfig> {
 	let txpool = TxPoolConfig {
 		pool_capacity: file_config.txpool.pool_capacity,
-		buffer_capacity: file_config.txpool.buffer_capacity,
 	};
 	Ok(txpool)
 }

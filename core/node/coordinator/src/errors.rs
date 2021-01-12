@@ -15,12 +15,16 @@
 use std::error::Error;
 use std::fmt::Debug;
 
+use crate::verifier::VerifyError;
 use primitives::errors::{CommonError, CommonErrorKind, Display};
 
 #[derive(Debug, Display)]
 pub enum ErrorKind {
 	#[display(fmt = "Data error: {}", _0)]
 	Data(String),
+
+	#[display(fmt = "Verify error: {}", _0)]
+	VerifyError(VerifyError),
 }
 
 impl Error for ErrorKind {}

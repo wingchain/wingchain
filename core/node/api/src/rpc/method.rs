@@ -37,8 +37,8 @@ pub async fn chain_get_header_by_number<S: ApiSupport>(
 
 	let support = data.0;
 	let number = match number_enum {
-		BlockNumberEnum::Confirmed => support.get_confirmed_number().await?,
-		BlockNumberEnum::ConfirmedExecuted => support.get_confirmed_executed_number().await?,
+		BlockNumberEnum::Confirmed => support.get_confirmed_number()?,
+		BlockNumberEnum::ConfirmedExecuted => support.get_confirmed_executed_number()?,
 		BlockNumberEnum::Number(number) => Some(number),
 	};
 
@@ -47,12 +47,12 @@ pub async fn chain_get_header_by_number<S: ApiSupport>(
 		None => return Ok(None),
 	};
 
-	let block_hash = match support.get_block_hash(&number).await? {
+	let block_hash = match support.get_block_hash(&number)? {
 		Some(block_hash) => block_hash,
 		None => return Ok(None),
 	};
 
-	let header: Option<Header> = support.get_header(&block_hash).await?.map(Into::into);
+	let header: Option<Header> = support.get_header(&block_hash)?.map(Into::into);
 
 	let header = header.map(|mut x| {
 		x.hash = Some(block_hash.into());
@@ -68,7 +68,7 @@ pub async fn chain_get_header_by_hash<S: ApiSupport>(
 ) -> CustomResult<Option<Header>> {
 	let hash = hash.try_into()?;
 	let support = data.0;
-	let header: Option<Header> = support.get_header(&hash).await?.map(Into::into);
+	let header: Option<Header> = support.get_header(&hash)?.map(Into::into);
 
 	let header = header.map(|mut x| {
 		x.hash = Some(hash.into());
@@ -86,8 +86,8 @@ pub async fn chain_get_block_by_number<S: ApiSupport>(
 
 	let support = data.0;
 	let number = match number_enum {
-		BlockNumberEnum::Confirmed => support.get_confirmed_number().await?,
-		BlockNumberEnum::ConfirmedExecuted => support.get_confirmed_executed_number().await?,
+		BlockNumberEnum::Confirmed => support.get_confirmed_number()?,
+		BlockNumberEnum::ConfirmedExecuted => support.get_confirmed_executed_number()?,
 		BlockNumberEnum::Number(number) => Some(number),
 	};
 
@@ -96,12 +96,12 @@ pub async fn chain_get_block_by_number<S: ApiSupport>(
 		None => return Ok(None),
 	};
 
-	let block_hash = match support.get_block_hash(&number).await? {
+	let block_hash = match support.get_block_hash(&number)? {
 		Some(block_hash) => block_hash,
 		None => return Ok(None),
 	};
 
-	let block: Option<Block> = support.get_block(&block_hash).await?.map(Into::into);
+	let block: Option<Block> = support.get_block(&block_hash)?.map(Into::into);
 
 	let block = block.map(|mut x| {
 		x.hash = Some(block_hash.into());
@@ -117,7 +117,7 @@ pub async fn chain_get_block_by_hash<S: ApiSupport>(
 ) -> CustomResult<Option<Block>> {
 	let hash = hash.try_into()?;
 	let support = data.0;
-	let block: Option<Block> = support.get_block(&hash).await?.map(Into::into);
+	let block: Option<Block> = support.get_block(&hash)?.map(Into::into);
 
 	let block = block.map(|mut x| {
 		x.hash = Some(hash.into());
@@ -133,7 +133,7 @@ pub async fn chain_get_transaction_by_hash<S: ApiSupport>(
 ) -> CustomResult<Option<Transaction>> {
 	let hash = hash.try_into()?;
 	let support = data.0;
-	let tx: Option<Transaction> = support.get_transaction(&hash).await?.map(Into::into);
+	let tx: Option<Transaction> = support.get_transaction(&hash)?.map(Into::into);
 
 	let tx = tx.map(|mut x| {
 		x.hash = Some(hash.into());
@@ -149,7 +149,7 @@ pub async fn chain_get_raw_transaction_by_hash<S: ApiSupport>(
 ) -> CustomResult<Option<Hex>> {
 	let hash = hash.try_into()?;
 	let support = data.0;
-	let raw_tx: Option<Hex> = support.get_raw_transaction(&hash).await?.map(Into::into);
+	let raw_tx: Option<Hex> = support.get_raw_transaction(&hash)?.map(Into::into);
 	Ok(raw_tx)
 }
 
@@ -159,7 +159,7 @@ pub async fn chain_get_receipt_by_hash<S: ApiSupport>(
 ) -> CustomResult<Option<Receipt>> {
 	let hash = hash.try_into()?;
 	let support = data.0;
-	let tx: Option<Receipt> = support.get_receipt(&hash).await?.map(Into::into);
+	let tx: Option<Receipt> = support.get_receipt(&hash)?.map(Into::into);
 
 	let tx = tx.map(|mut x| {
 		x.hash = Some(hash.into());
@@ -182,31 +182,11 @@ pub async fn chain_send_raw_transaction<S: ApiSupport>(
 
 	let support = data.0;
 
-	let tx_hash = support.hash_transaction(&transaction).await?.into();
+	let tx_hash = support.hash_transaction(&transaction)?.into();
 
-	support.insert_transaction(transaction).await?;
+	support.insert_transaction(transaction)?;
 
 	Ok(tx_hash)
-}
-
-pub async fn chain_get_transaction_in_txpool<S: ApiSupport>(
-	data: Data<Arc<S>>,
-	Params((hash,)): Params<(Hash,)>,
-) -> CustomResult<Option<Transaction>> {
-	let hash = hash.try_into()?;
-	let support = data.0;
-
-	let tx: Option<Transaction> = support
-		.get_transaction_in_txpool(&hash)
-		.await?
-		.map(Into::into);
-
-	let tx = tx.map(|mut x| {
-		x.hash = Some(hash.into());
-		x
-	});
-
-	Ok(tx)
 }
 
 pub async fn chain_execute_call<S: ApiSupport>(
@@ -220,9 +200,7 @@ pub async fn chain_execute_call<S: ApiSupport>(
 	};
 	let call: primitives::Call = request.call.try_into()?;
 
-	let result = data
-		.execute_call(&block_hash, sender.as_ref(), &call)
-		.await?;
+	let result = data.execute_call(&block_hash, sender.as_ref(), &call)?;
 
 	let result: CommonResult<Vec<u8>> = result.map_err(|e| errors::ErrorKind::CallError(e).into());
 	let result = result?;
@@ -232,7 +210,7 @@ pub async fn chain_execute_call<S: ApiSupport>(
 	Ok(result)
 }
 
-pub async fn build_transaction<S: ApiSupport>(
+pub async fn chain_build_transaction<S: ApiSupport>(
 	data: Data<Arc<S>>,
 	Params(request): Params<BuildTransactionRequest>,
 ) -> CustomResult<Hex> {
@@ -246,16 +224,33 @@ pub async fn build_transaction<S: ApiSupport>(
 		None => None,
 	};
 	let call: primitives::Call = request.call.try_into()?;
-	let result = data.build_transaction(witness, call).await?;
+	let result = data.build_transaction(witness, call)?;
 	let result = codec::encode(&result)?.into();
 	Ok(result)
+}
+
+pub async fn txpool_get_transaction<S: ApiSupport>(
+	data: Data<Arc<S>>,
+	Params((hash,)): Params<(Hash,)>,
+) -> CustomResult<Option<Transaction>> {
+	let hash = hash.try_into()?;
+	let support = data.0;
+
+	let tx: Option<Transaction> = support.txpool_get_transaction(&hash)?.map(Into::into);
+
+	let tx = tx.map(|mut x| {
+		x.hash = Some(hash.into());
+		x
+	});
+
+	Ok(tx)
 }
 
 pub async fn network_get_state<S: ApiSupport>(
 	data: Data<Arc<S>>,
 	Params(_request): Params<EmptyRequest>,
 ) -> CustomResult<NetworkState> {
-	let co_tx = data.0.coordinator_tx().await?;
+	let co_tx = data.0.coordinator_tx()?;
 	let (tx, rx) = oneshot::channel();
 	co_tx
 		.unbounded_send(CoordinatorInMessage::Network(

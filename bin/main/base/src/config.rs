@@ -28,7 +28,6 @@ pub struct Config {
 #[derive(Deserialize, Debug)]
 pub struct TxPoolConfig {
 	pub pool_capacity: usize,
-	pub buffer_capacity: usize,
 }
 
 #[derive(Deserialize, Debug)]

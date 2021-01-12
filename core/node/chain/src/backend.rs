@@ -19,7 +19,6 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::SystemTime;
 
-use atomic_refcell::AtomicRefCell;
 use futures::channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
 use log::{debug, info};
 use parking_lot::RwLock;
@@ -29,22 +28,22 @@ use crypto::dsa::DsaImpl;
 use crypto::hash::HashImpl;
 use main_base::spec::Spec;
 use node_db::{DBTransaction, DB};
+use node_executor::module::system::Meta;
 use node_executor::{Context, ContextEssence, Executor};
-use node_executor_primitives::ContextEnv;
+use node_executor_primitives::{ContextEnv, EmptyParams};
 use node_statedb::{StateDB, TrieRoot};
 use primitives::codec::{self, Decode, Encode};
-use primitives::errors::CommonResult;
+use primitives::errors::{Catchable, CommonResult};
 use primitives::types::{CallResult, ExecutionGap};
 use primitives::{
 	Address, Block, BlockNumber, Body, BuildBlockParams, BuildExecutionParams, Call, DBKey,
 	Execution, Hash, Header, Nonce, OpaqueCallResult, Receipt, SecretKey, Transaction,
 };
 
-use crate::errors::ErrorKind;
+use crate::errors::{CommitBlockError, ErrorKind, ValidateTxError};
 use crate::genesis::build_genesis;
 use crate::{
-	errors, Basic, ChainCommitBlockParams, ChainCommitExecutionParams, ChainConfig,
-	ChainOutMessage, CommitBlockError, CommitBlockResult,
+	errors, Basic, ChainCommitBlockParams, ChainCommitExecutionParams, ChainConfig, ChainOutMessage,
 };
 
 pub struct Backend {
@@ -55,10 +54,22 @@ pub struct Backend {
 	trie_root: Arc<TrieRoot>,
 	executor: Executor,
 	basic: Arc<Basic>,
-	current_context_essence: AtomicRefCell<Option<ContextEssence>>,
+	current_state: RwLock<Option<Arc<CurrentState>>>,
 	message_tx: UnboundedSender<ChainOutMessage>,
 	message_rx: RwLock<Option<UnboundedReceiver<ChainOutMessage>>>,
 	commit_block_lock: RwLock<()>,
+}
+
+pub struct CurrentState {
+	pub context_essence: ContextEssence,
+	pub system_meta: Meta,
+	pub confirmed_number: BlockNumber,
+	#[allow(dead_code)]
+	pub confirmed_block_hash: Hash,
+	#[allow(dead_code)]
+	pub executed_number: BlockNumber,
+	#[allow(dead_code)]
+	pub executed_block_hash: Hash,
 }
 
 impl Backend {
@@ -86,8 +97,6 @@ impl Backend {
 
 		let basic = Arc::new(Basic { hash, dsa, address });
 
-		let current_context_essence = AtomicRefCell::new(None);
-
 		let (message_tx, message_rx) = unbounded();
 
 		let mut backend = Self {
@@ -98,7 +107,7 @@ impl Backend {
 			trie_root,
 			executor,
 			basic,
-			current_context_essence,
+			current_state: RwLock::new(None),
 			message_tx,
 			message_rx: RwLock::new(Some(message_rx)),
 			commit_block_lock: RwLock::new(()),
@@ -116,7 +125,11 @@ impl Backend {
 
 		backend.executor.set_genesis_hash(genesis_hash);
 
-		backend.update_current_context_essence()?;
+		backend.update_current_state()?;
+
+		backend.get_confirmed_number()?.map(|number| {
+			info!("Confirmed number: {}", number);
+		});
 
 		Ok(backend)
 	}
@@ -134,14 +147,77 @@ impl Backend {
 	/// Validate the transaction
 	pub fn validate_transaction(
 		&self,
+		tx_hash: &Hash,
 		tx: &Transaction,
 		witness_required: bool,
 	) -> CommonResult<()> {
-		let context_essence = self.current_context_essence.borrow();
-		let context_essence = context_essence.as_ref().expect("qed");
-		let context = Context::new(&context_essence)?;
+		let context_state = self.current_state.read();
+		let context_state = context_state.as_ref().expect("qed");
+		let system_meta = &context_state.system_meta;
+		let context = Context::new(&context_state.context_essence)?;
+		let confirmed_number = context_state.confirmed_number;
 
-		self.executor.validate_tx(&context, tx, witness_required)
+		// validate until
+		if let Some(witness) = &tx.witness {
+			let until = witness.until;
+			let max_until_gap = system_meta.max_until_gap;
+			let max_until = confirmed_number + max_until_gap;
+			if until > max_until {
+				return Err(
+					errors::ErrorKind::ValidateTxError(ValidateTxError::InvalidTxUntil(format!(
+						"Exceed max until: {}",
+						until
+					)))
+					.into(),
+				);
+			}
+			if until <= confirmed_number {
+				return Err(
+					errors::ErrorKind::ValidateTxError(ValidateTxError::InvalidTxUntil(format!(
+						"Exceed min until: {}",
+						until
+					)))
+					.into(),
+				);
+			}
+		}
+
+		// validate duplication
+		if self.get_transaction(tx_hash)?.is_some() {
+			return Err(
+				errors::ErrorKind::ValidateTxError(ValidateTxError::DuplicatedTx(format!(
+					"{}",
+					tx_hash
+				)))
+				.into(),
+			);
+		}
+
+		// validate by executor
+		self.executor
+			.validate_tx(&context, tx, witness_required)
+			.or_else_catch::<node_executor_primitives::errors::ErrorKind, _>(|e| {
+			let vte = match e {
+				node_executor_primitives::errors::ErrorKind::InvalidTxWitness(e) => {
+					Some(ValidateTxError::InvalidTxWitness(e.clone()))
+				}
+				node_executor_primitives::errors::ErrorKind::InvalidTxModule(e) => {
+					Some(ValidateTxError::InvalidTxModule(e.clone()))
+				}
+				node_executor_primitives::errors::ErrorKind::InvalidTxMethod(e) => {
+					Some(ValidateTxError::InvalidTxMethod(e.clone()))
+				}
+				node_executor_primitives::errors::ErrorKind::InvalidTxParams(e) => {
+					Some(ValidateTxError::InvalidTxParams(e.clone()))
+				}
+				_ => None,
+			};
+			match vte {
+				Some(e) => Some(Err(ErrorKind::ValidateTxError(e).into())),
+				None => None,
+			}
+		})?;
+		Ok(())
 	}
 
 	/// Build a call
@@ -166,6 +242,12 @@ impl Backend {
 	/// Get the basic algorithms: das, hash and address
 	pub fn get_basic(&self) -> Arc<Basic> {
 		self.basic.clone()
+	}
+
+	/// Get the current state
+	pub fn get_current_state(&self) -> Arc<CurrentState> {
+		let context_state = (*self.current_state.read()).clone();
+		context_state.expect("qed")
 	}
 
 	/// Get the confirmed block number (namely best number or max height)
@@ -503,10 +585,7 @@ impl Backend {
 
 	/// Commit a block
 	/// this will persist the block into the db
-	pub fn commit_block(
-		&self,
-		commit_block_params: ChainCommitBlockParams,
-	) -> CommonResult<CommitBlockResult> {
+	pub fn commit_block(&self, commit_block_params: ChainCommitBlockParams) -> CommonResult<()> {
 		let _guard = self.commit_block_lock.write();
 
 		debug!("Commit block params: {:?}", commit_block_params);
@@ -516,7 +595,7 @@ impl Backend {
 		let parent_hash = &commit_block_params.header.parent_hash;
 
 		if self.get_header(block_hash)?.is_some() {
-			return Ok(Err(CommitBlockError::Duplicated));
+			return Err(ErrorKind::CommitBlockError(CommitBlockError::Duplicated).into());
 		}
 
 		let confirmed = {
@@ -535,7 +614,7 @@ impl Backend {
 		};
 
 		if !(number == confirmed.0 + 1 && parent_hash == &confirmed.1) {
-			return Ok(Err(CommitBlockError::NotBest));
+			return Err(ErrorKind::CommitBlockError(CommitBlockError::NotBest).into());
 		}
 
 		let mut transaction = DBTransaction::new();
@@ -555,7 +634,7 @@ impl Backend {
 
 		self.on_block_committed(number, block_hash.clone())?;
 
-		Ok(Ok(()))
+		Ok(())
 	}
 
 	/// Build an execution
@@ -634,7 +713,7 @@ impl Backend {
 	}
 
 	fn on_block_committed(&self, number: u64, block_hash: Hash) -> CommonResult<()> {
-		self.update_current_context_essence()?;
+		self.update_current_state()?;
 		self.message_tx
 			.unbounded_send(ChainOutMessage::BlockCommitted {
 				number,
@@ -645,7 +724,7 @@ impl Backend {
 	}
 
 	fn on_execution_committed(&self, number: u64, block_hash: Hash) -> CommonResult<()> {
-		self.update_current_context_essence()?;
+		self.update_current_state()?;
 		self.message_tx
 			.unbounded_send(ChainOutMessage::ExecutionCommitted {
 				number,
@@ -655,41 +734,41 @@ impl Backend {
 		Ok(())
 	}
 
-	fn update_current_context_essence(&self) -> CommonResult<()> {
+	fn update_current_state(&self) -> CommonResult<()> {
 		let confirmed_number =
 			self.get_confirmed_number()?
 				.ok_or(errors::ErrorKind::Data(format!(
 					"Confirmed number not found"
 				)))?;
-		let block_hash = self
-			.get_block_hash(&confirmed_number)?
-			.ok_or(errors::ErrorKind::Data(format!(
-				"Invalid block number: {}",
-				confirmed_number
-			)))?;
+		let confirmed_block_hash =
+			self.get_block_hash(&confirmed_number)?
+				.ok_or(errors::ErrorKind::Data(format!(
+					"Invalid block number: {}",
+					confirmed_number
+				)))?;
 		let header = self
-			.get_header(&block_hash)?
+			.get_header(&confirmed_block_hash)?
 			.ok_or(errors::ErrorKind::Data(format!(
 				"Invalid block hash: {}",
 				confirmed_number
 			)))?;
 
-		let execution_number =
+		let executed_number =
 			self.get_execution_number()?
 				.ok_or(errors::ErrorKind::Data(format!(
-					"Execution number not found"
+					"Executed number not found"
 				)))?;
-		let execution_block_hash =
-			self.get_block_hash(&execution_number)?
+		let executed_block_hash =
+			self.get_block_hash(&executed_number)?
 				.ok_or(errors::ErrorKind::Data(format!(
 					"Invalid block number: {}",
-					execution_number
+					executed_number
 				)))?;
 		let execution =
-			self.get_execution(&execution_block_hash)?
+			self.get_execution(&executed_block_hash)?
 				.ok_or(errors::ErrorKind::Data(format!(
-					"Not execution block hash: {}",
-					execution_block_hash
+					"Not executed block hash: {}",
+					executed_block_hash
 				)))?;
 
 		let number = confirmed_number + 1;
@@ -712,7 +791,26 @@ impl Backend {
 			payload_state_root,
 		)?;
 
-		(*self.current_context_essence.borrow_mut()) = Some(context_essence);
+		let system_meta = self
+			.execute_call_with_block_hash(
+				&executed_block_hash,
+				None,
+				"system".to_string(),
+				"get_meta".to_string(),
+				EmptyParams,
+			)?
+			.map_err(|e| ErrorKind::Call(e))?;
+
+		let current_state = CurrentState {
+			context_essence,
+			system_meta,
+			confirmed_number,
+			confirmed_block_hash,
+			executed_number,
+			executed_block_hash,
+		};
+
+		(*self.current_state.write()) = Some(Arc::new(current_state));
 
 		Ok(())
 	}

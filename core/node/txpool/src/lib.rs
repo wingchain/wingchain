@@ -18,16 +18,15 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use chashmap::CHashMap;
-use futures::channel::mpsc::{channel, Receiver, Sender};
-use futures::{SinkExt, StreamExt};
-use log::info;
+use futures::channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
+use futures::StreamExt;
+use log::{info, trace};
 use parking_lot::RwLock;
 
-use node_executor::module;
-use node_executor_primitives::EmptyParams;
 use primitives::errors::CommonResult;
 use primitives::{FullTransaction, Hash, Transaction};
 
+use crate::errors::InsertError;
 use crate::support::TxPoolSupport;
 
 pub mod errors;
@@ -36,10 +35,10 @@ pub mod support;
 pub struct TxPoolConfig {
 	/// Max transaction count
 	pub pool_capacity: usize,
-	/// The  queue may be locked when the consensus module reads or writes,
-	/// so we need a buffer to avoid blocking inserting
-	/// this specifies the capacity of the buffer
-	pub buffer_capacity: usize,
+}
+
+pub enum TxPoolOutMessage {
+	TxInserted { tx_hash: Hash },
 }
 
 pub struct TxPool<S>
@@ -47,11 +46,12 @@ where
 	S: TxPoolSupport,
 {
 	config: TxPoolConfig,
-	system_meta: module::system::Meta,
 	support: Arc<S>,
 	map: CHashMap<Hash, Arc<FullTransaction>>,
 	queue: Arc<RwLock<Vec<Arc<FullTransaction>>>>,
-	buffer_tx: Sender<Arc<FullTransaction>>,
+	buffer_tx: UnboundedSender<Arc<FullTransaction>>,
+	message_tx: UnboundedSender<TxPoolOutMessage>,
+	message_rx: RwLock<Option<UnboundedReceiver<TxPoolOutMessage>>>,
 }
 
 impl<S> TxPool<S>
@@ -63,17 +63,18 @@ where
 		let map = CHashMap::with_capacity(config.pool_capacity);
 		let queue = Arc::new(RwLock::new(Vec::with_capacity(config.pool_capacity)));
 
-		let (buffer_tx, buffer_rx) = channel(config.buffer_capacity);
+		let (buffer_tx, buffer_rx) = unbounded();
 
-		let system_meta = get_system_meta(support.clone())?;
+		let (message_tx, message_rx) = unbounded();
 
 		let txpool = Self {
 			config,
-			system_meta,
 			support,
 			map,
 			queue: queue.clone(),
 			buffer_tx,
+			message_tx,
+			message_rx: RwLock::new(Some(message_rx)),
 		};
 
 		tokio::spawn(process_buffer(buffer_rx, queue));
@@ -96,13 +97,12 @@ where
 	}
 
 	/// Insert a transaction into the pool
-	pub async fn insert(&self, tx: Transaction) -> CommonResult<()> {
+	pub fn insert(&self, tx: Transaction) -> CommonResult<()> {
 		self.check_capacity()?;
 		let tx_hash = self.support.hash_transaction(&tx)?;
 
 		self.check_pool_exist(&tx_hash)?;
 		self.validate_transaction(&tx_hash, &tx)?;
-		self.check_chain_exist(&tx_hash)?;
 
 		let pool_tx = Arc::new(FullTransaction {
 			tx,
@@ -110,15 +110,20 @@ where
 		});
 
 		if self.map.insert(tx_hash.clone(), pool_tx.clone()).is_some() {
-			return Err(errors::ErrorKind::Duplicated(tx_hash.clone()).into());
+			return Err(
+				errors::ErrorKind::InsertError(InsertError::DuplicatedTx(format!("{}", tx_hash)))
+					.into(),
+			);
 		}
 
-		let result = self.buffer_tx.clone().send(pool_tx).await;
+		let result = self.buffer_tx.clone().unbounded_send(pool_tx);
 
-		if let Err(_e) = result {
+		if let Err(e) = result {
 			self.map.remove(&tx_hash);
-			return Err(errors::ErrorKind::Insert(tx_hash).into());
+			return Err(errors::ErrorKind::Channel(Box::new(e)).into());
 		}
+
+		self.on_tx_inserted(tx_hash)?;
 
 		Ok(())
 	}
@@ -137,10 +142,18 @@ where
 		Ok(())
 	}
 
+	/// Out message receiver
+	pub fn message_rx(&self) -> Option<UnboundedReceiver<TxPoolOutMessage>> {
+		self.message_rx.write().take()
+	}
+
 	/// Check pool capacify
 	fn check_capacity(&self) -> CommonResult<()> {
 		if self.map.len() >= self.config.pool_capacity {
-			return Err(errors::ErrorKind::ExceedCapacity(self.config.pool_capacity).into());
+			return Err(errors::ErrorKind::InsertError(InsertError::ExceedCapacity(
+				self.config.pool_capacity,
+			))
+			.into());
 		}
 		Ok(())
 	}
@@ -148,39 +161,25 @@ where
 	/// Check if the pool already contains a transaction
 	fn check_pool_exist(&self, tx_hash: &Hash) -> CommonResult<()> {
 		if self.contain(tx_hash) {
-			return Err(errors::ErrorKind::Duplicated(tx_hash.clone()).into());
+			return Err(
+				errors::ErrorKind::InsertError(InsertError::DuplicatedTx(format!("{}", tx_hash)))
+					.into(),
+			);
 		}
 		Ok(())
 	}
 
-	/// Check if the chain already contains a transaction
-	fn check_chain_exist(&self, tx_hash: &Hash) -> CommonResult<()> {
-		if self.support.get_transaction(&tx_hash)?.is_some() {
-			return Err(errors::ErrorKind::Duplicated(tx_hash.clone()).into());
-		}
+	fn on_tx_inserted(&self, tx_hash: Hash) -> CommonResult<()> {
+		trace!("Tx inserted: {}", tx_hash);
+		self.message_tx
+			.unbounded_send(TxPoolOutMessage::TxInserted { tx_hash })
+			.map_err(|e| errors::ErrorKind::Channel(Box::new(e)))?;
 		Ok(())
 	}
 
 	/// Validate a transaction
-	/// check signature
-	/// check params format
-	/// check until: confirmed_number < until <= confirmed_number + until_gap
 	fn validate_transaction(&self, tx_hash: &Hash, tx: &Transaction) -> CommonResult<()> {
-		self.support.validate_transaction(&tx, true)?;
-		let witness = tx.witness.as_ref().expect("qed");
-
-		let confirmed_number = self.support.get_confirmed_number()?.expect("qed");
-		let max_until_gap = self.system_meta.max_until_gap;
-		let max_until = confirmed_number + max_until_gap;
-
-		if witness.until > max_until {
-			return Err(errors::ErrorKind::ExceedUntil(tx_hash.clone()).into());
-		}
-
-		if witness.until <= confirmed_number {
-			return Err(errors::ErrorKind::InvalidUntil(tx_hash.clone()).into());
-		}
-
+		self.support.validate_transaction(tx_hash, &tx, true)?;
 		Ok(())
 	}
 
@@ -192,7 +191,7 @@ where
 
 /// A loop to process the transaction in the buffer
 async fn process_buffer(
-	buffer_rx: Receiver<Arc<FullTransaction>>,
+	buffer_rx: UnboundedReceiver<Arc<FullTransaction>>,
 	queue: Arc<RwLock<Vec<Arc<FullTransaction>>>>,
 ) {
 	let mut buffer_rx = buffer_rx;
@@ -203,17 +202,4 @@ async fn process_buffer(
 			None => break,
 		}
 	}
-}
-
-/// Get system meta by executing a call on the system module
-fn get_system_meta<S: TxPoolSupport>(support: Arc<S>) -> CommonResult<module::system::Meta> {
-	support
-		.execute_call_with_block_number(
-			&0,
-			None,
-			"system".to_string(),
-			"get_meta".to_string(),
-			EmptyParams,
-		)
-		.map(|x| x.expect("qed"))
 }

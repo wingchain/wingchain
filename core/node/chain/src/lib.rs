@@ -34,6 +34,7 @@ use primitives::{
 };
 
 use crate::backend::Backend;
+pub use crate::backend::CurrentState;
 use crate::execute::{ExecuteQueue, ExecuteTask};
 
 mod backend;
@@ -127,10 +128,12 @@ impl Chain {
 	/// Validate transaction
 	pub fn validate_transaction(
 		&self,
+		tx_hash: &Hash,
 		tx: &Transaction,
 		witness_required: bool,
 	) -> CommonResult<()> {
-		self.backend.validate_transaction(tx, witness_required)
+		self.backend
+			.validate_transaction(tx_hash, tx, witness_required)
 	}
 
 	/// Build a call by module, method and params
@@ -163,10 +166,7 @@ impl Chain {
 	/// Commit a block
 	/// this will persist the block into the db
 	/// and insert a execute task into the execute queue
-	pub fn commit_block(
-		&self,
-		commit_block_params: ChainCommitBlockParams,
-	) -> CommonResult<CommitBlockResult> {
+	pub fn commit_block(&self, commit_block_params: ChainCommitBlockParams) -> CommonResult<()> {
 		let number = commit_block_params.header.number;
 		let timestamp = commit_block_params.header.timestamp;
 		let block_hash = commit_block_params.block_hash.clone();
@@ -174,7 +174,7 @@ impl Chain {
 		let meta_state_root = commit_block_params.header.meta_state_root.clone();
 		let payload_txs = commit_block_params.payload_txs.clone();
 
-		let result = self.backend.commit_block(commit_block_params)?;
+		self.backend.commit_block(commit_block_params)?;
 
 		let execute_task = ExecuteTask {
 			number,
@@ -186,12 +186,17 @@ impl Chain {
 		};
 		self.execute_queue.insert_task(execute_task)?;
 
-		Ok(result)
+		Ok(())
 	}
 
 	/// Get the basic algorithms: das, hash and address
 	pub fn get_basic(&self) -> Arc<Basic> {
 		self.backend.get_basic()
+	}
+
+	/// Get current state
+	pub fn get_current_state(&self) -> Arc<CurrentState> {
+		self.backend.get_current_state()
 	}
 
 	/// Get the confirmed block number (namely best number or max height)
@@ -245,13 +250,3 @@ pub enum ChainOutMessage {
 	BlockCommitted { number: u64, hash: Hash },
 	ExecutionCommitted { number: u64, hash: Hash },
 }
-
-#[derive(Debug)]
-pub enum CommitBlockError {
-	/// Block duplicated
-	Duplicated,
-	/// Block is not the best
-	NotBest,
-}
-
-pub type CommitBlockResult = Result<(), CommitBlockError>;

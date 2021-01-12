@@ -13,28 +13,31 @@
 // limitations under the License.
 
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 
 use log::{info, trace};
 use lru::LruCache;
 
-use node_network::{NetworkInMessage, PeerId};
+use node_chain::ChainCommitBlockParams;
+use node_network::{NetworkInMessage, PMInMessage, PeerId};
 use primitives::codec::Encode;
-use primitives::errors::CommonResult;
-use primitives::{BlockNumber, Hash};
+use primitives::errors::{Catchable, CommonResult};
+use primitives::{BlockNumber, FullTransaction, Hash, Header};
 
+use crate::errors::ErrorKind;
 use crate::protocol::{
 	BlockAnnounce, BlockData, BlockId, BlockRequest, BlockResponse, BodyData, Direction,
-	ProtocolMessage, RequestId, FIELDS_BODY, FIELDS_HEADER,
+	ProtocolMessage, RequestId, TxPropagate, FIELDS_BODY, FIELDS_HEADER,
 };
-use crate::stream::{StreamSupport, VerifyError, VerifyResult};
+use crate::stream::StreamSupport;
 use crate::support::CoordinatorSupport;
-use node_chain::{ChainCommitBlockParams, CommitBlockError};
+use crate::verifier::{Verifier, VerifyError};
 
 const PEER_KNOWN_BLOCKS_SIZE: u32 = 1024;
 const PENDING_BLOCKS_SIZE: u32 = 2560;
 const PEER_REQUEST_BLOCK_SIZE: u32 = 128;
+const PEER_KNOWN_TXS_SIZE: u32 = 10240;
 
 pub struct ChainSync<S>
 where
@@ -43,18 +46,23 @@ where
 	peers: HashMap<PeerId, PeerInfo>,
 	pending_blocks: BTreeMap<BlockNumber, PendingBlockInfo>,
 	support: Arc<StreamSupport<S>>,
+	verifier: Verifier<S>,
 	next_request_id: RequestId,
 }
 
+/// Handle peers open/close
 impl<S> ChainSync<S>
 where
 	S: CoordinatorSupport + Send + Sync + 'static,
 {
 	pub fn new(support: Arc<StreamSupport<S>>) -> CommonResult<Self> {
+		let verifier = Verifier::new(support.clone())?;
+
 		Ok(ChainSync {
 			peers: HashMap::new(),
 			pending_blocks: BTreeMap::new(),
 			support,
+			verifier,
 			next_request_id: RequestId(0),
 		})
 	}
@@ -64,6 +72,7 @@ where
 			peer_id.clone(),
 			PeerInfo {
 				known_blocks: LruCache::new(PEER_KNOWN_BLOCKS_SIZE as usize),
+				known_txs: LruCache::new(PEER_KNOWN_TXS_SIZE as usize),
 				confirmed_number: 0,
 				confirmed_hash: self.support.get_genesis_hash().clone(),
 				state: PeerState::Vacant,
@@ -71,28 +80,14 @@ where
 		);
 
 		// announce block
-		let (block_hash, block_announce) = {
-			let (block_hash, header) = self
-				.support
-				.get_header_by_number(&self.support.get_confirmed_number()?)?;
-			(
-				block_hash.clone(),
-				ProtocolMessage::BlockAnnounce(BlockAnnounce { block_hash, header }),
-			)
-		};
-		match self.peers.get_mut(&peer_id) {
-			Some(peer) => {
-				peer.known_blocks.put(block_hash, ());
-			}
-			_ => (),
-		}
-		info!("Complete handshake with {}", peer_id);
+		let (block_hash, header) = self
+			.support
+			.get_header_by_number(&self.support.get_confirmed_number()?)?;
+		self.announce_block(block_hash, header, MessageTarget::One(peer_id.clone()))?;
 
-		self.support
-			.network_send_message(NetworkInMessage::SendMessage {
-				peer_id,
-				message: block_announce.encode(),
-			});
+		// propagate txs
+		let txs = self.support.ori_support().txpool_get_transactions()?;
+		self.propagate_txs(txs, MessageTarget::One(peer_id))?;
 
 		Ok(())
 	}
@@ -113,7 +108,13 @@ where
 		self.sync()?;
 		Ok(())
 	}
+}
 
+/// Handle blocks syncing
+impl<S> ChainSync<S>
+where
+	S: CoordinatorSupport + Send + Sync + 'static,
+{
 	pub fn on_block_announce(
 		&mut self,
 		peer_id: PeerId,
@@ -121,6 +122,7 @@ where
 	) -> CommonResult<()> {
 		let BlockAnnounce { block_hash, header } = block_announce;
 		if let Some(peer) = self.peers.get_mut(&peer_id) {
+			peer.known_blocks.put(block_hash.clone(), ());
 			peer.confirmed_number = header.number;
 			peer.confirmed_hash = block_hash;
 		}
@@ -256,23 +258,12 @@ where
 
 	pub fn on_block_committed(&mut self, _number: BlockNumber, hash: Hash) -> CommonResult<()> {
 		// announce to all connected peers
-		let (block_hash, block_announce) = {
+		let (block_hash, header) = {
 			let header = self.support.get_header_by_block_hash(&hash)?;
 			let block_hash = hash;
-			(
-				block_hash.clone(),
-				ProtocolMessage::BlockAnnounce(BlockAnnounce { block_hash, header }),
-			)
+			(block_hash.clone(), header)
 		};
-		let block_announce = block_announce.encode();
-		for (peer_id, peer_info) in &mut self.peers {
-			peer_info.known_blocks.put(block_hash.clone(), ());
-			self.support
-				.network_send_message(NetworkInMessage::SendMessage {
-					peer_id: peer_id.clone(),
-					message: block_announce.clone(),
-				});
-		}
+		self.announce_block(block_hash, header, MessageTarget::All)?;
 		Ok(())
 	}
 
@@ -407,7 +398,7 @@ where
 				_ => unreachable!("qed"),
 			};
 
-			let result = self.support.verify_block(&mut block_data)?;
+			let result = self.verifier.verify_block(&mut block_data);
 			let action = self.on_verify_result(result)?;
 
 			trace!(
@@ -455,30 +446,116 @@ where
 		Ok(())
 	}
 
-	fn on_verify_result(
+	fn on_verify_ok(
 		&self,
-		result: VerifyResult<ChainCommitBlockParams>,
+		commit_block_params: ChainCommitBlockParams,
 	) -> CommonResult<VerifyAction> {
-		let action = match result {
-			Ok(v) => match self.support.commit_block(v)? {
-				Ok(_) => VerifyAction::Ok,
-				Err(e) => match e {
-					CommitBlockError::Duplicated => VerifyAction::Discard,
-					CommitBlockError::NotBest => VerifyAction::Reset,
-				},
-			},
-			Err(e) => match e {
-				VerifyError::ShouldWait => VerifyAction::Wait,
-				VerifyError::Duplicated => VerifyAction::Discard,
-				VerifyError::NotBest => VerifyAction::Reset,
-				VerifyError::Bad => VerifyAction::Reset,
-				VerifyError::InvalidExecutionGap => VerifyAction::Reset,
-				VerifyError::InvalidHeader(_) => VerifyAction::Reset,
-				VerifyError::DuplicatedTx(_) => VerifyAction::Reset,
-				VerifyError::InvalidTx(_) => VerifyAction::Reset,
-			},
+		let tx_hash_set = commit_block_params
+			.body
+			.meta_txs
+			.iter()
+			.chain(commit_block_params.body.payload_txs.iter())
+			.cloned()
+			.collect::<HashSet<_>>();
+		let mut remove_from_txpool = false;
+
+		let action = self
+			.support
+			.ori_support()
+			.commit_block(commit_block_params)
+			.map(|_| {
+				remove_from_txpool = true;
+				VerifyAction::Ok
+			})
+			.or_else_catch::<node_chain::errors::ErrorKind, _>(|e| match e {
+				node_chain::errors::ErrorKind::CommitBlockError(e) => {
+					let action = match e {
+						node_chain::errors::CommitBlockError::Duplicated => {
+							remove_from_txpool = true;
+							VerifyAction::Discard
+						}
+						node_chain::errors::CommitBlockError::NotBest => VerifyAction::Reset,
+					};
+					Some(Ok(action))
+				}
+				_ => None,
+			})?;
+
+		if remove_from_txpool {
+			trace!(
+				"Remove txs from txpool after committing block, count: {}",
+				tx_hash_set.len()
+			);
+			self.support
+				.ori_support()
+				.txpool_remove_transactions(&tx_hash_set)?;
+		}
+
+		Ok(action)
+	}
+
+	fn on_verify_err(&self, e: &VerifyError) -> CommonResult<VerifyAction> {
+		let action = match e {
+			VerifyError::ShouldWait => VerifyAction::Wait,
+			VerifyError::Duplicated => VerifyAction::Discard,
+			VerifyError::NotBest => VerifyAction::Reset,
+			VerifyError::Bad => VerifyAction::Reset,
+			VerifyError::InvalidExecutionGap => VerifyAction::Reset,
+			VerifyError::InvalidHeader(_) => VerifyAction::Reset,
+			VerifyError::DuplicatedTx(_) => VerifyAction::Reset,
+			VerifyError::InvalidTx(_) => VerifyAction::Reset,
 		};
 		Ok(action)
+	}
+
+	fn on_verify_result(
+		&self,
+		result: CommonResult<ChainCommitBlockParams>,
+	) -> CommonResult<VerifyAction> {
+		let action = result
+			.and_then(|v| self.on_verify_ok(v))
+			.or_else_catch::<ErrorKind, _>(|e| match e {
+				ErrorKind::VerifyError(e) => Some(self.on_verify_err(e)),
+				_ => None,
+			})?;
+		Ok(action)
+	}
+
+	fn announce_block(
+		&mut self,
+		block_hash: Hash,
+		header: Header,
+		target: MessageTarget,
+	) -> CommonResult<()> {
+		let number = header.number;
+		let message = ProtocolMessage::BlockAnnounce(BlockAnnounce {
+			block_hash: block_hash.clone(),
+			header,
+		});
+		let message = message.encode();
+
+		let peers = self.peers.iter_mut().filter(|&(peer_id, _)| match &target {
+			MessageTarget::All => true,
+			MessageTarget::One(target_peer_id) => peer_id == target_peer_id,
+		});
+
+		for (peer_id, peer_info) in peers {
+			if peer_info.known_blocks.put(block_hash.clone(), ()).is_none() {
+				trace!(
+					"Announce block to {}, block_hash: {}, number: {}",
+					peer_id,
+					block_hash,
+					number,
+				);
+
+				self.support
+					.network_send_message(NetworkInMessage::SendMessage {
+						peer_id: peer_id.clone(),
+						message: message.clone(),
+					});
+			}
+		}
+		Ok(())
 	}
 
 	fn next_request_id(request_id: &mut RequestId) -> RequestId {
@@ -488,6 +565,99 @@ where
 		});
 		std::mem::replace(request_id, new)
 	}
+}
+
+/// Handle tx propagation
+impl<S> ChainSync<S>
+where
+	S: CoordinatorSupport + Send + Sync + 'static,
+{
+	pub fn on_tx_inserted(&mut self, tx_hash: Hash) -> CommonResult<()> {
+		if let Some(tx) = self
+			.support
+			.ori_support()
+			.txpool_get_transaction(&tx_hash)?
+		{
+			self.propagate_txs(vec![tx], MessageTarget::All)?;
+		}
+		Ok(())
+	}
+
+	pub fn on_tx_propagate(
+		&mut self,
+		peer_id: PeerId,
+		tx_propagate: TxPropagate,
+	) -> CommonResult<()> {
+		let ori_support = self.support.ori_support();
+		for tx in tx_propagate.txs {
+			if let Some(peer_info) = self.peers.get_mut(&peer_id) {
+				let tx_hash = self.support.ori_support().hash_transaction(&tx)?;
+				if peer_info.known_txs.put(tx_hash, ()).is_none() {
+					let result = ori_support.txpool_insert_transaction(tx);
+					self.on_insert_result(result, &peer_id)?;
+				}
+			}
+		}
+		Ok(())
+	}
+
+	fn on_insert_result(&self, result: CommonResult<()>, peer_id: &PeerId) -> CommonResult<()> {
+		result.or_else_catch::<node_txpool::errors::ErrorKind, _>(|e| match e {
+			node_txpool::errors::ErrorKind::InsertError(e) => {
+				info!("Insert into txpool error: {}, source: {}", e, peer_id);
+				match e {
+					node_txpool::errors::InsertError::InvalidTx(_e) => {
+						self.support
+							.peer_manager_send_message(PMInMessage::DiscardPeer(peer_id.clone()));
+					}
+					_ => (),
+				}
+				Some(Ok(()))
+			}
+			_ => None,
+		})?;
+		Ok(())
+	}
+
+	fn propagate_txs(
+		&mut self,
+		txs: Vec<Arc<FullTransaction>>,
+		target: MessageTarget,
+	) -> CommonResult<()> {
+		let peers = self.peers.iter_mut().filter(|&(peer_id, _)| match &target {
+			MessageTarget::All => true,
+			MessageTarget::One(target_peer_id) => peer_id == target_peer_id,
+		});
+
+		for (peer_id, peer_info) in peers {
+			let to_propagate_txs = txs
+				.iter()
+				.filter(|tx| peer_info.known_txs.put(tx.tx_hash.clone(), ()).is_none())
+				.map(|tx| tx.tx.clone())
+				.collect::<Vec<_>>();
+			if to_propagate_txs.len() > 0 {
+				trace!(
+					"Propagate txs to {}, count: {}",
+					peer_id,
+					to_propagate_txs.len(),
+				);
+				let tx_propagate = ProtocolMessage::TxPropagate(TxPropagate {
+					txs: to_propagate_txs,
+				});
+				self.support
+					.network_send_message(NetworkInMessage::SendMessage {
+						peer_id: peer_id.clone(),
+						message: tx_propagate.encode(),
+					});
+			}
+		}
+		Ok(())
+	}
+}
+
+enum MessageTarget {
+	All,
+	One(PeerId),
 }
 
 #[derive(Debug)]
@@ -501,6 +671,7 @@ enum VerifyAction {
 #[derive(Debug)]
 pub struct PeerInfo {
 	known_blocks: LruCache<Hash, ()>,
+	known_txs: LruCache<Hash, ()>,
 	confirmed_number: BlockNumber,
 	confirmed_hash: Hash,
 	state: PeerState,

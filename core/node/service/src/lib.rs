@@ -48,21 +48,21 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use tokio::runtime::Runtime;
+use tokio::time::Duration;
 
 use node_api::support::DefaultApiSupport;
 use node_api::Api;
 use node_chain::{Chain, ChainConfig};
 use node_consensus::support::DefaultConsensusSupport;
 use node_consensus_poa::Poa;
+use node_coordinator::support::DefaultCoordinatorSupport;
+use node_coordinator::Coordinator;
+use node_txpool::support::DefaultTxPoolSupport;
 use node_txpool::TxPool;
 use primitives::errors::CommonResult;
 
 use crate::config::get_config;
 use crate::errors::ErrorKind;
-use node_coordinator::support::DefaultCoordinatorSupport;
-use node_coordinator::Coordinator;
-use node_txpool::support::DefaultTxPoolSupport;
-use tokio::time::Duration;
 
 mod config;
 pub mod errors;
@@ -109,7 +109,10 @@ impl Service {
 		let consensus = Arc::new(Poa::new(global_config.poa, consensus_support)?);
 
 		// init coordinator
-		let coordinator_support = Arc::new(DefaultCoordinatorSupport::new(chain.clone()));
+		let coordinator_support = Arc::new(DefaultCoordinatorSupport::new(
+			chain.clone(),
+			txpool.clone(),
+		));
 		let coordinator = Arc::new(Coordinator::new(
 			global_config.coordinator,
 			coordinator_support,

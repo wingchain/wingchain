@@ -21,7 +21,12 @@ use std::sync::Arc;
 
 pub trait TxPoolSupport {
 	fn hash_transaction(&self, tx: &Transaction) -> CommonResult<Hash>;
-	fn validate_transaction(&self, tx: &Transaction, witness_required: bool) -> CommonResult<()>;
+	fn validate_transaction(
+		&self,
+		tx_hash: &Hash,
+		tx: &Transaction,
+		witness_required: bool,
+	) -> CommonResult<()>;
 	fn get_confirmed_number(&self) -> CommonResult<Option<BlockNumber>>;
 	fn get_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Transaction>>;
 	fn execute_call_with_block_number<P: Encode, R: Decode>(
@@ -48,8 +53,14 @@ impl TxPoolSupport for DefaultTxPoolSupport {
 	fn hash_transaction(&self, tx: &Transaction) -> CommonResult<Hash> {
 		self.chain.hash_transaction(tx)
 	}
-	fn validate_transaction(&self, tx: &Transaction, witness_required: bool) -> CommonResult<()> {
-		self.chain.validate_transaction(tx, witness_required)
+	fn validate_transaction(
+		&self,
+		tx_hash: &Hash,
+		tx: &Transaction,
+		witness_required: bool,
+	) -> CommonResult<()> {
+		self.chain
+			.validate_transaction(tx_hash, tx, witness_required)
 	}
 	fn get_confirmed_number(&self) -> CommonResult<Option<BlockNumber>> {
 		self.chain.get_confirmed_number()
