@@ -26,9 +26,6 @@ pub enum ErrorKind {
 	#[display(fmt = "Duplicated tx: tx_hash: {:?}", _0)]
 	Duplicated(Hash),
 
-	#[display(fmt = "Insert error: tx_hash: {:?}", _0)]
-	Insert(Hash),
-
 	#[display(fmt = "Channel error: {:?}", _0)]
 	Channel(Box<dyn Error + Send + Sync>),
 }

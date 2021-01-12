@@ -114,9 +114,9 @@ where
 
 		let result = self.buffer_tx.clone().unbounded_send(pool_tx);
 
-		if let Err(_e) = result {
+		if let Err(e) = result {
 			self.map.remove(&tx_hash);
-			return Err(errors::ErrorKind::Insert(tx_hash).into());
+			return Err(errors::ErrorKind::Channel(Box::new(e)).into());
 		}
 
 		self.on_tx_inserted(tx_hash)?;

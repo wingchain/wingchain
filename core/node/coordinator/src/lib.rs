@@ -31,6 +31,7 @@ mod protocol;
 mod stream;
 pub mod support;
 mod sync;
+mod verifier;
 
 pub struct CoordinatorConfig {
 	pub network_config: NetworkConfig,
