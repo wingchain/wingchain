@@ -45,20 +45,28 @@ where
 #[derive(Debug, Display)]
 pub enum VerifyError {
 	/// Block duplicated
+	#[display(fmt = "Duplicated")]
 	Duplicated,
 	/// Block is not the best
+	#[display(fmt = "Not best")]
 	NotBest,
 	/// Bad block
+	#[display(fmt = "Bad")]
 	Bad,
 	/// Invalid execution gap
+	#[display(fmt = "Invalid exection gap")]
 	InvalidExecutionGap,
 	/// Should wait executing
+	#[display(fmt = "Should wait")]
 	ShouldWait,
 	/// Invalid header
+	#[display(fmt = "Invalid header: {}", _0)]
 	InvalidHeader(String),
 	/// Transaction duplicated
+	#[display(fmt = "Duplicated tx: {}", _0)]
 	DuplicatedTx(String),
 	/// Transaction invalid
+	#[display(fmt = "Invalid tx: {}", _0)]
 	InvalidTx(String),
 }
 

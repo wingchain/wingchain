@@ -121,7 +121,7 @@ async fn test_txpool_dup() {
 	txpool.insert(tx.clone()).unwrap();
 
 	let result = txpool.insert(tx);
-	assert!(format!("{}", result.unwrap_err()).contains("Error: Duplicated tx"));
+	assert!(format!("{}", result.unwrap_err()).contains("Duplicated tx"));
 
 	safe_close(chain, txpool).await;
 }
@@ -281,7 +281,7 @@ async fn test_txpool_capacity() {
 	txpool.insert(tx).unwrap();
 	txpool.insert(tx2).unwrap();
 	let result = txpool.insert(tx3);
-	assert!(format!("{}", result.unwrap_err()).contains("Error: Exceed capacity"));
+	assert!(format!("{}", result.unwrap_err()).contains("Exceed capacity"));
 
 	safe_close(chain, txpool).await;
 }

@@ -26,6 +26,7 @@ use parking_lot::RwLock;
 use primitives::errors::CommonResult;
 use primitives::{FullTransaction, Hash, Transaction};
 
+use crate::errors::InsertError;
 use crate::support::TxPoolSupport;
 
 pub mod errors;
@@ -109,7 +110,10 @@ where
 		});
 
 		if self.map.insert(tx_hash.clone(), pool_tx.clone()).is_some() {
-			return Err(errors::ErrorKind::Duplicated(tx_hash.clone()).into());
+			return Err(
+				errors::ErrorKind::InsertError(InsertError::DuplicatedTx(format!("{}", tx_hash)))
+					.into(),
+			);
 		}
 
 		let result = self.buffer_tx.clone().unbounded_send(pool_tx);
@@ -146,7 +150,10 @@ where
 	/// Check pool capacify
 	fn check_capacity(&self) -> CommonResult<()> {
 		if self.map.len() >= self.config.pool_capacity {
-			return Err(errors::ErrorKind::ExceedCapacity(self.config.pool_capacity).into());
+			return Err(errors::ErrorKind::InsertError(InsertError::ExceedCapacity(
+				self.config.pool_capacity,
+			))
+			.into());
 		}
 		Ok(())
 	}
@@ -154,7 +161,10 @@ where
 	/// Check if the pool already contains a transaction
 	fn check_pool_exist(&self, tx_hash: &Hash) -> CommonResult<()> {
 		if self.contain(tx_hash) {
-			return Err(errors::ErrorKind::Duplicated(tx_hash.clone()).into());
+			return Err(
+				errors::ErrorKind::InsertError(InsertError::DuplicatedTx(format!("{}", tx_hash)))
+					.into(),
+			);
 		}
 		Ok(())
 	}

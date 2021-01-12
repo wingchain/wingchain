@@ -16,18 +16,26 @@ use std::error::Error;
 use std::fmt::Debug;
 
 use primitives::errors::{CommonError, CommonErrorKind, Display};
-use primitives::Hash;
 
 #[derive(Debug, Display)]
 pub enum ErrorKind {
-	#[display(fmt = "Exceed capacity: {}", _0)]
-	ExceedCapacity(usize),
-
-	#[display(fmt = "Duplicated tx: tx_hash: {:?}", _0)]
-	Duplicated(Hash),
+	#[display(fmt = "Insert error: {}", _0)]
+	InsertError(InsertError),
 
 	#[display(fmt = "Channel error: {:?}", _0)]
 	Channel(Box<dyn Error + Send + Sync>),
+}
+
+#[derive(Debug, Display)]
+pub enum InsertError {
+	#[display(fmt = "Exceed capacity: {}", _0)]
+	ExceedCapacity(usize),
+
+	#[display(fmt = "Duplicated tx: {}", _0)]
+	DuplicatedTx(String),
+
+	#[display(fmt = "Invalid tx: {}", _0)]
+	InvalidTx(String),
 }
 
 impl Error for ErrorKind {}
