@@ -26,6 +26,7 @@ use primitives::{
 	Address, BlockNumber, Body, BuildBlockParams, CallResult, FullTransaction, Hash, Header,
 	Transaction,
 };
+use std::collections::HashSet;
 
 #[async_trait]
 pub trait CoordinatorSupport {
@@ -61,6 +62,7 @@ pub trait CoordinatorSupport {
 	fn txpool_get_transactions(&self) -> CommonResult<Vec<Arc<FullTransaction>>>;
 	fn txpool_get_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Arc<FullTransaction>>>;
 	fn txpool_insert_transaction(&self, tx: Transaction) -> CommonResult<()>;
+	fn txpool_remove_transactions(&self, tx_hash_set: &HashSet<Hash>) -> CommonResult<()>;
 }
 
 pub struct DefaultCoordinatorSupport {
@@ -145,5 +147,8 @@ impl CoordinatorSupport for DefaultCoordinatorSupport {
 	}
 	fn txpool_insert_transaction(&self, tx: Transaction) -> CommonResult<()> {
 		self.txpool.insert(tx)
+	}
+	fn txpool_remove_transactions(&self, tx_hash_set: &HashSet<Hash>) -> CommonResult<()> {
+		self.txpool.remove(tx_hash_set)
 	}
 }

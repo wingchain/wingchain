@@ -13,14 +13,14 @@
 // limitations under the License.
 
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 
 use log::{info, trace};
 use lru::LruCache;
 
 use node_chain::ChainCommitBlockParams;
-use node_network::{NetworkInMessage, PeerId};
+use node_network::{NetworkInMessage, PMInMessage, PeerId};
 use primitives::codec::Encode;
 use primitives::errors::{Catchable, CommonResult};
 use primitives::{BlockNumber, FullTransaction, Hash};
@@ -474,21 +474,47 @@ where
 		&self,
 		commit_block_params: ChainCommitBlockParams,
 	) -> CommonResult<VerifyAction> {
+		let tx_hash_set = commit_block_params
+			.body
+			.meta_txs
+			.iter()
+			.chain(commit_block_params.body.payload_txs.iter())
+			.cloned()
+			.collect::<HashSet<_>>();
+		let mut remove_from_txpool = false;
+
 		let action = self
 			.support
 			.ori_support()
 			.commit_block(commit_block_params)
-			.map(|_| VerifyAction::Ok)
+			.map(|_| {
+				remove_from_txpool = true;
+				VerifyAction::Ok
+			})
 			.or_else_catch::<node_chain::errors::ErrorKind, _>(|e| match e {
 				node_chain::errors::ErrorKind::CommitBlockError(e) => {
 					let action = match e {
-						node_chain::errors::CommitBlockError::Duplicated => VerifyAction::Discard,
+						node_chain::errors::CommitBlockError::Duplicated => {
+							remove_from_txpool = true;
+							VerifyAction::Discard
+						}
 						node_chain::errors::CommitBlockError::NotBest => VerifyAction::Reset,
 					};
 					Some(Ok(action))
 				}
 				_ => None,
 			})?;
+
+		if remove_from_txpool {
+			trace!(
+				"Remove txs from txpool after committing block, count: {}",
+				tx_hash_set.len()
+			);
+			self.support
+				.ori_support()
+				.txpool_remove_transactions(&tx_hash_set)?;
+		}
+
 		Ok(action)
 	}
 
@@ -555,15 +581,29 @@ where
 				let tx_hash = self.support.ori_support().hash_transaction(&tx)?;
 				if peer_info.known_txs.put(tx_hash, ()).is_none() {
 					let result = ori_support.txpool_insert_transaction(tx);
-					self.on_insert_result(result)?;
+					self.on_insert_result(result, &peer_id)?;
 				}
 			}
 		}
 		Ok(())
 	}
 
-	fn on_insert_result(&self, result: CommonResult<()>) -> CommonResult<()> {
-		unimplemented!()
+	fn on_insert_result(&self, result: CommonResult<()>, peer_id: &PeerId) -> CommonResult<()> {
+		result.or_else_catch::<node_txpool::errors::ErrorKind, _>(|e| match e {
+			node_txpool::errors::ErrorKind::InsertError(e) => {
+				info!("Insert into txpool error: {}, source: {}", e, peer_id);
+				match e {
+					node_txpool::errors::InsertError::InvalidTx(_e) => {
+						self.support
+							.peer_manager_send_message(PMInMessage::DiscardPeer(peer_id.clone()));
+					}
+					_ => (),
+				}
+				Some(Ok(()))
+			}
+			_ => None,
+		})?;
+		Ok(())
 	}
 
 	fn propagate_txs<'a>(&mut self, txs: Vec<Arc<FullTransaction>>) -> CommonResult<()> {
