@@ -16,7 +16,7 @@ use std::sync::Arc;
 
 use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
 use futures::StreamExt;
-use log::{error, warn};
+use log::{error, info, warn};
 
 use node_chain::ChainOutMessage;
 use node_network::{BytesMut, NetworkInMessage, NetworkOutMessage, PMInMessage, PeerId};
@@ -160,6 +160,7 @@ where
 				.peer_manager_send_message(PMInMessage::DiscardPeer(peer_id.clone()));
 			return Ok(());
 		}
+		info!("Complete handshake with {}", peer_id);
 
 		self.sync.on_protocol_open(peer_id)?;
 

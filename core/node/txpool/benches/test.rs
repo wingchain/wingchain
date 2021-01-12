@@ -33,7 +33,7 @@ use node_txpool::{TxPool, TxPoolConfig};
 use primitives::{Address, PublicKey, SecretKey, Transaction};
 use utils_test::test_accounts;
 
-const TXS_SIZE: usize = 2000;
+const TXS_SIZE: usize = 4000;
 
 #[bench]
 fn bench_txpool_insert_transfer(b: &mut Bencher) {
@@ -56,7 +56,6 @@ fn bench_txpool_insert_txs(b: &mut Bencher, address: &Address, txs: Vec<Transact
 		black_box({
 			let config = TxPoolConfig {
 				pool_capacity: 10240,
-				buffer_capacity: 10240,
 			};
 
 			let runtime = Runtime::new().unwrap();
@@ -67,7 +66,10 @@ fn bench_txpool_insert_txs(b: &mut Bencher, address: &Address, txs: Vec<Transact
 				let txpool = TxPool::new(config, txpool_support).unwrap();
 				let futures = txs
 					.iter()
-					.map(|tx| txpool.insert(tx.clone()))
+					.map(|tx| {
+						let tx = tx.clone();
+						async { txpool.insert(tx) }
+					})
 					.collect::<Vec<_>>();
 				let r = join_all(futures).await;
 				println!("{:?}", r);
@@ -112,7 +114,9 @@ fn gen_transfer_tx(
 				.unwrap(),
 		)
 		.unwrap();
-	chain.validate_transaction(&tx, true).unwrap();
+	chain
+		.validate_transaction(&chain.hash_transaction(&tx).unwrap(), &tx, true)
+		.unwrap();
 	tx
 }
 

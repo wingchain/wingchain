@@ -95,13 +95,16 @@ where
 			}
 			_ => (),
 		}
-		info!("Complete handshake with {}", peer_id);
 
 		self.support
 			.network_send_message(NetworkInMessage::SendMessage {
-				peer_id,
+				peer_id: peer_id.clone(),
 				message: block_announce.encode(),
 			});
+
+		// propagate txs
+		let txs = self.support.ori_support().txpool_get_transactions()?;
+		self.propagate_txs(txs, PropagateTarget::One(peer_id))?;
 
 		Ok(())
 	}
@@ -565,7 +568,7 @@ where
 			.ori_support()
 			.txpool_get_transaction(&tx_hash)?
 		{
-			self.propagate_txs(vec![tx])?;
+			self.propagate_txs(vec![tx], PropagateTarget::All)?;
 		}
 		Ok(())
 	}
@@ -606,8 +609,17 @@ where
 		Ok(())
 	}
 
-	fn propagate_txs<'a>(&mut self, txs: Vec<Arc<FullTransaction>>) -> CommonResult<()> {
-		for (peer_id, peer_info) in self.peers.iter_mut() {
+	fn propagate_txs(
+		&mut self,
+		txs: Vec<Arc<FullTransaction>>,
+		target: PropagateTarget,
+	) -> CommonResult<()> {
+		let peers = self.peers.iter_mut().filter(|&(peer_id, _)| match &target {
+			PropagateTarget::All => true,
+			PropagateTarget::One(target_peer_id) => peer_id == target_peer_id,
+		});
+
+		for (peer_id, peer_info) in peers {
 			let to_propagate_txs = txs
 				.iter()
 				.filter(|tx| peer_info.known_txs.put(tx.tx_hash.clone(), ()).is_none())
@@ -629,6 +641,11 @@ where
 		}
 		Ok(())
 	}
+}
+
+enum PropagateTarget {
+	All,
+	One(PeerId),
 }
 
 #[derive(Debug)]

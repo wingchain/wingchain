@@ -19,7 +19,6 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::SystemTime;
 
-use atomic_refcell::AtomicRefCell;
 use futures::channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
 use log::{debug, info};
 use parking_lot::RwLock;
@@ -55,7 +54,7 @@ pub struct Backend {
 	trie_root: Arc<TrieRoot>,
 	executor: Executor,
 	basic: Arc<Basic>,
-	current_state: AtomicRefCell<Option<Arc<CurrentState>>>,
+	current_state: RwLock<Option<Arc<CurrentState>>>,
 	message_tx: UnboundedSender<ChainOutMessage>,
 	message_rx: RwLock<Option<UnboundedReceiver<ChainOutMessage>>>,
 	commit_block_lock: RwLock<()>,
@@ -98,8 +97,6 @@ impl Backend {
 
 		let basic = Arc::new(Basic { hash, dsa, address });
 
-		let current_state = AtomicRefCell::new(None);
-
 		let (message_tx, message_rx) = unbounded();
 
 		let mut backend = Self {
@@ -110,7 +107,7 @@ impl Backend {
 			trie_root,
 			executor,
 			basic,
-			current_state,
+			current_state: RwLock::new(None),
 			message_tx,
 			message_rx: RwLock::new(Some(message_rx)),
 			commit_block_lock: RwLock::new(()),
@@ -154,7 +151,7 @@ impl Backend {
 		tx: &Transaction,
 		witness_required: bool,
 	) -> CommonResult<()> {
-		let context_state = self.current_state.borrow();
+		let context_state = self.current_state.read();
 		let context_state = context_state.as_ref().expect("qed");
 		let system_meta = &context_state.system_meta;
 		let context = Context::new(&context_state.context_essence)?;
@@ -249,7 +246,7 @@ impl Backend {
 
 	/// Get the current state
 	pub fn get_current_state(&self) -> Arc<CurrentState> {
-		let context_state = (*self.current_state.borrow()).clone();
+		let context_state = (*self.current_state.read()).clone();
 		context_state.expect("qed")
 	}
 
@@ -813,7 +810,7 @@ impl Backend {
 			executed_block_hash,
 		};
 
-		(*self.current_state.borrow_mut()) = Some(Arc::new(current_state));
+		(*self.current_state.write()) = Some(Arc::new(current_state));
 
 		Ok(())
 	}
