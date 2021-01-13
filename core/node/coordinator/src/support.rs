@@ -142,7 +142,7 @@ impl CoordinatorSupport for DefaultCoordinatorSupport {
 		Ok(txs)
 	}
 	fn txpool_get_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Arc<FullTransaction>>> {
-		let tx = self.txpool.get_map().get(&tx_hash).map(|x| x.clone());
+		let tx = self.txpool.get_map().get(&tx_hash).as_deref().cloned();
 		Ok(tx)
 	}
 	fn txpool_insert_transaction(&self, tx: Transaction) -> CommonResult<()> {

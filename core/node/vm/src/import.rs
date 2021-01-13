@@ -38,8 +38,7 @@ pub struct State<'a> {
 
 impl<'a> State<'a> {
 	fn from_ctx(ctx: &mut Ctx) -> &mut Self {
-		let state = unsafe { &mut *(ctx.data as *mut State) };
-		state
+		unsafe { &mut *(ctx.data as *mut State) }
 	}
 
 	fn memory_to_vec(&self, len: u64, ptr: u64) -> Vec<u8> {
@@ -88,7 +87,7 @@ impl<'a> State<'a> {
 		Ok(())
 	}
 
-	fn to_error_aware<T>(&mut self, result: VMResult<T>, error_share_id: u64) -> VMResult<u64> {
+	fn make_error_aware<T>(&mut self, result: VMResult<T>, error_share_id: u64) -> VMResult<u64> {
 		match result {
 			Ok(_) => Ok(0),
 			Err(VMError::System(e)) => Err(VMError::System(e)),
@@ -342,7 +341,7 @@ fn util_validate_address_ea(
 
 	let state = State::from_ctx(ctx);
 
-	state.to_error_aware(result, error_share_id)
+	state.make_error_aware(result, error_share_id)
 }
 
 fn balance_read(ctx: &mut Ctx, address_len: u64, address_ptr: u64) -> VMResult<u64> {
@@ -401,7 +400,7 @@ fn balance_transfer_ea(
 		state.context.module_payload_drain_buffer()?;
 		state.context.module_drain_events()?;
 	}
-	state.to_error_aware(result, error_share_id)
+	state.make_error_aware(result, error_share_id)
 }
 
 fn pay(ctx: &mut Ctx) -> VMResult<()> {
@@ -497,5 +496,5 @@ fn contract_execute_ea(
 		state.context.nested_vm_payload_drain_buffer()?;
 		state.context.nested_vm_drain_events()?;
 	}
-	state.to_error_aware(result, error_share_id)
+	state.make_error_aware(result, error_share_id)
 }

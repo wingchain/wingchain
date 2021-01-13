@@ -39,7 +39,7 @@ use crate::protocol::handler::{HandlerIn, HandlerOut, HandlerProto};
 mod handler;
 mod upgrade;
 
-const PROTOCOL_NAME: &'static [u8] = b"/wingchain/protocol/1.0.0";
+const PROTOCOL_NAME: &[u8] = b"/wingchain/protocol/1.0.0";
 const DELAY: Duration = Duration::from_secs(5);
 
 pub enum ProtocolOut {
@@ -131,8 +131,8 @@ impl Protocol {
 		if let Some(connection_id) = connection_id {
 			self.events
 				.push_back(NetworkBehaviourAction::NotifyHandler {
-					peer_id: peer_id,
-					handler: NotifyHandler::One(connection_id.clone()),
+					peer_id,
+					handler: NotifyHandler::One(*connection_id),
 					event: HandlerIn::SendMessage { message },
 				});
 		}
@@ -158,7 +158,7 @@ impl Protocol {
 				debug!("Handler({}, All) <= Close", peer_id);
 				self.events
 					.push_back(NetworkBehaviourAction::NotifyHandler {
-						peer_id: peer_id.clone(),
+						peer_id,
 						handler: NotifyHandler::All,
 						event: HandlerIn::Close,
 					});
@@ -173,7 +173,7 @@ impl Protocol {
 				debug!("Handler({}, All) <= Close", peer_id);
 				self.events
 					.push_back(NetworkBehaviourAction::NotifyHandler {
-						peer_id: peer_id.clone(),
+						peer_id,
 						handler: NotifyHandler::All,
 						event: HandlerIn::Close,
 					});
@@ -187,10 +187,7 @@ impl Protocol {
 	}
 
 	fn next_incoming_id(incoming_id: &mut IncomingId) -> IncomingId {
-		let new = IncomingId(match incoming_id.0.checked_add(1) {
-			Some(v) => v,
-			None => 0,
-		});
+		let new = IncomingId(incoming_id.0.checked_add(1).unwrap_or(0));
 		std::mem::replace(incoming_id, new)
 	}
 
@@ -271,7 +268,7 @@ impl Protocol {
 				debug!("Handler({}, All) <= Close", peer_id);
 				self.events
 					.push_back(NetworkBehaviourAction::NotifyHandler {
-						peer_id: peer_id.clone(),
+						peer_id,
 						handler: NotifyHandler::All,
 						event: HandlerIn::Close,
 					});
@@ -286,7 +283,7 @@ impl Protocol {
 				debug!("Handler({}, All) <= Close", peer_id);
 				self.events
 					.push_back(NetworkBehaviourAction::NotifyHandler {
-						peer_id: peer_id.clone(),
+						peer_id,
 						handler: NotifyHandler::All,
 						event: HandlerIn::Close,
 					});
@@ -315,7 +312,7 @@ impl Protocol {
 			PeerState::Init { pending_dial } => {
 				debug!("PeerManager => Accept({})", peer_id);
 				debug!("PeerManager <= Dropped({})", peer_id);
-				self.peer_manager.dropped(peer_id.clone());
+				self.peer_manager.dropped(peer_id);
 				*entry = PeerState::Init { pending_dial };
 			}
 			// Connected => Connected
@@ -332,8 +329,8 @@ impl Protocol {
 					debug!("Handler({}, {:?}) <= Open", peer_id, connection_id);
 					self.events
 						.push_back(NetworkBehaviourAction::NotifyHandler {
-							peer_id: peer_id.clone(),
-							handler: NotifyHandler::One(connection_id.clone()),
+							peer_id,
+							handler: NotifyHandler::One(*connection_id),
 							event: HandlerIn::Open,
 						});
 				}
@@ -356,8 +353,8 @@ impl Protocol {
 					debug!("Handler({}, {:?}) <= Open", peer_id, connection_id);
 					self.events
 						.push_back(NetworkBehaviourAction::NotifyHandler {
-							peer_id: peer_id.clone(),
-							handler: NotifyHandler::One(connection_id.clone()),
+							peer_id,
+							handler: NotifyHandler::One(*connection_id),
 							event: HandlerIn::Open,
 						});
 				}
@@ -392,7 +389,7 @@ impl Protocol {
 				debug!("Handler({}, All) <= Close", peer_id);
 				self.events
 					.push_back(NetworkBehaviourAction::NotifyHandler {
-						peer_id: peer_id.clone(),
+						peer_id,
 						handler: NotifyHandler::All,
 						event: HandlerIn::Close,
 					});
@@ -407,7 +404,7 @@ impl Protocol {
 				debug!("Handler({}, All) <= Close", peer_id);
 				self.events
 					.push_back(NetworkBehaviourAction::NotifyHandler {
-						peer_id: peer_id.clone(),
+						peer_id,
 						handler: NotifyHandler::All,
 						event: HandlerIn::Close,
 					});
@@ -466,7 +463,7 @@ impl NetworkBehaviour for Protocol {
 						self.events
 							.push_back(NetworkBehaviourAction::NotifyHandler {
 								peer_id: peer_id.clone(),
-								handler: NotifyHandler::One(conn.clone()),
+								handler: NotifyHandler::One(*conn),
 								event: HandlerIn::Open,
 							});
 					}
@@ -479,7 +476,7 @@ impl NetworkBehaviour for Protocol {
 								self.events
 									.push_back(NetworkBehaviourAction::NotifyHandler {
 										peer_id: peer_id.clone(),
-										handler: NotifyHandler::One(conn.clone()),
+										handler: NotifyHandler::One(*conn),
 										event: HandlerIn::Close,
 									});
 								self.delay_peers.insert(peer_id.clone(), instant);
@@ -507,7 +504,7 @@ impl NetworkBehaviour for Protocol {
 					self.local_peer_id, peer_id
 				);
 				*entry = PeerState::Connected {
-					connected_list: std::iter::once((conn.clone(), connection)).collect(),
+					connected_list: std::iter::once((*conn, connection)).collect(),
 				}
 			}
 			// Connected => Connected
@@ -515,12 +512,9 @@ impl NetworkBehaviour for Protocol {
 				let should_open = match endpoint {
 					ConnectedPoint::Dialer { .. } => true,
 					ConnectedPoint::Listener { .. } => {
-						let dialer_connection_exist = connected_list
-							.iter()
-							.find(
-								|(_k, v)| matches!(v.connected_point, ConnectedPoint::Dialer {..}),
-							)
-							.is_some();
+						let dialer_connection_exist = connected_list.iter().any(
+							|(_k, v)| matches!(v.connected_point, ConnectedPoint::Dialer {..}),
+						);
 						dialer_connection_exist
 					}
 				};
@@ -532,11 +526,11 @@ impl NetworkBehaviour for Protocol {
 					self.events
 						.push_back(NetworkBehaviourAction::NotifyHandler {
 							peer_id: peer_id.clone(),
-							handler: NotifyHandler::One(conn.clone()),
+							handler: NotifyHandler::One(*conn),
 							event: HandlerIn::Open,
 						});
 					connected_list.insert(
-						conn.clone(),
+						*conn,
 						Connection {
 							connected_point: endpoint.clone(),
 							incoming_id: None,
@@ -552,7 +546,7 @@ impl NetworkBehaviour for Protocol {
 					self.events
 						.push_back(NetworkBehaviourAction::NotifyHandler {
 							peer_id: peer_id.clone(),
-							handler: NotifyHandler::One(conn.clone()),
+							handler: NotifyHandler::One(*conn),
 							event: HandlerIn::Close,
 						});
 				}
@@ -566,12 +560,9 @@ impl NetworkBehaviour for Protocol {
 				let should_open = match endpoint {
 					ConnectedPoint::Dialer { .. } => true,
 					ConnectedPoint::Listener { .. } => {
-						let dialer_connection_exist = connected_list
-							.iter()
-							.find(
-								|(_k, v)| matches!(v.connected_point, ConnectedPoint::Dialer {..}),
-							)
-							.is_some();
+						let dialer_connection_exist = connected_list.iter().any(
+							|(_k, v)| matches!(v.connected_point, ConnectedPoint::Dialer {..}),
+						);
 						dialer_connection_exist
 					}
 				};
@@ -583,11 +574,11 @@ impl NetworkBehaviour for Protocol {
 					self.events
 						.push_back(NetworkBehaviourAction::NotifyHandler {
 							peer_id: peer_id.clone(),
-							handler: NotifyHandler::One(conn.clone()),
+							handler: NotifyHandler::One(*conn),
 							event: HandlerIn::Open,
 						});
 					connected_list.insert(
-						conn.clone(),
+						*conn,
 						Connection {
 							connected_point: endpoint.clone(),
 							incoming_id: None,
@@ -597,7 +588,7 @@ impl NetworkBehaviour for Protocol {
 					self.events
 						.push_back(NetworkBehaviourAction::NotifyHandler {
 							peer_id: peer_id.clone(),
-							handler: NotifyHandler::One(conn.clone()),
+							handler: NotifyHandler::One(*conn),
 							event: HandlerIn::Close,
 						});
 				}
@@ -610,6 +601,7 @@ impl NetworkBehaviour for Protocol {
 		}
 	}
 
+	#[allow(clippy::unnecessary_unwrap)]
 	fn inject_connection_closed(
 		&mut self,
 		peer_id: &PeerId,
@@ -695,6 +687,7 @@ impl NetworkBehaviour for Protocol {
 		}
 	}
 
+	#[allow(clippy::unnecessary_unwrap)]
 	fn inject_event(&mut self, source: PeerId, conn: ConnectionId, event: HandlerOut) {
 		match event {
 			HandlerOut::ProtocolOpen { handshake } => {
@@ -836,7 +829,7 @@ impl NetworkBehaviour for Protocol {
 									.insert(source.clone(), Instant::now() + DELAY);
 								self.events
 									.push_back(NetworkBehaviourAction::NotifyHandler {
-										peer_id: source.clone(),
+										peer_id: source,
 										handler: NotifyHandler::One(conn),
 										event: HandlerIn::Close,
 									});
@@ -860,7 +853,7 @@ impl NetworkBehaviour for Protocol {
 									.insert(source.clone(), Instant::now() + DELAY);
 								self.events
 									.push_back(NetworkBehaviourAction::NotifyHandler {
-										peer_id: source.clone(),
+										peer_id: source,
 										handler: NotifyHandler::One(conn),
 										event: HandlerIn::Close,
 									});
@@ -967,23 +960,20 @@ impl NetworkBehaviour for Protocol {
 		// pending dial
 		for (peer_id, peer_state) in self.peers.iter_mut() {
 			if let PeerState::Init { pending_dial } = peer_state {
-				match pending_dial {
-					Some(pd) => {
-						match pd.poll_unpin(cx) {
-							Poll::Ready(_) => {
-								// dial
-								debug!("Apply pending dial({})", peer_id);
-								debug!("Libp2p <= Dial({})", peer_id);
-								self.events.push_back(NetworkBehaviourAction::DialPeer {
-									peer_id: peer_id.clone(),
-									condition: DialPeerCondition::Disconnected,
-								});
-								*pending_dial = None;
-							}
-							Poll::Pending => (),
+				if let Some(pd) = pending_dial {
+					match pd.poll_unpin(cx) {
+						Poll::Ready(_) => {
+							// dial
+							debug!("Apply pending dial({})", peer_id);
+							debug!("Libp2p <= Dial({})", peer_id);
+							self.events.push_back(NetworkBehaviourAction::DialPeer {
+								peer_id: peer_id.clone(),
+								condition: DialPeerCondition::Disconnected,
+							});
+							*pending_dial = None;
 						}
+						Poll::Pending => (),
 					}
-					_ => (),
 				}
 			}
 		}

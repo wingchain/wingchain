@@ -42,7 +42,7 @@ async fn test_poa_contract_create() {
 		&txpool,
 		chain
 			.build_transaction(
-				Some((account1.0.clone(), 0, 10)),
+				Some((account1.secret_key.clone(), 0, 10)),
 				chain
 					.build_call(
 						"contract".to_string(),
@@ -119,7 +119,7 @@ async fn test_poa_contract_create() {
 		admin,
 		Some(module::contract::Admin {
 			threshold: 1,
-			members: vec![(account1.3.clone(), 1)],
+			members: vec![(account1.address.clone(), 1)],
 		})
 	);
 	base::safe_close(chain, txpool, poa).await;
@@ -140,7 +140,7 @@ async fn test_poa_contract_create_fail() {
 
 	let tx1 = chain
 		.build_transaction(
-			Some((account1.0.clone(), 0, 10)),
+			Some((account1.secret_key.clone(), 0, 10)),
 			chain
 				.build_call(
 					"contract".to_string(),
@@ -166,7 +166,7 @@ async fn test_poa_contract_create_fail() {
 
 	let tx1 = chain
 		.build_transaction(
-			Some((account1.0.clone(), 0, 10)),
+			Some((account1.secret_key.clone(), 0, 10)),
 			chain
 				.build_call(
 					"contract".to_string(),
@@ -212,7 +212,7 @@ async fn test_poa_contract_update_admin() {
 		&txpool,
 		chain
 			.build_transaction(
-				Some((account1.0.clone(), 0, 10)),
+				Some((account1.secret_key.clone(), 0, 10)),
 				chain
 					.build_call(
 						"contract".to_string(),
@@ -260,7 +260,7 @@ async fn test_poa_contract_update_admin() {
 		admin,
 		Some(module::contract::Admin {
 			threshold: 1,
-			members: vec![(account1.3.clone(), 1)],
+			members: vec![(account1.address.clone(), 1)],
 		})
 	);
 
@@ -270,7 +270,7 @@ async fn test_poa_contract_update_admin() {
 		&txpool,
 		chain
 			.build_transaction(
-				Some((account1.0.clone(), 0, 10)),
+				Some((account1.secret_key.clone(), 0, 10)),
 				chain
 					.build_call(
 						"contract".to_string(),
@@ -279,7 +279,10 @@ async fn test_poa_contract_update_admin() {
 							contract_address: contract_address.clone(),
 							admin: module::contract::Admin {
 								threshold: 2,
-								members: vec![(account1.3.clone(), 1), (account2.3.clone(), 1)],
+								members: vec![
+									(account1.address.clone(), 1),
+									(account2.address.clone(), 1),
+								],
 							},
 						},
 					)
@@ -323,7 +326,7 @@ async fn test_poa_contract_update_admin() {
 		admin,
 		Some(module::contract::Admin {
 			threshold: 2,
-			members: vec![(account1.3.clone(), 1), (account2.3.clone(), 1)],
+			members: vec![(account1.address.clone(), 1), (account2.address.clone(), 1)],
 		})
 	);
 
@@ -333,7 +336,7 @@ async fn test_poa_contract_update_admin() {
 		&txpool,
 		chain
 			.build_transaction(
-				Some((account2.0.clone(), 0, 10)),
+				Some((account2.secret_key.clone(), 0, 10)),
 				chain
 					.build_call(
 						"contract".to_string(),
@@ -342,7 +345,7 @@ async fn test_poa_contract_update_admin() {
 							contract_address: contract_address.clone(),
 							admin: module::contract::Admin {
 								threshold: 1,
-								members: vec![(account2.3.clone(), 1)],
+								members: vec![(account2.address.clone(), 1)],
 							},
 						},
 					)
@@ -357,7 +360,7 @@ async fn test_poa_contract_update_admin() {
 		&txpool,
 		chain
 			.build_transaction(
-				Some((account1.0.clone(), 0, 10)),
+				Some((account1.secret_key.clone(), 0, 10)),
 				chain
 					.build_call(
 						"contract".to_string(),
@@ -419,7 +422,7 @@ async fn test_poa_contract_update_admin() {
 		admin,
 		Some(module::contract::Admin {
 			threshold: 1,
-			members: vec![(account2.3.clone(), 1)],
+			members: vec![(account2.address.clone(), 1)],
 		})
 	);
 
@@ -445,7 +448,7 @@ async fn test_poa_contract_update_code() {
 		&txpool,
 		chain
 			.build_transaction(
-				Some((account1.0.clone(), 0, 10)),
+				Some((account1.secret_key.clone(), 0, 10)),
 				chain
 					.build_call(
 						"contract".to_string(),
@@ -508,7 +511,7 @@ async fn test_poa_contract_update_code() {
 		admin,
 		Some(module::contract::Admin {
 			threshold: 1,
-			members: vec![(account1.3.clone(), 1)],
+			members: vec![(account1.address.clone(), 1)],
 		})
 	);
 
@@ -518,7 +521,7 @@ async fn test_poa_contract_update_code() {
 		&txpool,
 		chain
 			.build_transaction(
-				Some((account1.0.clone(), 0, 10)),
+				Some((account1.secret_key.clone(), 0, 10)),
 				chain
 					.build_call(
 						"contract".to_string(),
@@ -527,7 +530,10 @@ async fn test_poa_contract_update_code() {
 							contract_address: contract_address.clone(),
 							admin: module::contract::Admin {
 								threshold: 2,
-								members: vec![(account1.3.clone(), 1), (account2.3.clone(), 1)],
+								members: vec![
+									(account1.address.clone(), 1),
+									(account2.address.clone(), 1),
+								],
 							},
 						},
 					)
@@ -571,7 +577,7 @@ async fn test_poa_contract_update_code() {
 		admin,
 		Some(module::contract::Admin {
 			threshold: 2,
-			members: vec![(account1.3.clone(), 1), (account2.3.clone(), 1)],
+			members: vec![(account1.address.clone(), 1), (account2.address.clone(), 1)],
 		})
 	);
 
@@ -582,7 +588,7 @@ async fn test_poa_contract_update_code() {
 		&txpool,
 		chain
 			.build_transaction(
-				Some((account2.0.clone(), 0, 10)),
+				Some((account2.secret_key.clone(), 0, 10)),
 				chain
 					.build_call(
 						"contract".to_string(),
@@ -603,7 +609,7 @@ async fn test_poa_contract_update_code() {
 		&txpool,
 		chain
 			.build_transaction(
-				Some((account1.0.clone(), 0, 10)),
+				Some((account1.secret_key.clone(), 0, 10)),
 				chain
 					.build_call(
 						"contract".to_string(),

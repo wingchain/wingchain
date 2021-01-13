@@ -239,10 +239,7 @@ impl CustomLib {
 	}
 
 	fn length(call_length: &imp::Symbol<CallLength>) -> CommonResult<CLength> {
-		let length: CLength = unsafe {
-			let length = call_length();
-			length
-		};
+		let length: CLength = unsafe { call_length() };
 		Ok(length)
 	}
 }
@@ -292,7 +289,7 @@ impl Dsa for CustomLib {
 	}
 
 	fn generate_key_pair(&self) -> Result<Self::KeyPair, Self::Error> {
-		let mut err = 0u32 as c_uint;
+		let mut err = 0u32;
 		unsafe {
 			let raw = (self.call_generate_key_pair)(&mut err as *mut c_uint);
 			match err {
@@ -309,7 +306,7 @@ impl Dsa for CustomLib {
 	}
 
 	fn key_pair_from_secret_key(&self, secret_key: &[u8]) -> Result<Self::KeyPair, Self::Error> {
-		let mut err = 0u32 as c_uint;
+		let mut err = 0u32;
 		unsafe {
 			let raw = (self.call_key_pair_from_secret_key)(
 				secret_key.as_ptr(),
@@ -330,7 +327,7 @@ impl Dsa for CustomLib {
 	}
 
 	fn verifier_from_public_key(&self, public_key: &[u8]) -> Result<Self::Verifier, Self::Error> {
-		let mut err = 0u32 as c_uint;
+		let mut err = 0u32;
 		unsafe {
 			let raw = (self.call_verifier_from_public_key)(
 				public_key.as_ptr(),
@@ -378,7 +375,7 @@ impl KeyPair for CustomKeyPair {
 impl Verifier for CustomVerifier {
 	type Error = CommonError;
 	fn verify(&self, message: &[u8], signature: &[u8]) -> Result<(), Self::Error> {
-		let mut err = 0u32 as c_uint;
+		let mut err = 0u32;
 		unsafe {
 			(self.call.call_verifier_verify)(
 				self.inner,
@@ -415,13 +412,13 @@ macro_rules! declare_dsa_custom_lib {
 		}
 
 		#[no_mangle]
-		pub extern "C" fn _crypto_dsa_custom_name() -> *mut c_char {
+		pub unsafe extern "C" fn _crypto_dsa_custom_name() -> *mut c_char {
 			let name = $impl.name();
 			CString::new(name).expect("qed").into_raw()
 		}
 
 		#[no_mangle]
-		pub extern "C" fn _crypto_dsa_custom_name_free(name: *mut c_char) {
+		pub unsafe extern "C" fn _crypto_dsa_custom_name_free(name: *mut c_char) {
 			unsafe {
 				assert!(!name.is_null());
 				CString::from_raw(name)
@@ -429,7 +426,9 @@ macro_rules! declare_dsa_custom_lib {
 		}
 
 		#[no_mangle]
-		pub extern "C" fn _crypto_dsa_custom_generate_key_pair(err: *mut c_uint) -> *mut KeyPair {
+		pub unsafe extern "C" fn _crypto_dsa_custom_generate_key_pair(
+			err: *mut c_uint,
+		) -> *mut KeyPair {
 			let key_pair = match $impl.generate_key_pair() {
 				Ok(v) => v,
 				Err(e) => {
@@ -441,7 +440,7 @@ macro_rules! declare_dsa_custom_lib {
 		}
 
 		#[no_mangle]
-		pub extern "C" fn _crypto_dsa_custom_key_pair_from_secret_key(
+		pub unsafe extern "C" fn _crypto_dsa_custom_key_pair_from_secret_key(
 			secret_key: *const c_uchar,
 			secret_key_len: c_uint,
 			err: *mut c_uint,
@@ -458,7 +457,7 @@ macro_rules! declare_dsa_custom_lib {
 		}
 
 		#[no_mangle]
-		pub extern "C" fn _crypto_dsa_custom_key_pair_secret_key(
+		pub unsafe extern "C" fn _crypto_dsa_custom_key_pair_secret_key(
 			key_pair: *mut KeyPair,
 			out: *mut c_uchar,
 			out_len: c_uint,
@@ -470,7 +469,7 @@ macro_rules! declare_dsa_custom_lib {
 		}
 
 		#[no_mangle]
-		pub extern "C" fn _crypto_dsa_custom_key_pair_public_key(
+		pub unsafe extern "C" fn _crypto_dsa_custom_key_pair_public_key(
 			key_pair: *mut KeyPair,
 			out: *mut c_uchar,
 			out_len: c_uint,
@@ -482,7 +481,7 @@ macro_rules! declare_dsa_custom_lib {
 		}
 
 		#[no_mangle]
-		pub extern "C" fn _crypto_dsa_custom_key_pair_sign(
+		pub unsafe extern "C" fn _crypto_dsa_custom_key_pair_sign(
 			key_pair: *mut KeyPair,
 			message: *const c_uchar,
 			message_len: c_uint,
@@ -497,12 +496,12 @@ macro_rules! declare_dsa_custom_lib {
 		}
 
 		#[no_mangle]
-		pub extern "C" fn _crypto_dsa_custom_key_pair_free(key_pair: *mut KeyPair) {
+		pub unsafe extern "C" fn _crypto_dsa_custom_key_pair_free(key_pair: *mut KeyPair) {
 			unsafe { Box::from_raw(key_pair) };
 		}
 
 		#[no_mangle]
-		pub extern "C" fn _crypto_dsa_custom_verifier_from_public_key(
+		pub unsafe extern "C" fn _crypto_dsa_custom_verifier_from_public_key(
 			public_key: *const c_uchar,
 			public_key_len: c_uint,
 			err: *mut c_uint,
@@ -519,7 +518,7 @@ macro_rules! declare_dsa_custom_lib {
 		}
 
 		#[no_mangle]
-		pub extern "C" fn _crypto_dsa_custom_verifier_verify(
+		pub unsafe extern "C" fn _crypto_dsa_custom_verifier_verify(
 			verifier: *mut Verifier,
 			message: *const c_uchar,
 			message_len: c_uint,
@@ -542,7 +541,7 @@ macro_rules! declare_dsa_custom_lib {
 		}
 
 		#[no_mangle]
-		pub extern "C" fn _crypto_dsa_custom_verifier_free(verifier: *mut Verifier) {
+		pub unsafe extern "C" fn _crypto_dsa_custom_verifier_free(verifier: *mut Verifier) {
 			unsafe { Box::from_raw(verifier) };
 		}
 

@@ -84,8 +84,7 @@ pub struct VM {
 
 impl VM {
 	pub fn new(config: VMConfig) -> Self {
-		let vm = VM { config };
-		vm
+		VM { config }
 	}
 
 	pub fn validate(
@@ -159,7 +158,7 @@ impl VM {
 		let _result = instance.call(func, &[])?;
 
 		let output = state.result;
-		let output = output.unwrap_or(serde_json::to_vec(&()).unwrap());
+		let output = output.unwrap_or_else(|| serde_json::to_vec(&()).unwrap());
 		Ok(output)
 	}
 }

@@ -136,11 +136,9 @@ impl PeerManager {
 	}
 
 	pub fn incoming(&mut self, peer_id: PeerId, incoming_id: IncomingId) {
-		if self.config.reserved_only {
-			if !self.config.reserved.contains_key(&peer_id) {
-				self.send(OutMessage::Reject(incoming_id));
-				return;
-			}
+		if self.config.reserved_only && !self.config.reserved.contains_key(&peer_id) {
+			self.send(OutMessage::Reject(incoming_id));
+			return;
 		}
 
 		match self

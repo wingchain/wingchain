@@ -50,8 +50,7 @@ pub fn get_default_home() -> CommonResult<PathBuf> {
 		author: AUTHOR,
 	};
 
-	let home =
-		get_app_root(AppDataType::UserData, &app_info).map_err(|e| errors::ErrorKind::AppDir(e))?;
+	let home = get_app_root(AppDataType::UserData, &app_info).map_err(errors::ErrorKind::AppDir)?;
 	Ok(home)
 }
 

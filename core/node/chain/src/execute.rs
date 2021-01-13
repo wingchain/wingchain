@@ -88,12 +88,9 @@ fn process_task(task: ExecuteTask, backend: &Arc<Backend>) -> CommonResult<()> {
 
 	let number = task.number;
 
-	let execution_number =
-		backend
-			.get_execution_number()?
-			.ok_or(errors::ErrorKind::ExecuteQueue(format!(
-				"Unable to get execution_number"
-			)))?;
+	let execution_number = backend.get_execution_number()?.ok_or_else(|| {
+		errors::ErrorKind::ExecuteQueue("Unable to get execution_number".to_string())
+	})?;
 
 	// Ensure execution is committed one by one
 	// The former failed task will be processed again
@@ -115,45 +112,43 @@ fn process_number(
 	let current_task = match task {
 		Some(task) if task.number == current_number => task,
 		_ => {
-			let block_hash =
-				backend
-					.get_block_hash(&current_number)?
-					.ok_or(errors::ErrorKind::ExecuteQueue(format!(
-						"Unable to get block hash: {}",
-						current_number
-					)))?;
-			let block = backend
-				.get_block(&block_hash)?
-				.ok_or(errors::ErrorKind::ExecuteQueue(format!(
+			let block_hash = backend.get_block_hash(&current_number)?.ok_or_else(|| {
+				errors::ErrorKind::ExecuteQueue(format!(
+					"Unable to get block hash: {}",
+					current_number
+				))
+			})?;
+			let block = backend.get_block(&block_hash)?.ok_or_else(|| {
+				errors::ErrorKind::ExecuteQueue(format!(
 					"Unable to get block header: {}",
 					block_hash
-				)))?;
+				))
+			})?;
 			let payload_txs = block
 				.body
 				.payload_txs
 				.into_iter()
 				.map(|tx_hash| {
 					backend.get_transaction(&tx_hash).and_then(|x| {
-						x.ok_or(
+						x.ok_or_else(|| {
 							errors::ErrorKind::ExecuteQueue(format!(
 								"Unable to get transaction: {}",
 								tx_hash
 							))
-							.into(),
-						)
+							.into()
+						})
 						.map(|tx| Arc::new(FullTransaction { tx, tx_hash }))
 					})
 				})
 				.collect::<CommonResult<Vec<_>>>()?;
-			let task = ExecuteTask {
+			ExecuteTask {
 				number: current_number,
 				timestamp: block.header.timestamp,
 				block_hash,
 				parent_hash: block.header.parent_hash,
 				meta_state_root: block.header.meta_state_root,
 				payload_txs,
-			};
-			task
+			}
 		}
 	};
 

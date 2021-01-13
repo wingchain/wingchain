@@ -43,7 +43,7 @@ impl<C: Context, U: Util> Module<C, U> {
 			env: context.env(),
 			util,
 			block_interval: StorageValue::new(context.clone(), b"block_interval"),
-			authority: StorageValue::new(context.clone(), b"authority"),
+			authority: StorageValue::new(context, b"authority"),
 		}
 	}
 

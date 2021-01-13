@@ -132,22 +132,28 @@ where
 				.support
 				.ori_support()
 				.get_confirmed_number()?
-				.ok_or(errors::ErrorKind::Data(format!("Missing confirmed number")))?;
+				.ok_or_else(|| errors::ErrorKind::Data("Missing confirmed number".to_string()))?;
 			let block_hash = self
 				.support
 				.ori_support()
 				.get_block_hash(&confirmed_number)?
-				.ok_or(errors::ErrorKind::Data(format!(
-					"Missing block hash: number: {}",
-					confirmed_number
-				)))?;
-			let header = self.support.ori_support().get_header(&block_hash)?.ok_or(
-				errors::ErrorKind::Data(format!("Missing header: block_hash: {:?}", block_hash)),
-			)?;
+				.ok_or_else(|| {
+					errors::ErrorKind::Data(format!(
+						"Missing block hash: number: {}",
+						confirmed_number
+					))
+				})?;
+			let header = self
+				.support
+				.ori_support()
+				.get_header(&block_hash)?
+				.ok_or_else(|| {
+					errors::ErrorKind::Data(format!("Missing header: block_hash: {:?}", block_hash))
+				})?;
 			(confirmed_number, block_hash, header)
 		};
 
-		if !(header.number == confirmed.0 + 1 && &header.parent_hash == &confirmed.1) {
+		if !(header.number == confirmed.0 + 1 && header.parent_hash == confirmed.1) {
 			return Err(ErrorKind::VerifyError(VerifyError::NotBest).into());
 		}
 
@@ -176,13 +182,11 @@ where
 		}
 
 		// execution number of current state
-		let current_execution_number =
-			self.support
-				.ori_support()
-				.get_execution_number()?
-				.ok_or(errors::ErrorKind::Data(format!(
-					"Execution number not found"
-				)))?;
+		let current_execution_number = self
+			.support
+			.ori_support()
+			.get_execution_number()?
+			.ok_or_else(|| errors::ErrorKind::Data("Execution number not found".to_string()))?;
 		if execution_number > current_execution_number {
 			return Err(ErrorKind::VerifyError(VerifyError::ShouldWait).into());
 		}

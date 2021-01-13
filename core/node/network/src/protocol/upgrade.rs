@@ -168,6 +168,7 @@ impl Stream for OutSubstream {
 		}
 
 		while let Some(message) = this.send_queue.pop_front() {
+			#[allow(clippy::single_match)]
 			match this.socket.as_mut().start_send(io::Cursor::new(message)) {
 				Err(e) => return Poll::Ready(Some(Err(e))),
 				Ok(_) => (),
@@ -176,7 +177,7 @@ impl Stream for OutSubstream {
 
 		match Sink::poll_flush(this.socket.as_mut(), cx) {
 			Poll::Pending => Poll::Pending,
-			Poll::Ready(Err(e)) => return Poll::Ready(Some(Err(e))),
+			Poll::Ready(Err(e)) => Poll::Ready(Some(Err(e))),
 			Poll::Ready(Ok(_)) => Poll::Ready(Some(Ok(()))),
 		}
 	}

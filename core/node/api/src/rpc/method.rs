@@ -625,15 +625,12 @@ impl TryInto<u64> for Hex {
 		let number = self.0;
 		let number = if number.starts_with("0x") {
 			let hex = number.trim_start_matches("0x");
-			let number = u64::from_str_radix(hex, 16).map_err(|_| {
-				errors::ErrorKind::InvalidParams(format!("Invalid hex: {}", number))
-			})?;
-			number
+			u64::from_str_radix(hex, 16)
+				.map_err(|_| errors::ErrorKind::InvalidParams(format!("Invalid hex: {}", number)))?
 		} else {
-			let number = number.parse::<u64>().map_err(|_| {
+			number.parse::<u64>().map_err(|_| {
 				errors::ErrorKind::InvalidParams(format!("Invalid number: {}", number))
-			})?;
-			number
+			})?
 		};
 		Ok(number)
 	}
@@ -645,15 +642,12 @@ impl TryInto<u32> for Hex {
 		let number = self.0;
 		let number = if number.starts_with("0x") {
 			let hex = number.trim_start_matches("0x");
-			let number = u32::from_str_radix(hex, 16).map_err(|_| {
-				errors::ErrorKind::InvalidParams(format!("Invalid hex: {}", number))
-			})?;
-			number
+			u32::from_str_radix(hex, 16)
+				.map_err(|_| errors::ErrorKind::InvalidParams(format!("Invalid hex: {}", number)))?
 		} else {
-			let number = number.parse::<u32>().map_err(|_| {
+			number.parse::<u32>().map_err(|_| {
 				errors::ErrorKind::InvalidParams(format!("Invalid number: {}", number))
-			})?;
-			number
+			})?
 		};
 		Ok(number)
 	}
@@ -712,17 +706,13 @@ impl TryInto<u64> for NumberOrHex {
 				let result = match str.as_str() {
 					number if number.starts_with("0x") => {
 						let hex = number.trim_start_matches("0x");
-						let number = u64::from_str_radix(hex, 16).map_err(|_| {
+						u64::from_str_radix(hex, 16).map_err(|_| {
 							errors::ErrorKind::InvalidParams(format!("Invalid hex: {}", number))
-						})?;
-						number
+						})?
 					}
-					number => {
-						let number = number.parse::<u64>().map_err(|_| {
-							errors::ErrorKind::InvalidParams(format!("Invalid number: {}", number))
-						})?;
-						number
-					}
+					number => number.parse::<u64>().map_err(|_| {
+						errors::ErrorKind::InvalidParams(format!("Invalid number: {}", number))
+					})?,
 				};
 				Ok(result)
 			}

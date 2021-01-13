@@ -51,7 +51,7 @@ pub fn run(opt: InitOpt) -> CommonResult<()> {
 fn init_config(home: &PathBuf) -> CommonResult<()> {
 	let config_path = base::get_config_path(home);
 
-	fs::create_dir_all(&config_path).map_err(|e| errors::ErrorKind::IO(e))?;
+	fs::create_dir_all(&config_path).map_err(errors::ErrorKind::IO)?;
 
 	init_spec_file(&config_path)?;
 	init_config_file(&config_path)?;
@@ -66,10 +66,10 @@ fn init_spec_file(config_path: &PathBuf) -> CommonResult<()> {
 	let template = template.replace("${CHAIN_ID}", &gen_chain_id());
 	let template = template.replace("${TIME}", &gen_time());
 
-	fs::write(config_path.join(SPEC_FILE), &template).map_err(|e| errors::ErrorKind::IO(e))?;
+	fs::write(config_path.join(SPEC_FILE), &template).map_err(errors::ErrorKind::IO)?;
 
 	// test
-	toml::from_str::<Spec>(&template).map_err(|e| errors::ErrorKind::TomlDe(e))?;
+	toml::from_str::<Spec>(&template).map_err(errors::ErrorKind::TomlDe)?;
 
 	Ok(())
 }
@@ -79,17 +79,17 @@ fn init_config_file(config_path: &PathBuf) -> CommonResult<()> {
 
 	let template = String::from_utf8_lossy(template).to_string();
 
-	fs::write(config_path.join(CONFIG_FILE), &template).map_err(|e| errors::ErrorKind::IO(e))?;
+	fs::write(config_path.join(CONFIG_FILE), &template).map_err(errors::ErrorKind::IO)?;
 
 	// test
-	toml::from_str::<Config>(&template).map_err(|e| errors::ErrorKind::TomlDe(e))?;
+	toml::from_str::<Config>(&template).map_err(errors::ErrorKind::TomlDe)?;
 
 	Ok(())
 }
 
 fn gen_chain_id() -> String {
 	let mut rng = thread_rng();
-	let mut gen_char = || rng.gen_range('a' as u8, ('z' as u8) + 1) as char;
+	let mut gen_char = || rng.gen_range(b'a', b'z' + 1) as char;
 	let chain_id: String = (0..8).map(|_| gen_char()).collect();
 	let chain_id = format!("chain-{}", chain_id);
 	chain_id
@@ -103,7 +103,7 @@ fn gen_time() -> String {
 fn init_data(home: &PathBuf) -> CommonResult<()> {
 	let data_path = base::get_data_path(home);
 
-	fs::create_dir_all(data_path).map_err(|e| errors::ErrorKind::IO(e))?;
+	fs::create_dir_all(data_path).map_err(errors::ErrorKind::IO)?;
 
 	Ok(())
 }

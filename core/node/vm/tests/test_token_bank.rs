@@ -33,7 +33,7 @@ fn test_vm_tb_success() {
 
 	base::create_contract(
 		&token_contract_address,
-		&account1.3,
+		&account1.address,
 		get_token_code(),
 		executor_context.clone(),
 		"init",
@@ -50,7 +50,7 @@ fn test_vm_tb_success() {
 		VMConfig::default(),
 		tx_hash,
 		Some(token_bank_contract_address.clone()),
-		Some(account1.3.clone()),
+		Some(account1.address.clone()),
 		executor_context.clone(),
 	);
 
@@ -78,7 +78,7 @@ fn test_vm_tb_success() {
 		VMConfig::default(),
 		tx_hash,
 		Some(token_contract_address.clone()),
-		Some(account1.3.clone()),
+		Some(account1.address.clone()),
 		executor_context.clone(),
 	);
 
@@ -109,7 +109,7 @@ fn test_vm_tb_success() {
 		VMConfig::default(),
 		tx_hash,
 		Some(token_bank_contract_address.clone()),
-		Some(account1.3.clone()),
+		Some(account1.address.clone()),
 		executor_context.clone(),
 	);
 
@@ -133,7 +133,7 @@ fn test_vm_tb_success() {
 		VMConfig::default(),
 		tx_hash,
 		Some(token_bank_contract_address.clone()),
-		Some(account1.3.clone()),
+		Some(account1.address.clone()),
 		executor_context.clone(),
 	);
 
@@ -157,11 +157,11 @@ fn test_vm_tb_success() {
 		VMConfig::default(),
 		tx_hash,
 		Some(token_contract_address.clone()),
-		Some(account1.3.clone()),
+		Some(account1.address.clone()),
 		executor_context.clone(),
 	);
 
-	let params = &format!(r#"{{"address":"{}"}}"#, account1.3)
+	let params = &format!(r#"{{"address":"{}"}}"#, account1.address)
 		.as_bytes()
 		.to_vec();
 
@@ -182,7 +182,7 @@ fn test_vm_tb_success() {
 		VMConfig::default(),
 		tx_hash,
 		Some(token_contract_address.clone()),
-		Some(account1.3.clone()),
+		Some(account1.address.clone()),
 		executor_context.clone(),
 	);
 
@@ -217,7 +217,7 @@ fn test_vm_tb_success() {
 		VMConfig::default(),
 		tx_hash,
 		Some(token_bank_contract_address.clone()),
-		Some(account1.3.clone()),
+		Some(account1.address.clone()),
 		executor_context.clone(),
 	);
 
@@ -241,7 +241,7 @@ fn test_vm_tb_success() {
 		VMConfig::default(),
 		tx_hash,
 		Some(token_bank_contract_address.clone()),
-		Some(account1.3.clone()),
+		Some(account1.address.clone()),
 		executor_context.clone(),
 	);
 
@@ -265,11 +265,11 @@ fn test_vm_tb_success() {
 		VMConfig::default(),
 		tx_hash,
 		Some(token_contract_address.clone()),
-		Some(account1.3.clone()),
+		Some(account1.address.clone()),
 		executor_context.clone(),
 	);
 
-	let params = &format!(r#"{{"address":"{}"}}"#, account1.3)
+	let params = &format!(r#"{{"address":"{}"}}"#, account1.address)
 		.as_bytes()
 		.to_vec();
 
@@ -290,7 +290,7 @@ fn test_vm_tb_success() {
 		VMConfig::default(),
 		tx_hash,
 		Some(token_contract_address.clone()),
-		Some(account1.3.clone()),
+		Some(account1.address.clone()),
 		executor_context.clone(),
 	);
 
@@ -332,7 +332,7 @@ fn test_vm_tb_failed() {
 
 	base::create_contract(
 		&token_contract_address,
-		&account1.3,
+		&account1.address,
 		get_token_code(),
 		executor_context.clone(),
 		"init",
@@ -349,7 +349,7 @@ fn test_vm_tb_failed() {
 		VMConfig::default(),
 		tx_hash,
 		Some(token_bank_contract_address.clone()),
-		Some(account1.3.clone()),
+		Some(account1.address.clone()),
 		executor_context.clone(),
 	);
 
@@ -377,7 +377,7 @@ fn test_vm_tb_failed() {
 		VMConfig::default(),
 		tx_hash,
 		Some(token_contract_address.clone()),
-		Some(account1.3.clone()),
+		Some(account1.address.clone()),
 		executor_context.clone(),
 	);
 
@@ -408,7 +408,7 @@ fn test_vm_tb_failed() {
 		VMConfig::default(),
 		tx_hash,
 		Some(token_bank_contract_address.clone()),
-		Some(account1.3.clone()),
+		Some(account1.address.clone()),
 		executor_context.clone(),
 	);
 
@@ -442,7 +442,7 @@ fn test_vm_tb_ea() {
 
 	base::create_contract(
 		&token_contract_address,
-		&account1.3,
+		&account1.address,
 		get_token_code(),
 		executor_context.clone(),
 		"init",
@@ -459,7 +459,7 @@ fn test_vm_tb_ea() {
 		VMConfig::default(),
 		tx_hash,
 		Some(token_bank_contract_address.clone()),
-		Some(account1.3.clone()),
+		Some(account1.address.clone()),
 		executor_context.clone(),
 	);
 
@@ -487,7 +487,7 @@ fn test_vm_tb_ea() {
 		VMConfig::default(),
 		tx_hash,
 		Some(token_contract_address.clone()),
-		Some(account1.3.clone()),
+		Some(account1.address.clone()),
 		executor_context.clone(),
 	);
 
@@ -518,7 +518,7 @@ fn test_vm_tb_ea() {
 		VMConfig::default(),
 		tx_hash,
 		Some(token_bank_contract_address.clone()),
-		Some(account1.3.clone()),
+		Some(account1.address.clone()),
 		executor_context.clone(),
 	);
 

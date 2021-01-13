@@ -42,7 +42,7 @@ async fn test_poa_contract_token_read() {
         &txpool,
         chain
             .build_transaction(
-                Some((account1.0.clone(), 0, 10)),
+                Some((account1.secret_key.clone(), 0, 10)),
 				chain.build_call("contract".to_string(),
                 "create".to_string(),
                 module::contract::CreateParams {
@@ -70,7 +70,7 @@ async fn test_poa_contract_token_read() {
 	let result: Vec<u8> = chain
 		.execute_call_with_block_number(
 			&1,
-			Some(&account1.3),
+			Some(&account1.address),
 			"contract".to_string(),
 			"execute".to_string(),
 			module::contract::ExecuteParams {
@@ -90,7 +90,7 @@ async fn test_poa_contract_token_read() {
 	let result: Vec<u8> = chain
 		.execute_call_with_block_number(
 			&1,
-			Some(&account1.3),
+			Some(&account1.address),
 			"contract".to_string(),
 			"execute".to_string(),
 			module::contract::ExecuteParams {
@@ -110,7 +110,7 @@ async fn test_poa_contract_token_read() {
 	let result: Vec<u8> = chain
 		.execute_call_with_block_number(
 			&1,
-			Some(&account1.3),
+			Some(&account1.address),
 			"contract".to_string(),
 			"execute".to_string(),
 			module::contract::ExecuteParams {
@@ -130,7 +130,7 @@ async fn test_poa_contract_token_read() {
 	let result: Vec<u8> = chain
 		.execute_call_with_block_number(
 			&1,
-			Some(&account1.3),
+			Some(&account1.address),
 			"contract".to_string(),
 			"execute".to_string(),
 			module::contract::ExecuteParams {
@@ -150,15 +150,18 @@ async fn test_poa_contract_token_read() {
 	let result: Vec<u8> = chain
 		.execute_call_with_block_number(
 			&1,
-			Some(&account1.3),
+			Some(&account1.address),
 			"contract".to_string(),
 			"execute".to_string(),
 			module::contract::ExecuteParams {
 				contract_address: contract_address.clone(),
 				method: "balance".to_string(),
-				params: format!(r#"{{"address":"{}"}}"#, Address((account1.3).0.clone()))
-					.as_bytes()
-					.to_vec(),
+				params: format!(
+					r#"{{"address":"{}"}}"#,
+					Address((account1.address).0.clone())
+				)
+				.as_bytes()
+				.to_vec(),
 				pay_value: 0,
 			},
 		)
@@ -189,7 +192,7 @@ async fn test_poa_contract_token_transfer() {
         &txpool,
         chain
             .build_transaction(
-                Some((account1.0.clone(), 0, 10)),
+                Some((account1.secret_key.clone(), 0, 10)),
 				chain.build_call("contract".to_string(),
                 "create".to_string(),
                 module::contract::CreateParams {
@@ -218,7 +221,7 @@ async fn test_poa_contract_token_transfer() {
 		&txpool,
 		chain
 			.build_transaction(
-				Some((account1.0.clone(), 0, 10)),
+				Some((account1.secret_key.clone(), 0, 10)),
 				chain
 					.build_call(
 						"contract".to_string(),
@@ -229,7 +232,7 @@ async fn test_poa_contract_token_transfer() {
 							method: "transfer".to_string(),
 							params: format!(
 								r#"{{"recipient":"{}","value":100000000000000}}"#,
-								Address((account2.3).0.clone())
+								Address((account2.address).0.clone())
 							)
 							.as_bytes()
 							.to_vec(),
@@ -250,15 +253,18 @@ async fn test_poa_contract_token_transfer() {
 	let result: Vec<u8> = chain
 		.execute_call_with_block_number(
 			&2,
-			Some(&account1.3),
+			Some(&account1.address),
 			"contract".to_string(),
 			"execute".to_string(),
 			module::contract::ExecuteParams {
 				contract_address: contract_address.clone(),
 				method: "balance".to_string(),
-				params: format!(r#"{{"address":"{}"}}"#, Address((account1.3).0.clone()))
-					.as_bytes()
-					.to_vec(),
+				params: format!(
+					r#"{{"address":"{}"}}"#,
+					Address((account1.address).0.clone())
+				)
+				.as_bytes()
+				.to_vec(),
 				pay_value: 0,
 			},
 		)
@@ -272,15 +278,18 @@ async fn test_poa_contract_token_transfer() {
 	let result: Vec<u8> = chain
 		.execute_call_with_block_number(
 			&2,
-			Some(&account1.3),
+			Some(&account1.address),
 			"contract".to_string(),
 			"execute".to_string(),
 			module::contract::ExecuteParams {
 				contract_address: contract_address.clone(),
 				method: "balance".to_string(),
-				params: format!(r#"{{"address":"{}"}}"#, Address((account2.3).0.clone()))
-					.as_bytes()
-					.to_vec(),
+				params: format!(
+					r#"{{"address":"{}"}}"#,
+					Address((account2.address).0.clone())
+				)
+				.as_bytes()
+				.to_vec(),
 				pay_value: 0,
 			},
 		)
@@ -311,7 +320,7 @@ async fn test_poa_contract_token_transfer_from() {
         &txpool,
         chain
             .build_transaction(
-                Some((account1.0.clone(), 0, 10)),
+                Some((account1.secret_key.clone(), 0, 10)),
 				chain.build_call("contract".to_string(),
                 "create".to_string(),
                 module::contract::CreateParams {
@@ -340,7 +349,7 @@ async fn test_poa_contract_token_transfer_from() {
 		&txpool,
 		chain
 			.build_transaction(
-				Some((account1.0.clone(), 0, 10)),
+				Some((account1.secret_key.clone(), 0, 10)),
 				chain
 					.build_call(
 						"contract".to_string(),
@@ -351,7 +360,7 @@ async fn test_poa_contract_token_transfer_from() {
 							method: "approve".to_string(),
 							params: format!(
 								r#"{{"spender":"{}","value":100000000000000}}"#,
-								Address((account2.3).0.clone())
+								Address((account2.address).0.clone())
 							)
 							.as_bytes()
 							.to_vec(),
@@ -372,7 +381,7 @@ async fn test_poa_contract_token_transfer_from() {
 	let result: Vec<u8> = chain
 		.execute_call_with_block_number(
 			&2,
-			Some(&account1.3),
+			Some(&account1.address),
 			"contract".to_string(),
 			"execute".to_string(),
 			module::contract::ExecuteParams {
@@ -380,8 +389,8 @@ async fn test_poa_contract_token_transfer_from() {
 				method: "allowance".to_string(),
 				params: format!(
 					r#"{{"owner":"{}","spender":"{}"}}"#,
-					Address((account1.3).0.clone()),
-					Address((account2.3).0.clone())
+					Address((account1.address).0.clone()),
+					Address((account2.address).0.clone())
 				)
 				.as_bytes()
 				.to_vec(),
@@ -399,7 +408,7 @@ async fn test_poa_contract_token_transfer_from() {
 		&txpool,
 		chain
 			.build_transaction(
-				Some((account2.0.clone(), 0, 10)),
+				Some((account2.secret_key.clone(), 0, 10)),
 				chain
 					.build_call(
 						"contract".to_string(),
@@ -410,8 +419,8 @@ async fn test_poa_contract_token_transfer_from() {
 							method: "transfer_from".to_string(),
 							params: format!(
 								r#"{{"sender":"{}","recipient":"{}","value":100000000}}"#,
-								Address((account1.3).0.clone()),
-								Address((account2.3).0.clone())
+								Address((account1.address).0.clone()),
+								Address((account2.address).0.clone())
 							)
 							.as_bytes()
 							.to_vec(),
@@ -432,7 +441,7 @@ async fn test_poa_contract_token_transfer_from() {
 	let result: Vec<u8> = chain
 		.execute_call_with_block_number(
 			&3,
-			Some(&account1.3),
+			Some(&account1.address),
 			"contract".to_string(),
 			"execute".to_string(),
 			module::contract::ExecuteParams {
@@ -440,8 +449,8 @@ async fn test_poa_contract_token_transfer_from() {
 				method: "allowance".to_string(),
 				params: format!(
 					r#"{{"owner":"{}","spender":"{}"}}"#,
-					Address((account1.3).0.clone()),
-					Address((account2.3).0.clone())
+					Address((account1.address).0.clone()),
+					Address((account2.address).0.clone())
 				)
 				.as_bytes()
 				.to_vec(),
@@ -458,15 +467,18 @@ async fn test_poa_contract_token_transfer_from() {
 	let result: Vec<u8> = chain
 		.execute_call_with_block_number(
 			&3,
-			Some(&account1.3),
+			Some(&account1.address),
 			"contract".to_string(),
 			"execute".to_string(),
 			module::contract::ExecuteParams {
 				contract_address: contract_address.clone(),
 				method: "balance".to_string(),
-				params: format!(r#"{{"address":"{}"}}"#, Address((account1.3).0.clone()))
-					.as_bytes()
-					.to_vec(),
+				params: format!(
+					r#"{{"address":"{}"}}"#,
+					Address((account1.address).0.clone())
+				)
+				.as_bytes()
+				.to_vec(),
 				pay_value: 0,
 			},
 		)
@@ -480,15 +492,18 @@ async fn test_poa_contract_token_transfer_from() {
 	let result: Vec<u8> = chain
 		.execute_call_with_block_number(
 			&3,
-			Some(&account1.3),
+			Some(&account1.address),
 			"contract".to_string(),
 			"execute".to_string(),
 			module::contract::ExecuteParams {
 				contract_address: contract_address.clone(),
 				method: "balance".to_string(),
-				params: format!(r#"{{"address":"{}"}}"#, Address((account2.3).0.clone()))
-					.as_bytes()
-					.to_vec(),
+				params: format!(
+					r#"{{"address":"{}"}}"#,
+					Address((account2.address).0.clone())
+				)
+				.as_bytes()
+				.to_vec(),
 				pay_value: 0,
 			},
 		)
@@ -540,7 +555,7 @@ async fn test_poa_contract_build_tx_create() {
 
 	let tx = chain
         .build_transaction(
-            Some((account1.0.clone(), nonce, until)),
+            Some((account1.secret_key.clone(), nonce, until)),
 			chain.build_call("contract".to_string(),
             "create".to_string(),
             module::contract::CreateParams {
@@ -582,7 +597,7 @@ async fn test_poa_contract_build_call_balance() {
 
 	let tx = chain
 		.build_transaction(
-			Some((account1.0.clone(), 0, 0)),
+			Some((account1.secret_key.clone(), 0, 0)),
 			chain
 				.build_call(
 					"contract".to_string(),
@@ -590,9 +605,12 @@ async fn test_poa_contract_build_call_balance() {
 					module::contract::ExecuteParams {
 						contract_address,
 						method: "balance".to_string(),
-						params: format!(r#"{{"address":"{}"}}"#, Address((account1.3).0.clone()))
-							.as_bytes()
-							.to_vec(),
+						params: format!(
+							r#"{{"address":"{}"}}"#,
+							Address((account1.address).0.clone())
+						)
+						.as_bytes()
+						.to_vec(),
 						pay_value: 0,
 					},
 				)

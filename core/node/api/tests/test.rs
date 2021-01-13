@@ -37,8 +37,8 @@ async fn test_api() {
 
 	let (account1, account2) = test_accounts(dsa, address);
 
-	let account1 = (account1.0, account1.1, account1.3);
-	let account2 = (account2.0, account2.1, account2.3);
+	let account1 = (account1.secret_key, account1.public_key, account1.address);
+	let account2 = (account2.secret_key, account2.public_key, account2.address);
 
 	let specs = vec![
 		(

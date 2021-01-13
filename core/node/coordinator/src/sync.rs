@@ -95,10 +95,10 @@ where
 	pub fn on_protocol_close(&mut self, peer_id: PeerId) -> CommonResult<()> {
 		self.peers.remove(&peer_id);
 
-		for (_number, pending_block_info) in &mut self.pending_blocks {
+		for pending_block_info in self.pending_blocks.values_mut() {
 			match &pending_block_info.state {
 				PendingBlockState::Downloading { from, .. } => {
-					if &**from == &peer_id {
+					if **from == peer_id {
 						pending_block_info.state = PendingBlockState::Seen;
 					}
 				}
@@ -197,7 +197,7 @@ where
 					BlockId::Number(number + 1)
 				}
 				Direction::Desc => {
-					if number <= 0 {
+					if number == 0 {
 						break;
 					}
 					BlockId::Number(number - 1)
@@ -212,7 +212,7 @@ where
 
 		self.support
 			.network_send_message(NetworkInMessage::SendMessage {
-				peer_id: peer_id.clone(),
+				peer_id,
 				message: block_response.encode(),
 			});
 
@@ -261,7 +261,7 @@ where
 		let (block_hash, header) = {
 			let header = self.support.get_header_by_block_hash(&hash)?;
 			let block_hash = hash;
-			(block_hash.clone(), header)
+			(block_hash, header)
 		};
 		self.announce_block(block_hash, header, MessageTarget::All)?;
 		Ok(())
@@ -559,10 +559,7 @@ where
 	}
 
 	fn next_request_id(request_id: &mut RequestId) -> RequestId {
-		let new = RequestId(match request_id.0.checked_add(1) {
-			Some(v) => v,
-			None => 0,
-		});
+		let new = RequestId(request_id.0.checked_add(1).unwrap_or(0));
 		std::mem::replace(request_id, new)
 	}
 }
@@ -635,7 +632,7 @@ where
 				.filter(|tx| peer_info.known_txs.put(tx.tx_hash.clone(), ()).is_none())
 				.map(|tx| tx.tx.clone())
 				.collect::<Vec<_>>();
-			if to_propagate_txs.len() > 0 {
+			if !to_propagate_txs.is_empty() {
 				trace!(
 					"Propagate txs to {}, count: {}",
 					peer_id,
@@ -692,6 +689,7 @@ pub enum PeerState {
 	},
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
 pub enum PendingBlockState {
 	Seen,

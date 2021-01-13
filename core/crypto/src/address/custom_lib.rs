@@ -133,13 +133,13 @@ macro_rules! declare_address_custom_lib {
 		use std::os::raw::{c_char, c_uchar, c_uint};
 
 		#[no_mangle]
-		pub extern "C" fn _crypto_address_custom_name() -> *mut c_char {
+		pub unsafe extern "C" fn _crypto_address_custom_name() -> *mut c_char {
 			let name = $impl.name();
 			CString::new(name).expect("qed").into_raw()
 		}
 
 		#[no_mangle]
-		pub extern "C" fn _crypto_address_custom_name_free(name: *mut c_char) {
+		pub unsafe extern "C" fn _crypto_address_custom_name_free(name: *mut c_char) {
 			unsafe {
 				assert!(!name.is_null());
 				CString::from_raw(name)
@@ -153,7 +153,7 @@ macro_rules! declare_address_custom_lib {
 		}
 
 		#[no_mangle]
-		pub extern "C" fn _crypto_address_custom_address(
+		pub unsafe extern "C" fn _crypto_address_custom_address(
 			out: *mut c_uchar,
 			out_len: c_uint,
 			data: *const c_uchar,

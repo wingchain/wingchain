@@ -26,12 +26,12 @@ use tempfile::tempdir;
 use tokio::runtime::Runtime;
 
 use crypto::address::AddressImpl;
-use crypto::dsa::{DsaImpl, KeyPairImpl};
+use crypto::dsa::DsaImpl;
 use node_chain::{module, Chain, ChainConfig};
 use node_txpool::support::DefaultTxPoolSupport;
 use node_txpool::{TxPool, TxPoolConfig};
-use primitives::{Address, PublicKey, SecretKey, Transaction};
-use utils_test::test_accounts;
+use primitives::{Address, Transaction};
+use utils_test::{test_accounts, TestAccount};
 
 const TXS_SIZE: usize = 4000;
 
@@ -44,11 +44,11 @@ fn bench_txpool_insert_transfer(b: &mut Bencher) {
 
 	let runtime = Runtime::new().unwrap();
 	let chain = runtime.block_on(async {
-		let chain = get_chain(&account1.3);
+		let chain = get_chain(&account1.address);
 		chain
 	});
 	let txs = gen_transfer_txs(&chain, TXS_SIZE, &account1, &account2);
-	bench_txpool_insert_txs(b, &account1.3, txs);
+	bench_txpool_insert_txs(b, &account1.address, txs);
 }
 
 fn bench_txpool_insert_txs(b: &mut Bencher, address: &Address, txs: Vec<Transaction>) {
@@ -81,8 +81,8 @@ fn bench_txpool_insert_txs(b: &mut Bencher, address: &Address, txs: Vec<Transact
 fn gen_transfer_txs(
 	chain: &Arc<Chain>,
 	size: usize,
-	account1: &(SecretKey, PublicKey, KeyPairImpl, Address),
-	account2: &(SecretKey, PublicKey, KeyPairImpl, Address),
+	account1: &TestAccount,
+	account2: &TestAccount,
 ) -> Vec<Transaction> {
 	let mut txs = Vec::with_capacity(size);
 	for nonce in 0..size {
@@ -95,19 +95,19 @@ fn gen_transfer_txs(
 fn gen_transfer_tx(
 	chain: &Arc<Chain>,
 	nonce: u32,
-	account1: &(SecretKey, PublicKey, KeyPairImpl, Address),
-	account2: &(SecretKey, PublicKey, KeyPairImpl, Address),
+	account1: &TestAccount,
+	account2: &TestAccount,
 ) -> Transaction {
 	let until = 1u64;
 	let tx = chain
 		.build_transaction(
-			Some((account1.0.clone(), nonce, until)),
+			Some((account1.secret_key.clone(), nonce, until)),
 			chain
 				.build_call(
 					"balance".to_string(),
 					"transfer".to_string(),
 					module::balance::TransferParams {
-						recipient: account2.3.clone(),
+						recipient: account2.address.clone(),
 						value: 2,
 					},
 				)

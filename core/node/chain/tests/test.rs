@@ -48,7 +48,7 @@ async fn test_chain_normal() {
 
 	let (account1, _account2) = test_accounts(dsa, address);
 
-	init(&home, &account1.3);
+	init(&home, &account1.address);
 
 	let config = ChainConfig { home };
 
@@ -62,7 +62,7 @@ async fn test_chain_normal() {
 		expected_payload_txs,
 		expected_meta_receipts,
 		expected_payload_receipts,
-	) = expected_data(&chain, &account1.3);
+	) = expected_data(&chain, &account1.address);
 
 	// confirmed number
 	let confirmed_number = chain.get_confirmed_number().unwrap();
@@ -154,7 +154,7 @@ async fn test_chain_execute_call() {
 
 	let (account1, _account2) = test_accounts(dsa, address);
 
-	init(&home, &account1.3);
+	init(&home, &account1.address);
 
 	let config = ChainConfig { home };
 
@@ -162,7 +162,7 @@ async fn test_chain_execute_call() {
 
 	let block_hash = chain.get_block_hash(&0).unwrap().unwrap();
 
-	let sender = account1.3;
+	let sender = account1.address;
 	let params = node_executor_primitives::EmptyParams;
 	let call = chain
 		.build_transaction(

@@ -81,7 +81,7 @@ fn test_executor() {
 					"balance".to_string(),
 					"init".to_string(),
 					module::balance::InitParams {
-						endow: vec![(account1.3.clone(), 10)],
+						endow: vec![(account1.address.clone(), 10)],
 					},
 				)
 				.unwrap(),
@@ -181,13 +181,13 @@ fn test_executor() {
 
 	let tx = executor
 		.build_tx(
-			Some((account1.0.clone(), nonce, until)),
+			Some((account1.secret_key.clone(), nonce, until)),
 			executor
 				.build_call(
 					"balance".to_string(),
 					"transfer".to_string(),
 					module::balance::TransferParams {
-						recipient: account2.3.clone(),
+						recipient: account2.address.clone(),
 						value: 2,
 					},
 				)
@@ -231,7 +231,7 @@ fn test_executor() {
 	);
 	assert_eq!(
 		(payload_receipts_root, payload_receipts),
-		expected_block_1_receipts_root(&block_1_payload_txs, account1.3, account2.3, 2)
+		expected_block_1_receipts_root(&block_1_payload_txs, account1.address, account2.address, 2)
 	);
 }
 
@@ -284,7 +284,7 @@ fn test_executor_validate_tx() {
 	// invalid tx
 
 	let tx = executor.build_tx(
-		Some((account1.0.clone(), nonce, until)),
+		Some((account1.secret_key.clone(), nonce, until)),
 		executor
 			.build_call(
 				"unknown".to_string(),
@@ -299,7 +299,7 @@ fn test_executor_validate_tx() {
 	assert!(format!("{}", tx.unwrap_err()).contains("Error: Invalid tx module"));
 
 	let tx = executor.build_tx(
-		Some((account1.0.clone(), nonce, until)),
+		Some((account1.secret_key.clone(), nonce, until)),
 		executor
 			.build_call(
 				"balance".to_string(),
@@ -314,7 +314,7 @@ fn test_executor_validate_tx() {
 	assert!(format!("{}", tx.unwrap_err()).contains("Error: Invalid tx method"));
 
 	let tx = executor.build_tx(
-		Some((account1.0.clone(), nonce, until)),
+		Some((account1.secret_key.clone(), nonce, until)),
 		executor
 			.build_call(
 				"balance".to_string(),
@@ -327,7 +327,7 @@ fn test_executor_validate_tx() {
 
 	let tx = executor
 		.build_tx(
-			Some((account1.0.clone(), nonce, until)),
+			Some((account1.secret_key.clone(), nonce, until)),
 			executor
 				.build_call(
 					"balance".to_string(),
@@ -346,13 +346,13 @@ fn test_executor_validate_tx() {
 	let tx = {
 		let mut tx = executor
 			.build_tx(
-				Some((account1.0.clone(), nonce, until)),
+				Some((account1.secret_key.clone(), nonce, until)),
 				executor
 					.build_call(
 						"balance".to_string(),
 						"transfer".to_string(),
 						module::balance::TransferParams {
-							recipient: account2.3.clone(),
+							recipient: account2.address.clone(),
 							value: 2,
 						},
 					)
@@ -360,7 +360,7 @@ fn test_executor_validate_tx() {
 			)
 			.unwrap();
 		let mut witness = tx.witness.unwrap().clone();
-		witness.public_key = account2.1;
+		witness.public_key = account2.public_key;
 		tx.witness = Some(witness);
 		tx
 	};
@@ -489,13 +489,7 @@ fn expected_block_1_payload_state_root(
 	let (account1, balance) = &params.endow[0];
 
 	let data = vec![(
-		DBKey::from_slice(
-			&[
-				&b"balance_balance_"[..],
-				&codec::encode(&account1.0).unwrap(),
-			]
-			.concat(),
-		),
+		DBKey::from_slice(&[&b"balance_balance_"[..], &codec::encode(&account1).unwrap()].concat()),
 		Some(codec::encode(&balance).unwrap()),
 	)]
 	.into_iter()
@@ -527,21 +521,13 @@ fn expected_block_1_payload_state_root(
 	let data = vec![
 		(
 			DBKey::from_slice(
-				&[
-					&b"balance_balance_"[..],
-					&codec::encode(&account1.0).unwrap(),
-				]
-				.concat(),
+				&[&b"balance_balance_"[..], &codec::encode(&account1).unwrap()].concat(),
 			),
 			Some(codec::encode(&(balance - value)).unwrap()),
 		),
 		(
 			DBKey::from_slice(
-				&[
-					&b"balance_balance_"[..],
-					&codec::encode(&account2.0).unwrap(),
-				]
-				.concat(),
+				&[&b"balance_balance_"[..], &codec::encode(&account2).unwrap()].concat(),
 			),
 			Some(codec::encode(&value).unwrap()),
 		),

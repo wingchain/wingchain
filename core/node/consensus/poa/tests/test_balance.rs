@@ -38,13 +38,13 @@ async fn test_poa_balance() {
 		&txpool,
 		chain
 			.build_transaction(
-				Some((account1.0.clone(), 0, 10)),
+				Some((account1.secret_key.clone(), 0, 10)),
 				chain
 					.build_call(
 						"balance".to_string(),
 						"transfer".to_string(),
 						module::balance::TransferParams {
-							recipient: account2.3.clone(),
+							recipient: account2.address.clone(),
 							value: 1,
 						},
 					)
@@ -64,13 +64,13 @@ async fn test_poa_balance() {
 		&txpool,
 		chain
 			.build_transaction(
-				Some((account1.0.clone(), 0, 11)),
+				Some((account1.secret_key.clone(), 0, 11)),
 				chain
 					.build_call(
 						"balance".to_string(),
 						"transfer".to_string(),
 						module::balance::TransferParams {
-							recipient: account2.3.clone(),
+							recipient: account2.address.clone(),
 							value: 2,
 						},
 					)
@@ -90,13 +90,13 @@ async fn test_poa_balance() {
 		&txpool,
 		chain
 			.build_transaction(
-				Some((account1.0, 0, 12)),
+				Some((account1.secret_key, 0, 12)),
 				chain
 					.build_call(
 						"balance".to_string(),
 						"transfer".to_string(),
 						module::balance::TransferParams {
-							recipient: account2.3.clone(),
+							recipient: account2.address.clone(),
 							value: 3,
 						},
 					)
@@ -115,7 +115,7 @@ async fn test_poa_balance() {
 	let balance: Balance = chain
 		.execute_call_with_block_number(
 			&1,
-			Some(&account1.3),
+			Some(&account1.address),
 			"balance".to_string(),
 			"get_balance".to_string(),
 			node_executor_primitives::EmptyParams,
@@ -133,7 +133,7 @@ async fn test_poa_balance() {
 	let balance: Balance = chain
 		.execute_call_with_block_number(
 			&2,
-			Some(&account1.3),
+			Some(&account1.address),
 			"balance".to_string(),
 			"get_balance".to_string(),
 			node_executor_primitives::EmptyParams,
@@ -152,7 +152,7 @@ async fn test_poa_balance() {
 	let balance: Balance = chain
 		.execute_call_with_block_number(
 			&3,
-			Some(&account1.3),
+			Some(&account1.address),
 			"balance".to_string(),
 			"get_balance".to_string(),
 			node_executor_primitives::EmptyParams,
@@ -175,8 +175,8 @@ async fn test_poa_balance() {
 			events: vec![Event::from_data(
 				"Transferred".to_string(),
 				module::balance::Transferred {
-					sender: account1.3,
-					recipient: account2.3,
+					sender: account1.address,
+					recipient: account2.address,
 					value: 3,
 				},
 			)

@@ -139,7 +139,7 @@ impl Service {
 
 /// Start service daemon
 pub fn start(config: ServiceConfig) -> CommonResult<()> {
-	let rt = Runtime::new().map_err(|e| ErrorKind::Runtime(e))?;
+	let rt = Runtime::new().map_err(ErrorKind::Runtime)?;
 	rt.block_on(start_service(config))?;
 	Ok(())
 }

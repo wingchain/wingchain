@@ -73,7 +73,7 @@ fn import_memory(mut module: elements::Module, config: &VMConfig) -> VMResult<el
 
 	module
 		.memory_section_mut()
-		.unwrap_or_else(|| &mut tmp)
+		.unwrap_or(&mut tmp)
 		.entries_mut()
 		.pop();
 
@@ -138,7 +138,7 @@ fn validate_imports(module: elements::Module, config: &VMConfig) -> VMResult<ele
 
 		let Type::Function(ref _func_ty) = types
 			.get(*type_idx as usize)
-			.ok_or_else(|| PreCompileError::Imports)?;
+			.ok_or(PreCompileError::Imports)?;
 	}
 	if let Some(memory_type) = imported_memory_type {
 		let limits = memory_type.limits();

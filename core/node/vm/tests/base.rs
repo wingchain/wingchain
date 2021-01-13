@@ -21,19 +21,17 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 use crypto::address::{Address as AddressT, AddressImpl};
-use crypto::dsa::{DsaImpl, KeyPairImpl};
+use crypto::dsa::DsaImpl;
 use crypto::hash::{Hash as HashT, HashImpl};
 use node_vm::errors::{ContractError, VMResult};
 use node_vm::{
 	LazyCodeProvider, Mode, VMCallEnv, VMConfig, VMContext, VMContextEnv, VMContractEnv, VM,
 };
 use primitives::codec::{Decode, Encode};
-use primitives::{codec, Address, Balance, DBKey, DBValue, Event, Hash, PublicKey, SecretKey};
+use primitives::{codec, Address, Balance, DBKey, DBValue, Event, Hash};
+use utils_test::TestAccount;
 
-pub fn test_accounts() -> (
-	(SecretKey, PublicKey, KeyPairImpl, Address),
-	(SecretKey, PublicKey, KeyPairImpl, Address),
-) {
+pub fn test_accounts() -> (TestAccount, TestAccount) {
 	let address = Arc::new(AddressImpl::Blake2b160);
 	let dsa = Arc::new(DsaImpl::Ed25519);
 	utils_test::test_accounts(dsa, address)

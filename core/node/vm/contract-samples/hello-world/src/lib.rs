@@ -41,7 +41,7 @@ impl Contract {
 
 	fn validate_hello(&self, params: HelloParams) -> ContractResult<()> {
 		let name = params.name;
-		if name.len() == 0 {
+		if name.is_empty() {
 			return Err(ContractError::User {
 				msg: "Empty name".to_string(),
 			});
@@ -187,8 +187,8 @@ impl Contract {
 
 	#[call]
 	fn verify_address(&self, params: VerifyAddressParams) -> ContractResult<()> {
-		let result = self.util.validate_address(&params.address)?;
-		Ok(result)
+		self.util.validate_address(&params.address)?;
+		Ok(())
 	}
 
 	#[call]

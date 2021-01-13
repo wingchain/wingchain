@@ -88,7 +88,7 @@ impl VerifierT for Verifier {
 	type Error = CommonError;
 
 	fn verify(&self, message: &[u8], signature: &[u8]) -> CommonResult<()> {
-		let result = ED25519
+		ED25519
 			.verify(
 				Input::from(&self.0[..]),
 				Input::from(&message),
@@ -96,7 +96,7 @@ impl VerifierT for Verifier {
 			)
 			.map_err(|_| errors::ErrorKind::VerificationFailed)?;
 
-		Ok(result)
+		Ok(())
 	}
 }
 

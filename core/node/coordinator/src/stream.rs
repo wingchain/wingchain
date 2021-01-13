@@ -46,6 +46,7 @@ impl<S> CoordinatorStream<S>
 where
 	S: CoordinatorSupport + Send + Sync + 'static,
 {
+	#[allow(clippy::too_many_arguments)]
 	pub fn new(
 		genesis_hash: Hash,
 		chain_rx: UnboundedReceiver<ChainOutMessage>,
@@ -157,7 +158,7 @@ where
 		if !handshake_ok {
 			warn!("Discard {} for handshake failure", peer_id);
 			self.support
-				.peer_manager_send_message(PMInMessage::DiscardPeer(peer_id.clone()));
+				.peer_manager_send_message(PMInMessage::DiscardPeer(peer_id));
 			return Ok(());
 		}
 		info!("Complete handshake with {}", peer_id);
@@ -289,69 +290,45 @@ where
 		let number = self
 			.support
 			.get_confirmed_number()?
-			.ok_or(errors::ErrorKind::Data(format!("Missing confirmed number")))?;
+			.ok_or_else(|| errors::ErrorKind::Data("Missing confirmed number".to_string()))?;
 		Ok(number)
 	}
 
 	pub fn get_block_hash_by_number(&self, number: &BlockNumber) -> CommonResult<Hash> {
-		let block_hash = self
-			.support
-			.get_block_hash(number)?
-			.ok_or(errors::ErrorKind::Data(format!(
-				"Missing block hash: number: {}",
-				number
-			)))?;
+		let block_hash = self.support.get_block_hash(number)?.ok_or_else(|| {
+			errors::ErrorKind::Data(format!("Missing block hash: number: {}", number))
+		})?;
 		Ok(block_hash)
 	}
 
 	pub fn get_header_by_block_hash(&self, block_hash: &Hash) -> CommonResult<Header> {
-		let header = self
-			.support
-			.get_header(block_hash)?
-			.ok_or(errors::ErrorKind::Data(format!(
-				"Missing header: block_hash: {:?}",
-				block_hash
-			)))?;
+		let header = self.support.get_header(block_hash)?.ok_or_else(|| {
+			errors::ErrorKind::Data(format!("Missing header: block_hash: {:?}", block_hash))
+		})?;
 		Ok(header)
 	}
 
 	pub fn get_header_by_number(&self, number: &BlockNumber) -> CommonResult<(Hash, Header)> {
-		let block_hash = self
-			.support
-			.get_block_hash(number)?
-			.ok_or(errors::ErrorKind::Data(format!(
-				"Missing block hash: number: {}",
-				number
-			)))?;
-		let header = self
-			.support
-			.get_header(&block_hash)?
-			.ok_or(errors::ErrorKind::Data(format!(
-				"Missing header: block_hash: {:?}",
-				block_hash
-			)))?;
+		let block_hash = self.support.get_block_hash(number)?.ok_or_else(|| {
+			errors::ErrorKind::Data(format!("Missing block hash: number: {}", number))
+		})?;
+		let header = self.support.get_header(&block_hash)?.ok_or_else(|| {
+			errors::ErrorKind::Data(format!("Missing header: block_hash: {:?}", block_hash))
+		})?;
 		Ok((block_hash, header))
 	}
 
 	pub fn get_body_by_block_hash(&self, block_hash: &Hash) -> CommonResult<Body> {
-		let body = self
-			.support
-			.get_body(block_hash)?
-			.ok_or(errors::ErrorKind::Data(format!(
-				"Missing body: block_hash: {:?}",
-				block_hash
-			)))?;
+		let body = self.support.get_body(block_hash)?.ok_or_else(|| {
+			errors::ErrorKind::Data(format!("Missing body: block_hash: {:?}", block_hash))
+		})?;
 		Ok(body)
 	}
 
 	pub fn get_transaction_by_hash(&self, tx_hash: &Hash) -> CommonResult<Transaction> {
-		let body = self
-			.support
-			.get_transaction(tx_hash)?
-			.ok_or(errors::ErrorKind::Data(format!(
-				"Missing transaction: tx_hash: {:?}",
-				tx_hash
-			)))?;
+		let body = self.support.get_transaction(tx_hash)?.ok_or_else(|| {
+			errors::ErrorKind::Data(format!("Missing transaction: tx_hash: {:?}", tx_hash))
+		})?;
 		Ok(body)
 	}
 }

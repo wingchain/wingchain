@@ -120,10 +120,12 @@ impl Behaviour {
 		self.protocol.drop_peer(peer_id, delay);
 	}
 
+	#[allow(clippy::mutable_key_type)]
 	pub fn peers(&self) -> &FnvHashMap<PeerId, PeerInfo> {
 		&self.peers
 	}
 
+	#[allow(clippy::mutable_key_type)]
 	pub fn known_peers(&mut self) -> HashSet<PeerId> {
 		self.discovery.known_peers()
 	}
@@ -213,18 +215,16 @@ impl NetworkBehaviourEventProcess<IdentifyEvent> for Behaviour {
 
 impl NetworkBehaviourEventProcess<PingEvent> for Behaviour {
 	fn inject_event(&mut self, event: PingEvent) {
-		match event {
-			PingEvent {
-				peer: peer_id,
-				result: Ok(PingSuccess::Ping { rtt }),
-			} => {
-				trace!("Ping success with {}: {:?}", peer_id, rtt);
+		if let PingEvent {
+			peer: peer_id,
+			result: Ok(PingSuccess::Ping { rtt }),
+		} = event
+		{
+			trace!("Ping success with {}: {:?}", peer_id, rtt);
 
-				if let Some(peer_info) = self.peers.get_mut(&peer_id) {
-					peer_info.latest_ping = Some(rtt);
-				}
+			if let Some(peer_info) = self.peers.get_mut(&peer_id) {
+				peer_info.latest_ping = Some(rtt);
 			}
-			_ => (),
 		}
 	}
 }
@@ -234,8 +234,7 @@ impl NetworkBehaviourEventProcess<DiscoveryOut> for Behaviour {
 		match event {
 			DiscoveryOut::Discovered { peer_id } => {
 				trace!("Discovered {}", peer_id);
-				self.protocol
-					.add_discovered_peers(std::iter::once(peer_id.clone()));
+				self.protocol.add_discovered_peers(std::iter::once(peer_id));
 			}
 		}
 	}

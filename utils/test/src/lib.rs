@@ -39,13 +39,14 @@ pub fn get_dylib(package_name: &str) -> PathBuf {
 	PathBuf::from(path)
 }
 
-pub fn test_accounts(
-	dsa: Arc<DsaImpl>,
-	address: Arc<AddressImpl>,
-) -> (
-	(SecretKey, PublicKey, KeyPairImpl, Address),
-	(SecretKey, PublicKey, KeyPairImpl, Address),
-) {
+pub struct TestAccount {
+	pub secret_key: SecretKey,
+	pub public_key: PublicKey,
+	pub key_pair: KeyPairImpl,
+	pub address: Address,
+}
+
+pub fn test_accounts(dsa: Arc<DsaImpl>, address: Arc<AddressImpl>) -> (TestAccount, TestAccount) {
 	let (secret_key_len, public_key_len, _) = dsa.length().into();
 	let address_len = address.length().into();
 
@@ -58,12 +59,17 @@ pub fn test_accounts(
 			key_pair.public_key(&mut out);
 			out
 		});
-		let account = Address({
+		let address = Address({
 			let mut out = vec![0u8; address_len];
 			address.address(&mut out, &public_key.0);
 			out
 		});
-		(secret_key, public_key, key_pair, account)
+		TestAccount {
+			secret_key,
+			public_key,
+			key_pair,
+			address,
+		}
 	};
 
 	let account2 = {
@@ -75,12 +81,17 @@ pub fn test_accounts(
 			key_pair.public_key(&mut out);
 			out
 		});
-		let account = Address({
+		let address = Address({
 			let mut out = vec![0u8; address_len];
 			address.address(&mut out, &public_key.0);
 			out
 		});
-		(secret_key, public_key, key_pair, account)
+		TestAccount {
+			secret_key,
+			public_key,
+			key_pair,
+			address,
+		}
 	};
 
 	(account1, account2)

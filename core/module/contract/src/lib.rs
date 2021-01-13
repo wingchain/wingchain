@@ -256,7 +256,7 @@ impl<C: Context, U: Util> Module<C, U> {
 			.unwrap_or(1u32);
 		let mut proposal = UpdateAdminProposal {
 			proposal_id,
-			admin: new_admin.clone(),
+			admin: new_admin,
 			vote: vec![],
 		};
 		self.context.emit_event(Event::from_data(
@@ -741,7 +741,7 @@ fn aggregate_admin(admin: Admin) -> Admin {
 	let mut new_members = Vec::<(Address, u32)>::new();
 	for (address, weight) in members {
 		if weight > 0 {
-			match new_members.iter().position(|x| &x.0 == &address) {
+			match new_members.iter().position(|x| x.0 == address) {
 				Some(position) => {
 					let find = new_members.get_mut(position).unwrap();
 					find.1 += weight;
@@ -906,7 +906,7 @@ pub struct UpdateCodeProposalForEvent {
 impl UpdateCodeProposalForEvent {
 	fn from(proposal: &UpdateCodeProposal, code_hash: &Hash) -> Self {
 		Self {
-			proposal_id: proposal.proposal_id.clone(),
+			proposal_id: proposal.proposal_id,
 			code_hash: code_hash.clone(),
 			vote: proposal.vote.clone(),
 		}
