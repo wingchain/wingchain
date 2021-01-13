@@ -17,6 +17,9 @@ before_cache:
 install:
   - travis_wait 30 cargo build --verbose --workspace
 
+before_script:
+  - rustup component add clippy
+
 script:
   - cargo clippy -- -D warnings
   - cargo test --verbose --workspace --all-features
