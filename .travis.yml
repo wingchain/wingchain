@@ -18,4 +18,5 @@ install:
   - travis_wait 30 cargo build --verbose --workspace
 
 script:
+  - cargo clippy -- -D warnings
   - cargo test --verbose --workspace --all-features
