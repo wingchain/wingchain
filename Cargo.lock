@@ -2874,6 +2874,7 @@ dependencies = [
  "node-executor-primitives",
  "parity-scale-codec",
  "primitives",
+ "serde",
 ]
 
 [[package]]

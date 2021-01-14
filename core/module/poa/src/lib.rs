@@ -16,11 +16,12 @@ use std::sync::Arc;
 
 use executor_macro::{call, module};
 use executor_primitives::{
-	errors, Context, ContextEnv, EmptyParams, Module as ModuleT, ModuleResult, OpaqueModuleResult,
-	StorageValue, Util,
+	errors, errors::ApplicationError, Context, ContextEnv, EmptyParams, Module as ModuleT,
+	ModuleResult, OpaqueModuleResult, StorageValue, Util,
 };
 use primitives::codec::{Decode, Encode};
-use primitives::{codec, Address, Call};
+use primitives::{codec, Address, Call, Event};
+use serde::{Deserialize, Serialize};
 
 pub struct Module<C, U>
 where
@@ -28,6 +29,7 @@ where
 	U: Util,
 {
 	env: Arc<ContextEnv>,
+	context: C,
 	util: U,
 	block_interval: StorageValue<Option<u64>, Self>,
 	authority: StorageValue<Address, Self>,
@@ -41,6 +43,7 @@ impl<C: Context, U: Util> Module<C, U> {
 	fn new(context: C, util: U) -> Self {
 		Self {
 			env: context.env(),
+			context: context.clone(),
 			util,
 			block_interval: StorageValue::new(context.clone(), b"block_interval"),
 			authority: StorageValue::new(context, b"authority"),
@@ -82,6 +85,38 @@ impl<C: Context, U: Util> Module<C, U> {
 
 		Ok(authority)
 	}
+
+	#[call(write = true)]
+	fn update_authority(
+		&self,
+		sender: Option<&Address>,
+		params: UpdateAuthorityParams,
+	) -> ModuleResult<()> {
+		let sender = sender.ok_or(ApplicationError::Unsigned)?;
+		let current_authority = self.authority.get()?;
+		let current_authority = current_authority.ok_or("Unexpected none")?;
+		if sender != &current_authority {
+			return Err("Not authority".into());
+		}
+		self.authority.set(&params.authority)?;
+		self.context.emit_event(Event::from_data(
+			"AuthorityUpdated".to_string(),
+			AuthorityUpdated {
+				authority: params.authority,
+			},
+		)?)?;
+
+		Ok(())
+	}
+
+	fn validate_update_authority(
+		&self,
+		_sender: Option<&Address>,
+		params: UpdateAuthorityParams,
+	) -> ModuleResult<()> {
+		self.util.validate_address(&params.authority)?;
+		Ok(())
+	}
 }
 
 #[derive(Encode, Decode, Debug, PartialEq)]
@@ -91,6 +126,16 @@ pub struct InitParams {
 }
 
 #[derive(Encode, Decode, Debug, PartialEq)]
+pub struct UpdateAuthorityParams {
+	pub authority: Address,
+}
+
+#[derive(Encode, Decode, Debug, PartialEq)]
 pub struct Meta {
 	pub block_interval: Option<u64>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct AuthorityUpdated {
+	pub authority: Address,
 }

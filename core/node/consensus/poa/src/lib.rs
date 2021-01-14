@@ -25,16 +25,17 @@ use futures::prelude::*;
 use futures::task::Poll;
 use futures::{Future, Stream};
 use futures_timer::Delay;
-use log::{debug, info, warn};
+use log::{debug, info, trace, warn};
 
 use crypto::address::Address as AddressT;
 use crypto::dsa::{Dsa, KeyPair};
 use node_consensus_base::{support::ConsensusSupport, Consensus as ConsensusT, ConsensusConfig};
 use node_executor::module;
+use node_executor::module::poa::Meta;
 use node_executor_primitives::EmptyParams;
 use primitives::errors::{Catchable, CommonResult};
 use primitives::types::ExecutionGap;
-use primitives::{Address, BuildBlockParams, FullTransaction, SecretKey};
+use primitives::{Address, BlockNumber, BuildBlockParams, FullTransaction, SecretKey};
 
 pub mod errors;
 
@@ -43,7 +44,6 @@ where
 	S: ConsensusSupport + Send + Sync + 'static,
 {
 	stream: Arc<PoaStream<S>>,
-	is_authority: bool,
 }
 
 impl<S> Poa<S>
@@ -51,13 +51,15 @@ where
 	S: ConsensusSupport + Send + Sync + 'static,
 {
 	pub fn new(config: ConsensusConfig, support: Arc<S>) -> CommonResult<Self> {
-		let poa_meta = get_poa_meta(&support)?;
-		let authority_address = get_poa_authority(&support)?;
+		let poa_meta = get_poa_meta(&support, &0)?;
+
 		let current_address = if let Some(secret_key) = &config.secret_key {
 			Some(get_current_address(secret_key, &support)?)
 		} else {
 			None
 		};
+		let number = support.get_current_state().confirmed_number;
+		let authority_address = get_poa_authority(&support, &number)?;
 		let is_authority = current_address.as_ref() == Some(&authority_address);
 
 		info!(
@@ -65,18 +67,17 @@ where
 			is_authority, authority_address, current_address
 		);
 
-		let stream = Arc::new(PoaStream { poa_meta, support });
+		let stream = Arc::new(PoaStream {
+			support,
+			poa_meta,
+			current_address,
+		});
 
-		if is_authority && stream.poa_meta.block_interval.is_some() {
-			tokio::spawn(start(stream.clone()));
-		}
+		tokio::spawn(start(stream.clone()));
 
 		info!("Initializing consensus poa");
 
-		let poa = Poa {
-			stream,
-			is_authority,
-		};
+		let poa = Poa { stream };
 
 		Ok(poa)
 	}
@@ -87,10 +88,6 @@ where
 	S: ConsensusSupport + Send + Sync + 'static,
 {
 	fn generate(&self) -> CommonResult<()> {
-		if !self.is_authority {
-			return Err(errors::ErrorKind::NotAuthority.into());
-		}
-
 		let timestamp = SystemTime::now();
 		let timestamp = timestamp
 			.duration_since(SystemTime::UNIX_EPOCH)
@@ -106,8 +103,9 @@ struct PoaStream<S>
 where
 	S: ConsensusSupport + Send + Sync + 'static,
 {
-	poa_meta: module::poa::Meta,
 	support: Arc<S>,
+	poa_meta: Meta,
+	current_address: Option<Address>,
 }
 
 impl<S> PoaStream<S>
@@ -117,8 +115,21 @@ where
 	fn work(&self, schedule_info: ScheduleInfo) -> CommonResult<()> {
 		let current_state = &self.support.get_current_state();
 
-		let system_meta = &current_state.system_meta;
+		let authority_address = get_poa_authority(&self.support, &current_state.confirmed_number)?;
+		let is_authority = self.current_address.as_ref() == Some(&authority_address);
 
+		trace!(
+			"Current node is authority: {}, authority address: {}, current address: {:?}",
+			is_authority,
+			authority_address,
+			self.current_address
+		);
+
+		if !is_authority {
+			return Ok(());
+		}
+
+		let system_meta = &current_state.system_meta;
 		let number = current_state.confirmed_number + 1;
 		let timestamp = schedule_info.timestamp;
 		let execution_number = current_state.executed_number;
@@ -212,8 +223,11 @@ async fn start<S>(stream: Arc<PoaStream<S>>) -> CommonResult<()>
 where
 	S: ConsensusSupport + Send + Sync + 'static,
 {
+	let block_interval = match stream.poa_meta.block_interval {
+		Some(v) => v,
+		None => return Ok(()),
+	};
 	info!("Start poa work");
-	let block_interval = stream.poa_meta.block_interval.expect("qed");
 	let mut scheduler = Scheduler::new(block_interval);
 	loop {
 		let item = scheduler.next().await;
@@ -233,10 +247,13 @@ where
 	Ok(())
 }
 
-fn get_poa_meta<S: ConsensusSupport>(support: &Arc<S>) -> CommonResult<module::poa::Meta> {
+fn get_poa_meta<S: ConsensusSupport>(
+	support: &Arc<S>,
+	number: &BlockNumber,
+) -> CommonResult<module::poa::Meta> {
 	support
 		.execute_call_with_block_number(
-			&0,
+			number,
 			None,
 			"poa".to_string(),
 			"get_meta".to_string(),
@@ -245,10 +262,13 @@ fn get_poa_meta<S: ConsensusSupport>(support: &Arc<S>) -> CommonResult<module::p
 		.map(|x| x.expect("qed"))
 }
 
-fn get_poa_authority<S: ConsensusSupport>(support: &Arc<S>) -> CommonResult<Address> {
+fn get_poa_authority<S: ConsensusSupport>(
+	support: &Arc<S>,
+	number: &BlockNumber,
+) -> CommonResult<Address> {
 	support
 		.execute_call_with_block_number(
-			&0,
+			number,
 			None,
 			"poa".to_string(),
 			"get_authority".to_string(),
