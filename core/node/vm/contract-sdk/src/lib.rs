@@ -13,6 +13,7 @@
 // limitations under the License.
 
 //! Contract sdk
+#![allow(clippy::too_many_arguments)]
 
 #[allow(unused_imports)]
 #[macro_use]

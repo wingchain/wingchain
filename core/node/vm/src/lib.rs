@@ -14,6 +14,7 @@
 
 //! Virtual machine to execute contract
 
+#![allow(clippy::too_many_arguments)]
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::rc::Rc;
