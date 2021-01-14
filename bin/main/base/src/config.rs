@@ -39,7 +39,7 @@ pub struct ApiConfig {
 
 #[derive(Deserialize, Debug)]
 pub struct ValidatorConfig {
-	pub secret_key_file: PathBuf,
+	pub secret_key_file: Option<PathBuf>,
 }
 
 #[derive(Deserialize, Debug)]

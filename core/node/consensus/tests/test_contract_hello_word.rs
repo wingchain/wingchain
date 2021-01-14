@@ -16,6 +16,7 @@ use std::sync::Arc;
 
 use crypto::address::AddressImpl;
 use crypto::dsa::DsaImpl;
+use node_consensus_base::Consensus;
 use node_executor::module;
 use node_executor_primitives::EmptyParams;
 use primitives::codec::Decode;
@@ -33,7 +34,7 @@ async fn test_poa_contract_hw_read() {
 
 	let (account1, _account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, poa) = base::get_service(&account1);
+	let (chain, txpool, consensus) = base::get_service(&account1);
 
 	let ori_code = get_code().to_vec();
 
@@ -62,7 +63,7 @@ async fn test_poa_contract_hw_read() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 1
-	poa.generate_block().await.unwrap();
+	consensus.generate().unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -309,7 +310,7 @@ async fn test_poa_contract_hw_read() {
 	log::info!("result: {}", result);
 	assert_eq!(result, r#"10"#,);
 
-	base::safe_close(chain, txpool, poa).await;
+	base::safe_close(chain, txpool, consensus).await;
 }
 
 #[tokio::test]
@@ -321,7 +322,7 @@ async fn test_poa_contract_hw_write() {
 
 	let (account1, _account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, poa) = base::get_service(&account1);
+	let (chain, txpool, consensus) = base::get_service(&account1);
 
 	let ori_code = get_code().to_vec();
 
@@ -350,7 +351,7 @@ async fn test_poa_contract_hw_write() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 1
-	poa.generate_block().await.unwrap();
+	consensus.generate().unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -427,7 +428,7 @@ async fn test_poa_contract_hw_write() {
 	base::wait_txpool(&txpool, 3).await;
 
 	// generate block 2
-	poa.generate_block().await.unwrap();
+	consensus.generate().unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -482,7 +483,7 @@ async fn test_poa_contract_hw_write() {
 	log::info!("result: {}", result);
 	assert_eq!(result, r#"{"value":"abc"}"#.to_string(),);
 
-	base::safe_close(chain, txpool, poa).await;
+	base::safe_close(chain, txpool, consensus).await;
 }
 
 #[tokio::test]
@@ -494,7 +495,7 @@ async fn test_poa_contract_hw_transfer_success() {
 
 	let (account1, account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, poa) = base::get_service(&account1);
+	let (chain, txpool, consensus) = base::get_service(&account1);
 
 	let ori_code = get_code().to_vec();
 
@@ -523,7 +524,7 @@ async fn test_poa_contract_hw_transfer_success() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 1
-	poa.generate_block().await.unwrap();
+	consensus.generate().unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -561,7 +562,7 @@ async fn test_poa_contract_hw_transfer_success() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 2
-	poa.generate_block().await.unwrap();
+	consensus.generate().unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -627,7 +628,7 @@ async fn test_poa_contract_hw_transfer_success() {
 	log::info!("result: {}", result);
 	assert_eq!(result, 1);
 
-	base::safe_close(chain, txpool, poa).await;
+	base::safe_close(chain, txpool, consensus).await;
 }
 
 #[tokio::test]
@@ -639,7 +640,7 @@ async fn test_poa_contract_hw_transfer_failed() {
 
 	let (account1, account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, poa) = base::get_service(&account1);
+	let (chain, txpool, consensus) = base::get_service(&account1);
 
 	let ori_code = get_code().to_vec();
 
@@ -668,7 +669,7 @@ async fn test_poa_contract_hw_transfer_failed() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 1
-	poa.generate_block().await.unwrap();
+	consensus.generate().unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -706,7 +707,7 @@ async fn test_poa_contract_hw_transfer_failed() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 2
-	poa.generate_block().await.unwrap();
+	consensus.generate().unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -758,7 +759,7 @@ async fn test_poa_contract_hw_transfer_failed() {
 	log::info!("result: {}", result);
 	assert_eq!(result, 0);
 
-	base::safe_close(chain, txpool, poa).await;
+	base::safe_close(chain, txpool, consensus).await;
 }
 
 #[tokio::test]
@@ -770,7 +771,7 @@ async fn test_poa_contract_hw_transfer_partial_failed() {
 
 	let (account1, account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, poa) = base::get_service(&account1);
+	let (chain, txpool, consensus) = base::get_service(&account1);
 
 	let ori_code = get_code().to_vec();
 
@@ -799,7 +800,7 @@ async fn test_poa_contract_hw_transfer_partial_failed() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 1
-	poa.generate_block().await.unwrap();
+	consensus.generate().unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -837,7 +838,7 @@ async fn test_poa_contract_hw_transfer_partial_failed() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 2
-	poa.generate_block().await.unwrap();
+	consensus.generate().unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -896,7 +897,7 @@ async fn test_poa_contract_hw_transfer_partial_failed() {
 	log::info!("result: {}", result);
 	assert_eq!(result, 0);
 
-	base::safe_close(chain, txpool, poa).await;
+	base::safe_close(chain, txpool, consensus).await;
 }
 
 #[tokio::test]
@@ -908,7 +909,7 @@ async fn test_poa_contract_hw_nested_contract() {
 
 	let (account1, _account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, poa) = base::get_service(&account1);
+	let (chain, txpool, consensus) = base::get_service(&account1);
 
 	let ori_code = get_code().to_vec();
 
@@ -937,7 +938,7 @@ async fn test_poa_contract_hw_nested_contract() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 1
-	poa.generate_block().await.unwrap();
+	consensus.generate().unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -970,7 +971,7 @@ async fn test_poa_contract_hw_nested_contract() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 2
-	poa.generate_block().await.unwrap();
+	consensus.generate().unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -978,12 +979,12 @@ async fn test_poa_contract_hw_nested_contract() {
 	log::info!("tx1_error: {:?}", tx1_error);
 	assert_eq!(tx1_error, "ContractError: NestDepthExceeded".to_string());
 
-	base::safe_close(chain, txpool, poa).await;
+	base::safe_close(chain, txpool, consensus).await;
 }
 
 fn get_code() -> &'static [u8] {
 	let code = include_bytes!(
-		"../../../vm/contract-samples/hello-world/release/contract_samples_hello_world_bg.wasm"
+		"../../vm/contract-samples/hello-world/release/contract_samples_hello_world_bg.wasm"
 	);
 	code
 }

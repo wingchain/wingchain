@@ -15,7 +15,6 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use node_chain::{Basic, Chain, ChainCommitBlockParams, CurrentState};
 use node_txpool::support::DefaultTxPoolSupport;
 use node_txpool::TxPool;
@@ -26,7 +25,6 @@ use primitives::{
 	Address, BlockNumber, BuildBlockParams, FullTransaction, Hash, Header, Transaction,
 };
 
-#[async_trait]
 pub trait ConsensusSupport {
 	fn get_confirmed_number(&self) -> CommonResult<Option<BlockNumber>>;
 	fn get_execution_number(&self) -> CommonResult<Option<BlockNumber>>;
@@ -70,7 +68,6 @@ impl DefaultConsensusSupport {
 	}
 }
 
-#[async_trait]
 impl ConsensusSupport for DefaultConsensusSupport {
 	fn get_confirmed_number(&self) -> CommonResult<Option<BlockNumber>> {
 		self.chain.get_confirmed_number()

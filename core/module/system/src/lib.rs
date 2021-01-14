@@ -19,6 +19,7 @@ use executor_primitives::{
 	errors, Context, ContextEnv, EmptyParams, Module as ModuleT, ModuleResult, OpaqueModuleResult,
 	StorageValue, Util,
 };
+use node_consensus_primitives::CONSENSUS_LIST;
 use primitives::codec::{Decode, Encode};
 use primitives::types::ExecutionGap;
 use primitives::{codec, Address, BlockNumber, Call};
@@ -35,6 +36,7 @@ where
 	timestamp: StorageValue<u64, Self>,
 	max_until_gap: StorageValue<BlockNumber, Self>,
 	max_execution_gap: StorageValue<ExecutionGap, Self>,
+	consensus: StorageValue<String, Self>,
 }
 
 #[module]
@@ -49,7 +51,8 @@ impl<C: Context, U: Util> Module<C, U> {
 			chain_id: StorageValue::new(context.clone(), b"chain_id"),
 			timestamp: StorageValue::new(context.clone(), b"timestamp"),
 			max_until_gap: StorageValue::new(context.clone(), b"max_until_gap"),
-			max_execution_gap: StorageValue::new(context, b"max_execution_gap"),
+			max_execution_gap: StorageValue::new(context.clone(), b"max_execution_gap"),
+			consensus: StorageValue::new(context, b"consensus"),
 		}
 	}
 
@@ -62,6 +65,14 @@ impl<C: Context, U: Util> Module<C, U> {
 		self.timestamp.set(&params.timestamp)?;
 		self.max_until_gap.set(&params.max_until_gap)?;
 		self.max_execution_gap.set(&params.max_execution_gap)?;
+		self.consensus.set(&params.consensus)?;
+		Ok(())
+	}
+
+	fn validate_init(&self, _sender: Option<&Address>, params: InitParams) -> ModuleResult<()> {
+		if !CONSENSUS_LIST.iter().any(|&x| x == &params.consensus) {
+			return Err("Unknown consensus".into());
+		}
 		Ok(())
 	}
 
@@ -71,11 +82,13 @@ impl<C: Context, U: Util> Module<C, U> {
 		let timestamp = self.timestamp.get()?.ok_or("Unexpected none")?;
 		let max_until_gap = self.max_until_gap.get()?.ok_or("Unexpected none")?;
 		let max_execution_gap = self.max_execution_gap.get()?.ok_or("Unexpected none")?;
+		let consensus = self.consensus.get()?.ok_or("Unexpected none")?;
 		let meta = Meta {
 			chain_id,
 			timestamp,
 			max_until_gap,
 			max_execution_gap,
+			consensus,
 		};
 		Ok(meta)
 	}
@@ -89,4 +102,5 @@ pub struct Meta {
 	pub timestamp: u64,
 	pub max_until_gap: BlockNumber,
 	pub max_execution_gap: ExecutionGap,
+	pub consensus: String,
 }

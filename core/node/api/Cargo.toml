@@ -35,4 +35,4 @@ futures-timer = "3.0.2"
 env_logger = "0.7.1"
 
 node-consensus = { path = "../consensus" }
-node-consensus-poa = { path = "../consensus/poa" }
+node-consensus-base = { path = "../consensus/base" }

@@ -53,8 +53,8 @@ use tokio::time::Duration;
 use node_api::support::DefaultApiSupport;
 use node_api::Api;
 use node_chain::{Chain, ChainConfig};
-use node_consensus::support::DefaultConsensusSupport;
-use node_consensus_poa::Poa;
+use node_consensus::Consensus;
+use node_consensus_base::support::DefaultConsensusSupport;
 use node_coordinator::support::DefaultCoordinatorSupport;
 use node_coordinator::Coordinator;
 use node_txpool::support::DefaultTxPoolSupport;
@@ -84,7 +84,7 @@ pub struct Service {
 	#[allow(dead_code)]
 	api: Arc<Api<DefaultApiSupport>>,
 	#[allow(dead_code)]
-	consensus: Arc<Poa<DefaultConsensusSupport>>,
+	consensus: Arc<Consensus<DefaultConsensusSupport>>,
 	#[allow(dead_code)]
 	coordinator: Arc<Coordinator<DefaultCoordinatorSupport>>,
 }
@@ -106,7 +106,7 @@ impl Service {
 		// init consensus poa
 		let consensus_support =
 			Arc::new(DefaultConsensusSupport::new(chain.clone(), txpool.clone()));
-		let consensus = Arc::new(Poa::new(global_config.poa, consensus_support)?);
+		let consensus = Arc::new(Consensus::new(global_config.consensus, consensus_support)?);
 
 		// init coordinator
 		let coordinator_support = Arc::new(DefaultCoordinatorSupport::new(

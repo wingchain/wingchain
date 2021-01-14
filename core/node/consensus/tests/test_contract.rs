@@ -17,6 +17,7 @@ use std::sync::Arc;
 use crypto::address::AddressImpl;
 use crypto::dsa::DsaImpl;
 use crypto::hash::{Hash as HashT, HashImpl};
+use node_consensus_base::Consensus;
 use node_executor::module;
 use primitives::codec::Decode;
 use primitives::{Address, Hash};
@@ -33,7 +34,7 @@ async fn test_poa_contract_create() {
 
 	let (account1, _account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, poa) = base::get_service(&account1);
+	let (chain, txpool, consensus) = base::get_service(&account1);
 
 	let ori_code = get_code().to_vec();
 
@@ -62,7 +63,7 @@ async fn test_poa_contract_create() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 1
-	poa.generate_block().await.unwrap();
+	consensus.generate().unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -122,7 +123,7 @@ async fn test_poa_contract_create() {
 			members: vec![(account1.address.clone(), 1)],
 		})
 	);
-	base::safe_close(chain, txpool, poa).await;
+	base::safe_close(chain, txpool, consensus).await;
 }
 
 #[tokio::test]
@@ -134,7 +135,7 @@ async fn test_poa_contract_create_fail() {
 
 	let (account1, _account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, poa) = base::get_service(&account1);
+	let (chain, txpool, consensus) = base::get_service(&account1);
 
 	let ori_code = get_code().to_vec();
 
@@ -191,7 +192,7 @@ async fn test_poa_contract_create_fail() {
 			.to_string()
 	);
 
-	base::safe_close(chain, txpool, poa).await;
+	base::safe_close(chain, txpool, consensus).await;
 }
 
 #[tokio::test]
@@ -203,7 +204,7 @@ async fn test_poa_contract_update_admin() {
 
 	let (account1, account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, poa) = base::get_service(&account1);
+	let (chain, txpool, consensus) = base::get_service(&account1);
 
 	let ori_code = get_code().to_vec();
 
@@ -232,7 +233,7 @@ async fn test_poa_contract_update_admin() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 1
-	poa.generate_block().await.unwrap();
+	consensus.generate().unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -294,7 +295,7 @@ async fn test_poa_contract_update_admin() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 2
-	poa.generate_block().await.unwrap();
+	consensus.generate().unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -378,7 +379,7 @@ async fn test_poa_contract_update_admin() {
 	base::wait_txpool(&txpool, 2).await;
 
 	// generate block 3
-	poa.generate_block().await.unwrap();
+	consensus.generate().unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -426,7 +427,7 @@ async fn test_poa_contract_update_admin() {
 		})
 	);
 
-	base::safe_close(chain, txpool, poa).await;
+	base::safe_close(chain, txpool, consensus).await;
 }
 
 #[tokio::test]
@@ -439,7 +440,7 @@ async fn test_poa_contract_update_code() {
 
 	let (account1, account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, poa) = base::get_service(&account1);
+	let (chain, txpool, consensus) = base::get_service(&account1);
 
 	let ori_code = get_code().to_vec();
 
@@ -468,7 +469,7 @@ async fn test_poa_contract_update_code() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 1
-	poa.generate_block().await.unwrap();
+	consensus.generate().unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -545,7 +546,7 @@ async fn test_poa_contract_update_code() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 2
-	poa.generate_block().await.unwrap();
+	consensus.generate().unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -627,7 +628,7 @@ async fn test_poa_contract_update_code() {
 	base::wait_txpool(&txpool, 2).await;
 
 	// generate block 3
-	poa.generate_block().await.unwrap();
+	consensus.generate().unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -690,12 +691,12 @@ async fn test_poa_contract_update_code() {
 	log::info!("code_hash: {:?}", code_hash);
 	assert_eq!(code_hash, Some(expect_code_hash),);
 
-	base::safe_close(chain, txpool, poa).await;
+	base::safe_close(chain, txpool, consensus).await;
 }
 
 fn get_code() -> &'static [u8] {
 	let code = include_bytes!(
-		"../../../vm/contract-samples/hello-world/release/contract_samples_hello_world_bg.wasm"
+		"../../vm/contract-samples/hello-world/release/contract_samples_hello_world_bg.wasm"
 	);
 	code
 }

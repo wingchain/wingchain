@@ -16,6 +16,7 @@ use std::sync::Arc;
 
 use crypto::address::AddressImpl;
 use crypto::dsa::DsaImpl;
+use node_consensus_base::Consensus;
 use node_executor::module;
 use primitives::codec::Decode;
 use primitives::Address;
@@ -32,7 +33,7 @@ async fn test_poa_contract_tb_success() {
 
 	let (account1, _account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, poa) = base::get_service(&account1);
+	let (chain, txpool, consensus) = base::get_service(&account1);
 
 	// create token contract
 	let token_code = get_token_code().to_vec();
@@ -58,7 +59,7 @@ async fn test_poa_contract_tb_success() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 1
-	poa.generate_block().await.unwrap();
+	consensus.generate().unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -99,7 +100,7 @@ async fn test_poa_contract_tb_success() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 2
-	poa.generate_block().await.unwrap();
+	consensus.generate().unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -141,7 +142,7 @@ async fn test_poa_contract_tb_success() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 3
-	poa.generate_block().await.unwrap();
+	consensus.generate().unwrap();
 	base::wait_block_execution(&chain).await;
 
 	// deposit
@@ -170,7 +171,7 @@ async fn test_poa_contract_tb_success() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 4
-	poa.generate_block().await.unwrap();
+	consensus.generate().unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -283,7 +284,7 @@ async fn test_poa_contract_tb_success() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 5
-	poa.generate_block().await.unwrap();
+	consensus.generate().unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -364,7 +365,7 @@ async fn test_poa_contract_tb_success() {
 	log::info!("result: {}", result);
 	assert_eq!(result, r#"40"#.to_string(),);
 
-	base::safe_close(chain, txpool, poa).await;
+	base::safe_close(chain, txpool, consensus).await;
 }
 
 #[tokio::test]
@@ -376,7 +377,7 @@ async fn test_poa_contract_tb_failed() {
 
 	let (account1, _account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, poa) = base::get_service(&account1);
+	let (chain, txpool, consensus) = base::get_service(&account1);
 
 	// create token contract
 	let token_code = get_token_code().to_vec();
@@ -402,7 +403,7 @@ async fn test_poa_contract_tb_failed() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 1
-	poa.generate_block().await.unwrap();
+	consensus.generate().unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -443,7 +444,7 @@ async fn test_poa_contract_tb_failed() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 2
-	poa.generate_block().await.unwrap();
+	consensus.generate().unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -485,7 +486,7 @@ async fn test_poa_contract_tb_failed() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 3
-	poa.generate_block().await.unwrap();
+	consensus.generate().unwrap();
 	base::wait_block_execution(&chain).await;
 
 	// deposit
@@ -514,7 +515,7 @@ async fn test_poa_contract_tb_failed() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 4
-	poa.generate_block().await.unwrap();
+	consensus.generate().unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -541,7 +542,7 @@ async fn test_poa_contract_tb_failed() {
 	log::info!("result: {}", result);
 	assert_eq!(result, r#"0"#.to_string(),);
 
-	base::safe_close(chain, txpool, poa).await;
+	base::safe_close(chain, txpool, consensus).await;
 }
 
 #[tokio::test]
@@ -553,7 +554,7 @@ async fn test_poa_contract_tb_ea() {
 
 	let (account1, _account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, poa) = base::get_service(&account1);
+	let (chain, txpool, consensus) = base::get_service(&account1);
 
 	// create token contract
 	let token_code = get_token_code().to_vec();
@@ -579,7 +580,7 @@ async fn test_poa_contract_tb_ea() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 1
-	poa.generate_block().await.unwrap();
+	consensus.generate().unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -620,7 +621,7 @@ async fn test_poa_contract_tb_ea() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 2
-	poa.generate_block().await.unwrap();
+	consensus.generate().unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -662,7 +663,7 @@ async fn test_poa_contract_tb_ea() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 3
-	poa.generate_block().await.unwrap();
+	consensus.generate().unwrap();
 	base::wait_block_execution(&chain).await;
 
 	// deposit
@@ -691,7 +692,7 @@ async fn test_poa_contract_tb_ea() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 4
-	poa.generate_block().await.unwrap();
+	consensus.generate().unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -720,18 +721,18 @@ async fn test_poa_contract_tb_ea() {
 	log::info!("result: {}", result);
 	assert_eq!(result, r#"0"#.to_string(),);
 
-	base::safe_close(chain, txpool, poa).await;
+	base::safe_close(chain, txpool, consensus).await;
 }
 
 fn get_token_bank_code() -> &'static [u8] {
 	let code = include_bytes!(
-		"../../../vm/contract-samples/token-bank/release/contract_samples_token_bank_bg.wasm"
+		"../../vm/contract-samples/token-bank/release/contract_samples_token_bank_bg.wasm"
 	);
 	code
 }
 
 fn get_token_code() -> &'static [u8] {
 	let code =
-		include_bytes!("../../../vm/contract-samples/token/release/contract_samples_token_bg.wasm");
+		include_bytes!("../../vm/contract-samples/token/release/contract_samples_token_bg.wasm");
 	code
 }

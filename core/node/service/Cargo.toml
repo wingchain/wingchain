@@ -23,6 +23,6 @@ node-chain = { path = "../chain" }
 node-txpool = { path = "../txpool" }
 node-api = { path = "../api" }
 node-consensus = { path = "../consensus" }
-node-consensus-poa = { path = "../consensus/poa" }
+node-consensus-base = { path = "../consensus/base" }
 node-coordinator = { path = "../coordinator" }
 main-base = { path = "../../../bin/main/base" }

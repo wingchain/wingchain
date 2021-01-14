@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/// Executor primitives for modules
+/// Executor base for modules
 use std::marker::PhantomData;
 use std::sync::Arc;
 

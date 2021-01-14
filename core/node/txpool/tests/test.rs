@@ -329,7 +329,8 @@ params = '''
     "chain_id": "chain-test",
     "timestamp": "2020-04-29T15:51:36.502+08:00",
     "max_until_gap": 20,
-    "max_execution_gap": 8
+    "max_execution_gap": 8,
+    "consensus": "poa"
 }}
 '''
 

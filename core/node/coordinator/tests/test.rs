@@ -15,6 +15,7 @@
 use crypto::address::AddressImpl;
 use crypto::dsa::DsaImpl;
 use log::info;
+use node_consensus_base::Consensus;
 use node_executor::module;
 use node_network::{Keypair, LinkedHashMap, Multiaddr, PeerId, Protocol};
 use std::sync::Arc;
@@ -74,10 +75,10 @@ async fn test_coordinator_block_sync() {
 
 	let chain0 = &services[0].0;
 	let txpool0 = &services[0].1;
-	let poa0 = &services[0].2;
+	let consensus0 = &services[0].2;
 
 	// generate block 1
-	poa0.generate_block().await.unwrap();
+	consensus0.generate().unwrap();
 	base::wait_block_execution(&chain0).await;
 
 	// generate block 2
@@ -103,11 +104,11 @@ async fn test_coordinator_block_sync() {
 	.await;
 	base::wait_txpool(&txpool0, 1).await;
 
-	poa0.generate_block().await.unwrap();
+	consensus0.generate().unwrap();
 	base::wait_block_execution(&chain0).await;
 
 	// generate block 3
-	poa0.generate_block().await.unwrap();
+	consensus0.generate().unwrap();
 	base::wait_block_execution(&chain0).await;
 
 	// wait chain1 to sync

@@ -230,6 +230,7 @@ fn expected_data(
 						timestamp,
 						max_until_gap: 20,
 						max_execution_gap: 8,
+						consensus: "poa".to_string(),
 					},
 				)
 				.unwrap(),
@@ -386,6 +387,10 @@ fn expected_block_0_meta_state_root(txs: &Vec<Arc<FullTransaction>>) -> Hash {
 			DBKey::from_slice(b"system_max_execution_gap"),
 			Some(codec::encode(&params.max_execution_gap).unwrap()),
 		),
+		(
+			DBKey::from_slice(b"system_consensus"),
+			Some(codec::encode(&params.consensus).unwrap()),
+		),
 	]
 	.into_iter()
 	.collect::<HashMap<_, _>>();
@@ -466,7 +471,8 @@ params = '''
     "chain_id": "chain-test",
     "timestamp": "2020-04-29T15:51:36.502+08:00",
     "max_until_gap" : 20,
-    "max_execution_gap": 8
+    "max_execution_gap": 8,
+    "consensus": "poa"
 }}
 '''
 
@@ -508,7 +514,8 @@ params = '''
     "chain_id": "chain-test",
     "timestamp": "2020-04-29T15:51:36.502+08:00",
     "max_until_gap" : 20,
-    "max_execution_gap": 8
+    "max_execution_gap": 8,
+    "consensus": "poa"
 }
 '''
 

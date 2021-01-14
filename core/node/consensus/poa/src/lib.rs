@@ -29,21 +29,18 @@ use log::{debug, info, warn};
 
 use crypto::address::Address as AddressT;
 use crypto::dsa::{Dsa, KeyPair};
-use node_consensus::errors::ErrorKind;
-use node_consensus::{errors, support::ConsensusSupport};
+use node_consensus_base::{support::ConsensusSupport, Consensus as ConsensusT, ConsensusConfig};
 use node_executor::module;
 use node_executor_primitives::EmptyParams;
 use primitives::errors::{Catchable, CommonResult};
 use primitives::types::ExecutionGap;
 use primitives::{Address, BuildBlockParams, FullTransaction, SecretKey};
 
-pub struct PoaConfig {
-	pub secret_key: SecretKey,
-}
+pub mod errors;
 
 pub struct Poa<S>
 where
-	S: ConsensusSupport,
+	S: ConsensusSupport + Send + Sync + 'static,
 {
 	stream: Arc<PoaStream<S>>,
 	is_authority: bool,
@@ -53,14 +50,18 @@ impl<S> Poa<S>
 where
 	S: ConsensusSupport + Send + Sync + 'static,
 {
-	pub fn new(config: PoaConfig, support: Arc<S>) -> CommonResult<Self> {
+	pub fn new(config: ConsensusConfig, support: Arc<S>) -> CommonResult<Self> {
 		let poa_meta = get_poa_meta(&support)?;
 		let authority_address = get_poa_authority(&support)?;
-		let current_address = get_current_address(&config.secret_key, &support)?;
-		let is_authority = current_address == authority_address;
+		let current_address = if let Some(secret_key) = &config.secret_key {
+			Some(get_current_address(secret_key, &support)?)
+		} else {
+			None
+		};
+		let is_authority = current_address.as_ref() == Some(&authority_address);
 
 		info!(
-			"Current node is authority: {}, authority address: {}, current address: {}",
+			"Current node is authority: {}, authority address: {}, current address: {:?}",
 			is_authority, authority_address, current_address
 		);
 
@@ -79,26 +80,31 @@ where
 
 		Ok(poa)
 	}
+}
 
-	pub async fn generate_block(&self) -> CommonResult<()> {
+impl<S> ConsensusT for Poa<S>
+where
+	S: ConsensusSupport + Send + Sync + 'static,
+{
+	fn generate(&self) -> CommonResult<()> {
 		if !self.is_authority {
-			return Err(errors::ErrorKind::Other("Not authority".to_string()).into());
+			return Err(errors::ErrorKind::NotAuthority.into());
 		}
 
 		let timestamp = SystemTime::now();
 		let timestamp = timestamp
 			.duration_since(SystemTime::UNIX_EPOCH)
-			.map_err(|_| ErrorKind::TimeError)?;
+			.map_err(|_| node_consensus_base::errors::ErrorKind::Time)?;
 		let timestamp = timestamp.as_millis() as u64;
 		let schedule_info = ScheduleInfo { timestamp };
-		self.stream.work(schedule_info).await?;
+		self.stream.work(schedule_info)?;
 		Ok(())
 	}
 }
 
 struct PoaStream<S>
 where
-	S: ConsensusSupport,
+	S: ConsensusSupport + Send + Sync + 'static,
 {
 	poa_meta: module::poa::Meta,
 	support: Arc<S>,
@@ -106,9 +112,9 @@ where
 
 impl<S> PoaStream<S>
 where
-	S: ConsensusSupport,
+	S: ConsensusSupport + Send + Sync + 'static,
 {
-	async fn work(&self, schedule_info: ScheduleInfo) -> CommonResult<()> {
+	fn work(&self, schedule_info: ScheduleInfo) -> CommonResult<()> {
 		let current_state = &self.support.get_current_state();
 
 		let system_meta = &current_state.system_meta;
@@ -204,7 +210,7 @@ where
 
 async fn start<S>(stream: Arc<PoaStream<S>>) -> CommonResult<()>
 where
-	S: ConsensusSupport,
+	S: ConsensusSupport + Send + Sync + 'static,
 {
 	info!("Start poa work");
 	let block_interval = stream.poa_meta.block_interval.expect("qed");
@@ -212,7 +218,7 @@ where
 	loop {
 		let item = scheduler.next().await;
 		match item {
-			Some(Ok(v)) => match stream.work(v).await {
+			Some(Ok(v)) => match stream.work(v) {
 				Ok(_) => (),
 				Err(e) => warn!("Encountered consensus error: {:?}", e),
 			},

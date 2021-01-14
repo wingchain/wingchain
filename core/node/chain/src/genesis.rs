@@ -137,6 +137,7 @@ impl<'a> TryInto<module::system::InitParams> for JsonParams<'a> {
 			pub timestamp: String,
 			pub max_until_gap: BlockNumber,
 			pub max_execution_gap: ExecutionGap,
+			pub consensus: String,
 		}
 		let params = serde_json::from_str::<InitParams>(self.0)
 			.map_err(|e| errors::ErrorKind::Spec(format!("Invalid json: {:?}", e)))?;
@@ -146,11 +147,13 @@ impl<'a> TryInto<module::system::InitParams> for JsonParams<'a> {
 		let chain_id = params.chain_id;
 		let max_until_gap = params.max_until_gap;
 		let max_execution_gap = params.max_execution_gap;
+		let consensus = params.consensus;
 		Ok(module::system::InitParams {
 			chain_id,
 			timestamp,
 			max_until_gap,
 			max_execution_gap,
+			consensus,
 		})
 	}
 }
@@ -227,7 +230,8 @@ mod tests {
 			"chain_id": "chain-test",
 			"timestamp": "2020-04-16T23:46:02.189+08:00",
 			"max_until_gap": 20,
-			"max_execution_gap": 8
+			"max_execution_gap": 8,
+			"consensus": "poa"
 		}
 		"#;
 		let json_params = JsonParams(&str);
@@ -241,6 +245,7 @@ mod tests {
 				timestamp: 1587051962189,
 				max_until_gap: 20,
 				max_execution_gap: 8,
+				consensus: "poa".to_string(),
 			}
 		)
 	}

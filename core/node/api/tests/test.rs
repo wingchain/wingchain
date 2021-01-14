@@ -22,6 +22,7 @@ use node_api::support::DefaultApiSupport;
 use node_api::{Api, ApiConfig};
 use node_api_rt::tokio::time::Duration;
 use node_chain::module;
+use node_consensus_base::Consensus;
 use node_coordinator::{Keypair, LinkedHashMap, Multiaddr, PeerId, Protocol};
 use primitives::codec::Encode;
 use utils_test::test_accounts;
@@ -79,7 +80,7 @@ async fn test_api() {
 
 	let chain0 = &services[0].0;
 	let txpool0 = &services[0].1;
-	let poa0 = &services[0].2;
+	let consensus0 = &services[0].2;
 	let coordinator0 = &services[0].3;
 	let config = ApiConfig {
 		rpc_addr: "0.0.0.0:3109".to_string(),
@@ -98,7 +99,7 @@ async fn test_api() {
 	// chain_getBlockByNumber
 	let request = r#"{"jsonrpc": "2.0", "method": "chain_getBlockByNumber", "params": ["confirmed"], "id": 1}"#;
 	let response = call_rpc(request).await;
-	let expected = r#"{"jsonrpc":"2.0","result":{"hash":"0x958cec447c1a3a06135e91500b38554e9322c461558e8f5c881ac988e61b0d67","header":{"number":"0x0000000000000000","timestamp":"0x00000171c4eb7136","parent_hash":"0x0000000000000000000000000000000000000000000000000000000000000000","meta_txs_root":"0x02f1c52412bdfac67715f6558498a6cd920b81945b86b1ac2d547b7bc21289b4","meta_state_root":"0x338f35dc428e0fd0da8e885980e1e1e7aa39c1aeb9d992b5f2cb7c410224b925","meta_receipts_root":"0xe6c79028e5a20c619a5faa0dde88df82f378ca796a717570ef329de275ca1282","payload_txs_root":"0xcbe666e1dff8590ccfad41047bb4a6b8a682b52d1899e3f6a1c40c9eae65e363","payload_execution_gap":"0x00","payload_execution_state_root":"0x0000000000000000000000000000000000000000000000000000000000000000","payload_execution_receipts_root":"0x0000000000000000000000000000000000000000000000000000000000000000"},"body":{"meta_txs":["0x91b00eaf36abb6c89954e1ddc7933ed55373859de12bfdf24abc7c0abb327904","0x51fbd78a099eaad87565e79c617c112a7615ef7e8d41d24facdd90ebee720dda"],"payload_txs":["0x6745417d545c3e0f7d610cadfd1ee8d450a92e89fa74bb75777950a779f2aa94","0xa0faf0ea2a0c3bf69ae5c1124199c76336b36a159826e823a9fc1cd2d7b5ff55"]}},"id":1}"#;
+	let expected = r#"{"jsonrpc":"2.0","result":{"hash":"0x5d9c463e3666a5d9f51f2e674f1f2f7eebbc0693d30ba0cd4c34e46b2be75a11","header":{"number":"0x0000000000000000","timestamp":"0x00000171c4eb7136","parent_hash":"0x0000000000000000000000000000000000000000000000000000000000000000","meta_txs_root":"0x3eb8cb0c85f0ecc98300e23d753bc48a1ab5e42f86c9bba75a5c914f269d81ad","meta_state_root":"0xaebe53e5c921912056f086387df448d734ded82eac8479dea73c2ddf8f39274a","meta_receipts_root":"0xe6c79028e5a20c619a5faa0dde88df82f378ca796a717570ef329de275ca1282","payload_txs_root":"0xcbe666e1dff8590ccfad41047bb4a6b8a682b52d1899e3f6a1c40c9eae65e363","payload_execution_gap":"0x00","payload_execution_state_root":"0x0000000000000000000000000000000000000000000000000000000000000000","payload_execution_receipts_root":"0x0000000000000000000000000000000000000000000000000000000000000000"},"body":{"meta_txs":["0x709ab477fc45b28aab319323399bee607bac3af49518e33a78f099c6916ef75e","0x51fbd78a099eaad87565e79c617c112a7615ef7e8d41d24facdd90ebee720dda"],"payload_txs":["0x6745417d545c3e0f7d610cadfd1ee8d450a92e89fa74bb75777950a779f2aa94","0xa0faf0ea2a0c3bf69ae5c1124199c76336b36a159826e823a9fc1cd2d7b5ff55"]}},"id":1}"#;
 	info!("chain_getBlockByNumber response: {}", response);
 	assert_eq!(response, expected);
 
@@ -141,12 +142,12 @@ async fn test_api() {
 		hex::encode(&tx0_hash.0)
 	);
 	let response = call_rpc(&request).await;
-	let expected = r#"{"jsonrpc":"2.0","result":{"hash":"0x8ece9a3e63a339d854f762ff45e2b19ce110a43efe57d2499fc2c13749c1018f","witness":{"public_key":"0x8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","signature":"0xd3b0a9ccf9d20cf4dd03b756d8236e9ace3a632f55a65f9a8539ef7f23a4ec1da05be158e75c1d8b784e669000aac5780e5d8ef904641d630ecbc0fe9e4f9b09","nonce":"0x00000000","until":"0x000000000000000a"},"call":{"module":"balance","method":"transfer","params":"0x5043346e326b6721be4a070bfb2eb49127322fa5e40100000000000000"}},"id":1}"#;
+	let expected = r#"{"jsonrpc":"2.0","result":{"hash":"0x8ece9a3e63a339d854f762ff45e2b19ce110a43efe57d2499fc2c13749c1018f","witness":{"public_key":"0x8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","signature":"0x4b84ec33e868a6875bb1297b2c06e7598546f80addd9f83ba36e9d96af30e2d9e652bb37be486e59f0c60e346cca7d7ca4385295c0ecb9a78a4d7d217dd1cb0b","nonce":"0x00000000","until":"0x000000000000000a"},"call":{"module":"balance","method":"transfer","params":"0x5043346e326b6721be4a070bfb2eb49127322fa5e40100000000000000"}},"id":1}"#;
 	info!("chain_getTransactionInTxPool response: {}", response);
 	assert_eq!(response, expected);
 
 	// generate block 1
-	poa0.generate_block().await.unwrap();
+	consensus0.generate().unwrap();
 	base::wait_block_execution(&chain0).await;
 
 	// chain_getTransactionByHash
@@ -155,7 +156,7 @@ async fn test_api() {
 		hex::encode(&tx0_hash.0)
 	);
 	let response = call_rpc(&request).await;
-	let expected = r#"{"jsonrpc":"2.0","result":{"hash":"0x8ece9a3e63a339d854f762ff45e2b19ce110a43efe57d2499fc2c13749c1018f","witness":{"public_key":"0x8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","signature":"0xd3b0a9ccf9d20cf4dd03b756d8236e9ace3a632f55a65f9a8539ef7f23a4ec1da05be158e75c1d8b784e669000aac5780e5d8ef904641d630ecbc0fe9e4f9b09","nonce":"0x00000000","until":"0x000000000000000a"},"call":{"module":"balance","method":"transfer","params":"0x5043346e326b6721be4a070bfb2eb49127322fa5e40100000000000000"}},"id":1}"#;
+	let expected = r#"{"jsonrpc":"2.0","result":{"hash":"0x8ece9a3e63a339d854f762ff45e2b19ce110a43efe57d2499fc2c13749c1018f","witness":{"public_key":"0x8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","signature":"0x4b84ec33e868a6875bb1297b2c06e7598546f80addd9f83ba36e9d96af30e2d9e652bb37be486e59f0c60e346cca7d7ca4385295c0ecb9a78a4d7d217dd1cb0b","nonce":"0x00000000","until":"0x000000000000000a"},"call":{"module":"balance","method":"transfer","params":"0x5043346e326b6721be4a070bfb2eb49127322fa5e40100000000000000"}},"id":1}"#;
 	info!("chain_getTransactionByHash response: {}", response);
 	assert_eq!(response, expected);
 
