@@ -1,4 +1,3 @@
-#![allow(clippy::unnecessary_wraps)]
 
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;

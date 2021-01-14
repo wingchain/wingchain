@@ -34,7 +34,6 @@
 //!  - original_160
 //!  - original_256
 //!  - custom algorithm provided by a dylib
-#![allow(clippy::unnecessary_wraps)]
 use std::convert::TryFrom;
 
 use primitives::errors::CommonError;
