@@ -38,6 +38,7 @@ const PEER_KNOWN_BLOCKS_SIZE: u32 = 1024;
 const PENDING_BLOCKS_SIZE: u32 = 2560;
 const PEER_REQUEST_BLOCK_SIZE: u32 = 128;
 const PEER_KNOWN_TXS_SIZE: u32 = 10240;
+const TX_PROPAGATE_MAX_BLOCK_BEHIND: u32 = 8;
 
 pub struct ChainSync<S>
 where
@@ -83,11 +84,7 @@ where
 		let (block_hash, header) = self
 			.support
 			.get_header_by_number(&self.support.get_confirmed_number()?)?;
-		self.announce_block(block_hash, header, MessageTarget::One(peer_id.clone()))?;
-
-		// propagate txs
-		let txs = self.support.ori_support().txpool_get_transactions()?;
-		self.propagate_txs(txs, MessageTarget::One(peer_id))?;
+		self.announce_block(block_hash, header, MessageTarget::One(peer_id))?;
 
 		Ok(())
 	}
@@ -121,12 +118,17 @@ where
 		block_announce: BlockAnnounce,
 	) -> CommonResult<()> {
 		let BlockAnnounce { block_hash, header } = block_announce;
+		let mut first_announce = false;
 		if let Some(peer) = self.peers.get_mut(&peer_id) {
+			first_announce = peer.confirmed_number == 0;
 			peer.known_blocks.put(block_hash.clone(), ());
 			peer.confirmed_number = header.number;
 			peer.confirmed_hash = block_hash;
 		}
 		self.sync()?;
+		if first_announce {
+			self.on_block_announce_first(peer_id)?;
+		}
 		Ok(())
 	}
 
@@ -446,6 +448,22 @@ where
 		Ok(())
 	}
 
+	fn on_block_announce_first(&mut self, peer_id: PeerId) -> CommonResult<()> {
+		if let Some(peer) = self.peers.get_mut(&peer_id) {
+			let current_number = self
+				.support
+				.ori_support()
+				.get_current_state()
+				.confirmed_number;
+			if Self::should_tx_propagate(peer.confirmed_number, current_number) {
+				let txs = self.support.ori_support().txpool_get_transactions()?;
+				self.propagate_txs(txs, MessageTarget::One(peer_id))?;
+			}
+		}
+
+		Ok(())
+	}
+
 	fn on_verify_ok(
 		&self,
 		commit_block_params: ChainCommitBlockParams,
@@ -562,6 +580,10 @@ where
 		let new = RequestId(request_id.0.checked_add(1).unwrap_or(0));
 		std::mem::replace(request_id, new)
 	}
+
+	fn should_tx_propagate(receiver_number: BlockNumber, sender_number: BlockNumber) -> bool {
+		receiver_number + TX_PROPAGATE_MAX_BLOCK_BEHIND as u64 >= sender_number
+	}
 }
 
 /// Handle tx propagation
@@ -586,6 +608,17 @@ where
 		tx_propagate: TxPropagate,
 	) -> CommonResult<()> {
 		let ori_support = self.support.ori_support();
+		let current_number = ori_support.get_current_state().confirmed_number;
+		let peer_max_number = self
+			.peers
+			.values()
+			.map(|x| x.confirmed_number)
+			.max()
+			.unwrap_or(0);
+		if !Self::should_tx_propagate(current_number, peer_max_number) {
+			return Ok(());
+		}
+
 		for tx in tx_propagate.txs {
 			if let Some(peer_info) = self.peers.get_mut(&peer_id) {
 				let tx_hash = self.support.ori_support().hash_transaction(&tx)?;
