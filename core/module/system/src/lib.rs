@@ -70,7 +70,7 @@ impl<C: Context, U: Util> Module<C, U> {
 	}
 
 	fn validate_init(&self, _sender: Option<&Address>, params: InitParams) -> ModuleResult<()> {
-		if !CONSENSUS_LIST.iter().any(|&x| x == &params.consensus) {
+		if !CONSENSUS_LIST.iter().any(|&x| x == params.consensus) {
 			return Err("Unknown consensus".into());
 		}
 		Ok(())
