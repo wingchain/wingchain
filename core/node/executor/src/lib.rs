@@ -310,7 +310,7 @@ impl<'a> Context<'a> {
 	}
 
 	/// Get the transactions root of the given transactions
-	pub fn get_txs_root(&self, txs: &Vec<Arc<FullTransaction>>) -> CommonResult<Hash> {
+	pub fn get_txs_root(&self, txs: &[Arc<FullTransaction>]) -> CommonResult<Hash> {
 		let input = txs
 			.iter()
 			.map(|x| codec::encode(&TransactionForHash::new(&x.tx)))
@@ -473,7 +473,7 @@ impl Executor {
 			sender.as_ref(),
 			&call,
 		)?
-		.map_err(|e| ErrorKind::Application(e))?;
+		.map_err(ErrorKind::Application)?;
 
 		let write = Dispatcher::is_write_call::<Context, Util>(module, &call)?;
 		if !write {

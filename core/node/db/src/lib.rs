@@ -14,7 +14,7 @@
 
 //! Key value db based on rocksdb
 
-use std::path::PathBuf;
+use std::path::Path;
 
 use parking_lot::RwLock;
 use rocksdb::{
@@ -42,7 +42,7 @@ pub struct DB {
 
 impl DB {
 	/// Open the db from the given path
-	pub fn open(path: &PathBuf) -> CommonResult<DB> {
+	pub fn open(path: &Path) -> CommonResult<DB> {
 		let col_count = columns::COLUMN_NAMES.len();
 		let db_opts = gen_db_opts(col_count);
 		let block_opts = gen_block_opts();
@@ -59,7 +59,7 @@ impl DB {
 					for &name in columns::COLUMN_NAMES.iter() {
 						let _ = db
 							.create_cf(name, &gen_cf_opts(col_count, &block_opts))
-							.map_err(|e| errors::ErrorKind::RocksDB(e))?;
+							.map_err(errors::ErrorKind::RocksDB)?;
 					}
 					db
 				}
@@ -81,12 +81,12 @@ impl DB {
 
 	/// Get value by col and key
 	pub fn get(&self, col: u32, key: &[u8]) -> CommonResult<Option<DBValue>> {
-		let ref db = *self.db.read();
+		let db = &(*self.db.read());
 		let cf = Self::get_cf(&db, col);
 
 		let result = db
 			.get_cf_opt(cf, key, &self.read_opts)
-			.map_err(|e| errors::ErrorKind::RocksDB(e))?;
+			.map_err(errors::ErrorKind::RocksDB)?;
 
 		Ok(result)
 	}
@@ -108,7 +108,7 @@ impl DB {
 
 	/// Write with a db transaction
 	pub fn write(&self, transaction: DBTransaction) -> CommonResult<()> {
-		let ref db = *self.db.write();
+		let db = &(*self.db.write());
 
 		let ops = transaction.ops;
 		let mut batch = WriteBatch::default();
@@ -118,18 +118,18 @@ impl DB {
 					let cf = Self::get_cf(&db, col);
 					batch
 						.put_cf(cf, &key, &value)
-						.map_err(|e| errors::ErrorKind::RocksDB(e))?;
+						.map_err(errors::ErrorKind::RocksDB)?;
 				}
 				DBOp::Delete { col, key } => {
 					let cf = Self::get_cf(&db, col);
 					batch
 						.delete_cf(cf, &key)
-						.map_err(|e| errors::ErrorKind::RocksDB(e))?;
+						.map_err(errors::ErrorKind::RocksDB)?;
 				}
 			};
 		}
 		db.write_opt(batch, &self.write_opts)
-			.map_err(|e| errors::ErrorKind::RocksDB(e))?;
+			.map_err(errors::ErrorKind::RocksDB)?;
 		Ok(())
 	}
 
@@ -201,6 +201,12 @@ impl DBTransaction {
 	/// Extend with another transaction
 	pub fn extend(&mut self, transaction: DBTransaction) {
 		self.ops.extend(transaction.ops);
+	}
+}
+
+impl Default for DBTransaction {
+	fn default() -> Self {
+		Self::new()
 	}
 }
 

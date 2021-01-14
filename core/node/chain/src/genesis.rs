@@ -50,9 +50,8 @@ pub fn build_genesis(
 		}
 	}
 
-	let timestamp = timestamp.ok_or(errors::ErrorKind::Spec(
-		"No timestamp specified".to_string(),
-	))?;
+	let timestamp =
+		timestamp.ok_or_else(|| errors::ErrorKind::Spec("No timestamp specified".to_string()))?;
 
 	let number = 0;
 	let execution_number = 0;

@@ -77,7 +77,7 @@ impl StateDB {
 	/// Get the value from the trie
 	/// by trie root and key
 	pub fn get(&self, root: &[u8], key: &[u8]) -> CommonResult<Option<DBValue>> {
-		let result = match self.hash_length {
+		match self.hash_length {
 			HashLength::HashLength20 => {
 				let mut typed_root = [0u8; 20];
 				typed_root.copy_from_slice(&root);
@@ -94,8 +94,7 @@ impl StateDB {
 				let typed_root = H512::from(typed_root);
 				self.get_for_hasher::<TrieHasher64>(typed_root, key)
 			}
-		};
-		result
+		}
 	}
 
 	/// Get the statedb statement by trie root
@@ -223,7 +222,7 @@ impl StateDB {
 		let mut proxy = ProxyHashDB {
 			db: self.db.clone(),
 			db_column: self.db_column,
-			buffer: buffer,
+			buffer,
 		};
 
 		{

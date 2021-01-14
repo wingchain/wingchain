@@ -22,7 +22,7 @@ use quote::quote;
 use std::collections::{HashMap, HashSet};
 
 /// Contract method validate_xxx will be treated as the validator of method xxx
-const VALIDATE_METHOD_PREFIX: &'static str = "validate_";
+const VALIDATE_METHOD_PREFIX: &str = "validate_";
 
 #[proc_macro_attribute]
 pub fn call(_attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -36,8 +36,7 @@ pub fn init(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
 #[proc_macro_attribute]
 pub fn contract(_attr: TokenStream, item: TokenStream) -> TokenStream {
-	let item_copy = item.clone();
-	let impl_item = parse_macro_input!(item_copy as ItemImpl);
+	let impl_item = parse_macro_input!(item as ItemImpl);
 
 	let type_name = get_module_ident(&impl_item);
 
@@ -141,7 +140,7 @@ pub fn contract(_attr: TokenStream, item: TokenStream) -> TokenStream {
 		}
 
 		fn get_method() -> ContractResult<String> {
-			let share_id = 0u8 as *const u8 as u64;
+			let share_id = std::ptr::null::<u8>() as u64;
 			import::method_read(share_id);
 			let len = import::share_len(share_id);
 			let method = vec![0u8; len as usize];
@@ -151,7 +150,7 @@ pub fn contract(_attr: TokenStream, item: TokenStream) -> TokenStream {
 		}
 
 		fn get_params() -> ContractResult<Vec<u8>> {
-			let share_id = 0u8 as *const u8 as u64;
+			let share_id = std::ptr::null::<u8>() as u64;
 			import::params_read(share_id);
 			let len = import::share_len(share_id);
 			let params = vec![0u8; len as usize];
@@ -347,16 +346,14 @@ fn get_module_methods_by_name(impl_item: &ItemImpl, name: &str) -> Vec<ModuleMet
 		})
 		.collect::<HashMap<_, _>>();
 
-	let methods = methods
+	methods
 		.into_iter()
 		.map(|mut method| {
 			let method_name = method.method_ident.to_string();
 			method.validate_ident = method_validates.get(&method_name).cloned();
 			method
 		})
-		.collect::<Vec<_>>();
-
-	methods
+		.collect::<Vec<_>>()
 }
 
 fn get_method_params_ident(method: &ImplItemMethod) -> Ident {

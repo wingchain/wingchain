@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![allow(clippy::type_complexity)]
 use std::num::NonZeroUsize;
 use std::time::Duration;
 

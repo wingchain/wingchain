@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![allow(clippy::single_match)]
+#![allow(clippy::type_complexity)]
+
 use std::sync::Arc;
 
 pub use node_network::{
@@ -59,7 +62,7 @@ where
 	pub fn new(config: CoordinatorConfig, support: Arc<S>) -> CommonResult<Self> {
 		let genesis_hash = support
 			.get_block_hash(&0)?
-			.ok_or(errors::ErrorKind::Data("Missing genesis block".to_string()))?;
+			.ok_or_else(|| errors::ErrorKind::Data("Missing genesis block".to_string()))?;
 
 		let handshake = ProtocolMessage::Handshake(Handshake {
 			genesis_hash: genesis_hash.clone(),

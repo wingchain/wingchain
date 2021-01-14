@@ -31,7 +31,7 @@ fn test_vm_token_transfer() {
 		VMConfig::default(),
 		tx_hash,
 		Some(contract_address),
-		Some(account1.3.clone()),
+		Some(account1.address.clone()),
 		executor_context,
 	);
 
@@ -69,7 +69,7 @@ fn test_vm_token_transfer() {
 	assert_eq!(result, r#"2100000000000000"#.to_string());
 
 	// get balance
-	let params = &format!(r#"{{"address":"{}"}}"#, account1.3.clone())
+	let params = &format!(r#"{{"address":"{}"}}"#, account1.address.clone())
 		.as_bytes()
 		.to_vec();
 
@@ -80,7 +80,7 @@ fn test_vm_token_transfer() {
 	// transfer
 	let params = &format!(
 		r#"{{"recipient":"{}","value":100000000000000}}"#,
-		account2.3
+		account2.address
 	)
 	.as_bytes()
 	.to_vec();
@@ -90,7 +90,7 @@ fn test_vm_token_transfer() {
 	assert_eq!(result, r#"null"#.to_string());
 
 	// check balance after transferring
-	let params = &format!(r#"{{"address":"{}"}}"#, account1.3)
+	let params = &format!(r#"{{"address":"{}"}}"#, account1.address)
 		.as_bytes()
 		.to_vec();
 
@@ -98,7 +98,7 @@ fn test_vm_token_transfer() {
 
 	assert_eq!(result, r#"2000000000000000"#.to_string());
 
-	let params = &format!(r#"{{"address":"{}"}}"#, account2.3)
+	let params = &format!(r#"{{"address":"{}"}}"#, account2.address)
 		.as_bytes()
 		.to_vec();
 
@@ -118,7 +118,7 @@ fn test_vm_token_transfer_from() {
 		VMConfig::default(),
 		tx_hash,
 		Some(contract_address.clone()),
-		Some(account1.3.clone()),
+		Some(account1.address.clone()),
 		executor_context.clone(),
 	);
 
@@ -132,7 +132,7 @@ fn test_vm_token_transfer_from() {
 	assert_eq!(result, r#"null"#.to_string());
 
 	// get balance
-	let params = &format!(r#"{{"address":"{}"}}"#, account1.3)
+	let params = &format!(r#"{{"address":"{}"}}"#, account1.address)
 		.as_bytes()
 		.to_vec();
 
@@ -141,18 +141,24 @@ fn test_vm_token_transfer_from() {
 	assert_eq!(result, r#"2100000000000000"#.to_string());
 
 	// approve
-	let params = &format!(r#"{{"spender":"{}","value":100000000000000}}"#, account2.3)
-		.as_bytes()
-		.to_vec();
+	let params = &format!(
+		r#"{{"spender":"{}","value":100000000000000}}"#,
+		account2.address
+	)
+	.as_bytes()
+	.to_vec();
 
 	let result = vm_execute(&context, Mode::Call, "approve", &params, 0).unwrap();
 
 	assert_eq!(result, r#"null"#.to_string());
 
 	// check allowance after approving
-	let params = &format!(r#"{{"owner":"{}","spender":"{}"}}"#, account1.3, account2.3)
-		.as_bytes()
-		.to_vec();
+	let params = &format!(
+		r#"{{"owner":"{}","spender":"{}"}}"#,
+		account1.address, account2.address
+	)
+	.as_bytes()
+	.to_vec();
 
 	let result = vm_execute(&context, Mode::Call, "allowance", &params, 0).unwrap();
 
@@ -164,14 +170,14 @@ fn test_vm_token_transfer_from() {
 		VMConfig::default(),
 		tx_hash,
 		Some(contract_address),
-		Some(account2.3.clone()),
+		Some(account2.address.clone()),
 		executor_context,
 	);
 
 	// transfer from
 	let params = &format!(
 		r#"{{"sender":"{}","recipient":"{}","value":100000000}}"#,
-		account1.3, account2.3
+		account1.address, account2.address
 	)
 	.as_bytes()
 	.to_vec();
@@ -181,16 +187,19 @@ fn test_vm_token_transfer_from() {
 	assert_eq!(result, r#"null"#.to_string());
 
 	// check allowance after transfer from
-	let params = &format!(r#"{{"owner":"{}","spender":"{}"}}"#, account1.3, account2.3,)
-		.as_bytes()
-		.to_vec();
+	let params = &format!(
+		r#"{{"owner":"{}","spender":"{}"}}"#,
+		account1.address, account2.address,
+	)
+	.as_bytes()
+	.to_vec();
 
 	let result = vm_execute(&context, Mode::Call, "allowance", &params, 0).unwrap();
 
 	assert_eq!(result, r#"99999900000000"#.to_string());
 
 	// check sender balance
-	let params = &format!(r#"{{"address":"{}"}}"#, account1.3)
+	let params = &format!(r#"{{"address":"{}"}}"#, account1.address)
 		.as_bytes()
 		.to_vec();
 
@@ -199,7 +208,7 @@ fn test_vm_token_transfer_from() {
 	assert_eq!(result, r#"2099999900000000"#.to_string());
 
 	// check recipient balance
-	let params = &format!(r#"{{"address":"{}"}}"#, account2.3)
+	let params = &format!(r#"{{"address":"{}"}}"#, account2.address)
 		.as_bytes()
 		.to_vec();
 

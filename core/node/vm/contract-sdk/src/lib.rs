@@ -13,6 +13,7 @@
 // limitations under the License.
 
 //! Contract sdk
+#![allow(clippy::too_many_arguments)]
 
 #[allow(unused_imports)]
 #[macro_use]
@@ -50,16 +51,12 @@ impl Context {
 		let number = import::env_block_number();
 		let timestamp = import::env_block_timestamp();
 
-		let tx_hash =
-			option_vec_from_func(|share_id| import::env_tx_hash_read(share_id))?.map(Hash);
+		let tx_hash = option_vec_from_func(import::env_tx_hash_read)?.map(Hash);
 
 		let contract_address =
-			option_vec_from_func(|share_id| import::env_contract_address_read(share_id))?
-				.map(Address);
+			option_vec_from_func(import::env_contract_address_read)?.map(Address);
 
-		let sender_address =
-			option_vec_from_func(|share_id| import::env_sender_address_read(share_id))?
-				.map(Address);
+		let sender_address = option_vec_from_func(import::env_sender_address_read)?.map(Address);
 
 		let context = Self {
 			env: Rc::new(ContextEnv { number, timestamp }),
@@ -195,7 +192,7 @@ impl Util {
 	}
 	pub fn validate_address_ea(&self, address: &Address) -> ContractResult<()> {
 		let data = address.0.as_slice();
-		let share_id = 0u8 as *const u8 as u64;
+		let share_id = std::ptr::null::<u8>() as u64;
 		let error = import::util_validate_address_ea(data.len() as _, data.as_ptr() as _, share_id);
 		from_error_aware(error, share_id, || Ok(()))
 	}
@@ -209,6 +206,12 @@ impl Pay {
 	}
 	pub fn pay_value(&self) -> Balance {
 		self.pay_value
+	}
+}
+
+impl Default for Pay {
+	fn default() -> Self {
+		Self::new()
 	}
 }
 
@@ -325,13 +328,13 @@ fn storage_delete(key: &[u8]) -> ContractResult<()> {
 }
 
 fn vec_from_func<F: Fn(u64)>(f: F) -> ContractResult<Vec<u8>> {
-	let share_id = 0u8 as *const u8 as u64;
+	let share_id = std::ptr::null::<u8>() as u64;
 	f(share_id);
 	share_to_vec(share_id).ok_or(ContractError::ShareIllegalAccess)
 }
 
 fn option_vec_from_func<F: Fn(u64) -> u64>(f: F) -> ContractResult<Option<Vec<u8>>> {
-	let share_id = 0u8 as *const u8 as u64;
+	let share_id = std::ptr::null::<u8>() as u64;
 	let value = match f(share_id) {
 		1 => {
 			let value = share_to_vec(share_id).ok_or(ContractError::ShareIllegalAccess)?;
@@ -343,11 +346,12 @@ fn option_vec_from_func<F: Fn(u64) -> u64>(f: F) -> ContractResult<Option<Vec<u8
 }
 
 fn null_from_func<F: Fn()>(f: F) -> ContractResult<()> {
-	Ok(f())
+	f();
+	Ok(())
 }
 
 fn vec_from_func_ea<F: Fn(u64, u64) -> u64>(f: F) -> ContractResult<Vec<u8>> {
-	let data_share_id = 0u8 as *const u8 as u64;
+	let data_share_id = std::ptr::null::<u8>() as u64;
 	let error_share_id = 1u8 as *const u8 as u64;
 	let error = f(data_share_id, error_share_id);
 	let get_data = || -> ContractResult<Vec<u8>> {
@@ -357,7 +361,7 @@ fn vec_from_func_ea<F: Fn(u64, u64) -> u64>(f: F) -> ContractResult<Vec<u8>> {
 }
 
 fn null_from_func_ea<F: Fn(u64) -> u64>(f: F) -> ContractResult<()> {
-	let error_share_id = 0u8 as *const u8 as u64;
+	let error_share_id = std::ptr::null::<u8>() as u64;
 	let error = f(error_share_id);
 	from_error_aware(error, error_share_id, || Ok(()))
 }

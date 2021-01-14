@@ -89,6 +89,7 @@ pub enum HandlerIn {
 	SendMessage { message: Vec<u8> },
 }
 
+#[allow(clippy::large_enum_variant)]
 pub enum State {
 	Init,
 	Opening {
@@ -347,10 +348,7 @@ impl ProtocolsHandler for Handler {
 		_info: Self::OutboundOpenInfo,
 		error: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>,
 	) {
-		let should_disconnect = match error {
-			ProtocolsHandlerUpgrErr::Upgrade(_) => true,
-			_ => false,
-		};
+		let should_disconnect = matches!(error, ProtocolsHandlerUpgrErr::Upgrade(_));
 		let event = HandlerOut::ProtocolError {
 			should_disconnect,
 			error: Box::new(error),

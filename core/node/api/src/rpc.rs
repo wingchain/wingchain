@@ -111,10 +111,10 @@ where
 	.workers(workers)
 	.maxconn(cmp::max(config.rpc_maxconn / workers, 1))
 	.bind(&config.rpc_addr)
-	.map_err(|e| errors::ErrorKind::IO(e))?
+	.map_err(errors::ErrorKind::IO)?
 	.run()
 	.await
-	.map_err(|e| errors::ErrorKind::IO(e))?;
+	.map_err(errors::ErrorKind::IO)?;
 
 	Ok(())
 }

@@ -96,9 +96,7 @@ fn init_logger(log: &Option<String>) -> CommonResult<()> {
 		builder.parse_filters(&log);
 	}
 
-	builder
-		.try_init()
-		.map_err(|e| errors::ErrorKind::InitLogger(e))?;
+	builder.try_init().map_err(errors::ErrorKind::InitLogger)?;
 
 	Ok(())
 }

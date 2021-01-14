@@ -34,7 +34,7 @@ async fn test_txpool() {
 
 	let (account1, _account2) = test_accounts(dsa, address);
 
-	let chain = get_chain(&account1.3);
+	let chain = get_chain(&account1.address);
 	let config = TxPoolConfig {
 		pool_capacity: 1024,
 	};
@@ -48,13 +48,13 @@ async fn test_txpool() {
 
 	let tx = chain
 		.build_transaction(
-			Some((account1.0, 0, 1)),
+			Some((account1.secret_key, 0, 1)),
 			chain
 				.build_call(
 					"balance".to_string(),
 					"transfer".to_string(),
 					module::balance::TransferParams {
-						recipient: account2.3.clone(),
+						recipient: account2.address.clone(),
 						value: 2,
 					},
 				)
@@ -90,7 +90,7 @@ async fn test_txpool_dup() {
 
 	let (account1, _account2) = test_accounts(dsa, address);
 
-	let chain = get_chain(&account1.3);
+	let chain = get_chain(&account1.address);
 	let config = TxPoolConfig {
 		pool_capacity: 1024,
 	};
@@ -104,13 +104,13 @@ async fn test_txpool_dup() {
 
 	let tx = chain
 		.build_transaction(
-			Some((account1.0, 0, 1)),
+			Some((account1.secret_key, 0, 1)),
 			chain
 				.build_call(
 					"balance".to_string(),
 					"transfer".to_string(),
 					module::balance::TransferParams {
-						recipient: account2.3.clone(),
+						recipient: account2.address.clone(),
 						value: 2,
 					},
 				)
@@ -133,7 +133,7 @@ async fn test_txpool_validate() {
 
 	let (account1, _account2) = test_accounts(dsa, address);
 
-	let chain = get_chain(&account1.3);
+	let chain = get_chain(&account1.address);
 	let config = TxPoolConfig {
 		pool_capacity: 1024,
 	};
@@ -147,13 +147,13 @@ async fn test_txpool_validate() {
 
 	let mut tx = chain
 		.build_transaction(
-			Some((account1.0.clone(), 0, 1)),
+			Some((account1.secret_key.clone(), 0, 1)),
 			chain
 				.build_call(
 					"balance".to_string(),
 					"transfer".to_string(),
 					module::balance::TransferParams {
-						recipient: account2.3.clone(),
+						recipient: account2.address.clone(),
 						value: 2,
 					},
 				)
@@ -170,13 +170,13 @@ async fn test_txpool_validate() {
 
 	let tx = chain
 		.build_transaction(
-			Some((account1.0.clone(), 0, 21)),
+			Some((account1.secret_key.clone(), 0, 21)),
 			chain
 				.build_call(
 					"balance".to_string(),
 					"transfer".to_string(),
 					module::balance::TransferParams {
-						recipient: account2.3.clone(),
+						recipient: account2.address.clone(),
 						value: 2,
 					},
 				)
@@ -191,13 +191,13 @@ async fn test_txpool_validate() {
 
 	let tx = chain
 		.build_transaction(
-			Some((account1.0, 0, 0)),
+			Some((account1.secret_key, 0, 0)),
 			chain
 				.build_call(
 					"balance".to_string(),
 					"transfer".to_string(),
 					module::balance::TransferParams {
-						recipient: account2.3,
+						recipient: account2.address,
 						value: 2,
 					},
 				)
@@ -220,7 +220,7 @@ async fn test_txpool_capacity() {
 
 	let (account1, _account2) = test_accounts(dsa, address);
 
-	let chain = get_chain(&account1.3);
+	let chain = get_chain(&account1.address);
 	let config = TxPoolConfig { pool_capacity: 2 };
 	let txpool_support = Arc::new(DefaultTxPoolSupport::new(chain.clone()));
 	let txpool = TxPool::new(config, txpool_support).unwrap();
@@ -232,13 +232,13 @@ async fn test_txpool_capacity() {
 
 	let tx = chain
 		.build_transaction(
-			Some((account1.0.clone(), 0, 1)),
+			Some((account1.secret_key.clone(), 0, 1)),
 			chain
 				.build_call(
 					"balance".to_string(),
 					"transfer".to_string(),
 					module::balance::TransferParams {
-						recipient: account2.3.clone(),
+						recipient: account2.address.clone(),
 						value: 2,
 					},
 				)
@@ -248,13 +248,13 @@ async fn test_txpool_capacity() {
 
 	let tx2 = chain
 		.build_transaction(
-			Some((account1.0.clone(), 1, 1)),
+			Some((account1.secret_key.clone(), 1, 1)),
 			chain
 				.build_call(
 					"balance".to_string(),
 					"transfer".to_string(),
 					module::balance::TransferParams {
-						recipient: account2.3.clone(),
+						recipient: account2.address.clone(),
 						value: 2,
 					},
 				)
@@ -264,13 +264,13 @@ async fn test_txpool_capacity() {
 
 	let tx3 = chain
 		.build_transaction(
-			Some((account1.0.clone(), 2, 1)),
+			Some((account1.secret_key.clone(), 2, 1)),
 			chain
 				.build_call(
 					"balance".to_string(),
 					"transfer".to_string(),
 					module::balance::TransferParams {
-						recipient: account2.3.clone(),
+						recipient: account2.address.clone(),
 						value: 2,
 					},
 				)

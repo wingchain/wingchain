@@ -82,6 +82,7 @@ impl Discovery {
 		self.kademlia.add_address(peer, address);
 	}
 
+	#[allow(clippy::mutable_key_type)]
 	pub fn known_peers(&mut self) -> HashSet<PeerId> {
 		let mut peers = HashSet::new();
 		for k in self.kademlia.kbuckets() {

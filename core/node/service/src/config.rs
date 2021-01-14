@@ -141,15 +141,13 @@ fn get_file_config(home: &PathBuf) -> CommonResult<FileConfig> {
 	Ok(config)
 }
 
-fn parse_from_socket_addresses(
-	addresses: &Vec<String>,
-) -> CommonResult<LinkedHashMap<Multiaddr, ()>> {
+fn parse_from_socket_addresses(addresses: &[String]) -> CommonResult<LinkedHashMap<Multiaddr, ()>> {
 	let addresses = addresses.iter().map(|x| -> CommonResult<Multiaddr> {
 		let addr: SocketAddrV4 = x
 			.parse()
 			.map_err(|_| ErrorKind::Config(format!("Invalid socket address: {:?}", x)))?;
 		let addr = Multiaddr::empty()
-			.with(Protocol::Ip4(addr.ip().clone()))
+			.with(Protocol::Ip4(*addr.ip()))
 			.with(Protocol::Tcp(addr.port()));
 		Ok(addr)
 	});
@@ -161,7 +159,7 @@ fn parse_from_socket_addresses(
 }
 
 fn parse_from_multi_addresses(
-	addresses: &Vec<String>,
+	addresses: &[String],
 ) -> CommonResult<LinkedHashMap<(PeerId, Multiaddr), ()>> {
 	let addresses = addresses
 		.iter()
@@ -187,12 +185,11 @@ fn parse_from_multi_addresses(
 
 fn read_secret_key_file(file: &PathBuf, home: &PathBuf) -> CommonResult<Vec<u8>> {
 	let file = {
-		let file = if file.starts_with("/") {
+		if file.starts_with("/") {
 			file.clone()
 		} else {
 			home.join(main_base::CONFIG).join(file)
-		};
-		file
+		}
 	};
 
 	let secret_key = {

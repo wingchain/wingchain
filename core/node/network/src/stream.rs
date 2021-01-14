@@ -31,6 +31,7 @@ use log::{debug, error};
 use crate::behaviour::{Behaviour, BehaviourOut};
 use crate::{NetworkInMessage, NetworkOutMessage};
 
+#[allow(clippy::while_let_loop)]
 pub async fn start(mut stream: NetworkStream) {
 	loop {
 		match stream.next().await {
@@ -72,6 +73,8 @@ pub struct UnopenedPeer {
 	pub known_addresses: HashSet<Multiaddr>,
 }
 
+#[allow(clippy::needless_collect)]
+#[allow(clippy::mutable_key_type)]
 impl NetworkStream {
 	fn network_state(&mut self) -> NetworkState {
 		let peer_id = Swarm::local_peer_id(&self.swarm).clone();

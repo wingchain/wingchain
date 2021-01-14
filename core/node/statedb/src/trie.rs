@@ -53,10 +53,7 @@ pub fn load_hasher(hash_impl: Arc<HashImpl>) -> CommonResult<()> {
 					if HASH_IMPL_20
 						.read()
 						.map_err(|_| errors::ErrorKind::LoadHasherFail)?
-						.name() == name =>
-				{
-					()
-				}
+						.name() == name => {}
 				_ => {
 					return Err(errors::ErrorKind::LoadHasherConflict(
 						HASH_IMPL_32
@@ -77,10 +74,7 @@ pub fn load_hasher(hash_impl: Arc<HashImpl>) -> CommonResult<()> {
 					if HASH_IMPL_32
 						.read()
 						.map_err(|_| errors::ErrorKind::LoadHasherFail)?
-						.name() == name =>
-				{
-					()
-				}
+						.name() == name => {}
 				_ => {
 					return Err(errors::ErrorKind::LoadHasherConflict(
 						HASH_IMPL_32
@@ -101,10 +95,7 @@ pub fn load_hasher(hash_impl: Arc<HashImpl>) -> CommonResult<()> {
 					if HASH_IMPL_64
 						.read()
 						.map_err(|_| errors::ErrorKind::LoadHasherFail)?
-						.name() == name =>
-				{
-					()
-				}
+						.name() == name => {}
 				_ => {
 					return Err(errors::ErrorKind::LoadHasherConflict(
 						HASH_IMPL_32

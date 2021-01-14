@@ -34,7 +34,6 @@
 //!  - original_160
 //!  - original_256
 //!  - custom algorithm provided by a dylib
-
 use std::convert::TryFrom;
 
 use primitives::errors::CommonError;
@@ -56,9 +55,9 @@ pub enum HashLength {
 	HashLength64,
 }
 
-impl Into<usize> for HashLength {
-	fn into(self) -> usize {
-		match self {
+impl From<HashLength> for usize {
+	fn from(v: HashLength) -> Self {
+		match v {
 			HashLength::HashLength20 => 20,
 			HashLength::HashLength32 => 32,
 			HashLength::HashLength64 => 64,
@@ -89,9 +88,9 @@ pub enum DsaLength {
 	DsaLength32_65_64,
 }
 
-impl Into<(usize, usize, usize)> for DsaLength {
-	fn into(self) -> (usize, usize, usize) {
-		match self {
+impl From<DsaLength> for (usize, usize, usize) {
+	fn from(v: DsaLength) -> Self {
+		match v {
 			DsaLength::DsaLength32_32_64 => (32, 32, 64),
 			DsaLength::DsaLength32_65_64 => (32, 65, 64),
 		}
@@ -120,9 +119,9 @@ pub enum AddressLength {
 	AddressLength32,
 }
 
-impl Into<usize> for AddressLength {
-	fn into(self) -> usize {
-		match self {
+impl From<AddressLength> for usize {
+	fn from(v: AddressLength) -> Self {
+		match v {
 			AddressLength::AddressLength20 => 20,
 			AddressLength::AddressLength32 => 32,
 		}

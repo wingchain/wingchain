@@ -22,7 +22,7 @@ use syn::{
 use quote::quote;
 
 /// Module method validate_xxx will be treated as the validator of method xxx
-const VALIDATE_METHOD_PREFIX: &'static str = "validate_";
+const VALIDATE_METHOD_PREFIX: &str = "validate_";
 
 #[proc_macro_attribute]
 pub fn dispatcher(_attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -360,16 +360,14 @@ fn get_module_call_methods(impl_item: &ItemImpl) -> Vec<ModuleMethod> {
 		})
 		.collect::<HashMap<_, _>>();
 
-	let call_methods = call_methods
+	call_methods
 		.into_iter()
 		.map(|mut method| {
 			let method_name = method.method_ident.to_string();
 			method.validate_ident = call_method_validates.get(&method_name).cloned();
 			method
 		})
-		.collect::<Vec<_>>();
-
-	call_methods
+		.collect::<Vec<_>>()
 }
 
 fn get_method_params_ident(method: &ImplItemMethod) -> Ident {

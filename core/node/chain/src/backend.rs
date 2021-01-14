@@ -121,15 +121,15 @@ impl Backend {
 
 		let genesis_hash = backend
 			.get_block_hash(&0)?
-			.ok_or(errors::ErrorKind::Data("Missing genesis block".to_string()))?;
+			.ok_or_else(|| errors::ErrorKind::Data("Missing genesis block".to_string()))?;
 
 		backend.executor.set_genesis_hash(genesis_hash);
 
 		backend.update_current_state()?;
 
-		backend.get_confirmed_number()?.map(|number| {
+		if let Some(number) = backend.get_confirmed_number()? {
 			info!("Confirmed number: {}", number);
-		});
+		}
 
 		Ok(backend)
 	}
@@ -277,19 +277,13 @@ impl Backend {
 			None => return Ok(None),
 		};
 
-		let block_hash = self
-			.get_block_hash(&confirmed_number)?
-			.ok_or(errors::ErrorKind::Data(format!(
-				"Missing block hash: number: {}",
-				confirmed_number
-			)))?;
+		let block_hash = self.get_block_hash(&confirmed_number)?.ok_or_else(|| {
+			errors::ErrorKind::Data(format!("Missing block hash: number: {}", confirmed_number))
+		})?;
 
-		let header = self
-			.get_header(&block_hash)?
-			.ok_or(errors::ErrorKind::Data(format!(
-				"Missing header: block_hash: {:?}",
-				block_hash
-			)))?;
+		let header = self.get_header(&block_hash)?.ok_or_else(|| {
+			errors::ErrorKind::Data(format!("Missing header: block_hash: {:?}", block_hash))
+		})?;
 
 		let confirmed_executed_number = match confirmed_number {
 			0 => None,
@@ -349,12 +343,9 @@ impl Backend {
 			Some(header) => header,
 			None => return Ok(None),
 		};
-		let body = self
-			.get_body(block_hash)?
-			.ok_or(errors::ErrorKind::Data(format!(
-				"Block missing body: block_hash: {:?}",
-				block_hash
-			)))?;
+		let body = self.get_body(block_hash)?.ok_or_else(|| {
+			errors::ErrorKind::Data(format!("Block missing body: block_hash: {:?}", block_hash))
+		})?;
 
 		Ok(Some(Block { header, body }))
 	}
@@ -399,19 +390,13 @@ impl Backend {
 		sender: Option<&Address>,
 		call: &Call,
 	) -> CommonResult<OpaqueCallResult> {
-		let header = self
-			.get_header(block_hash)?
-			.ok_or(errors::ErrorKind::Data(format!(
-				"Unknown block hash: {}",
-				block_hash
-			)))?;
+		let header = self.get_header(block_hash)?.ok_or_else(|| {
+			errors::ErrorKind::Data(format!("Unknown block hash: {}", block_hash))
+		})?;
 
-		let execution = self
-			.get_execution(block_hash)?
-			.ok_or(errors::ErrorKind::Data(format!(
-				"Not execution block hash: {}",
-				block_hash
-			)))?;
+		let execution = self.get_execution(block_hash)?.ok_or_else(|| {
+			errors::ErrorKind::Data(format!("Not execution block hash: {}", block_hash))
+		})?;
 
 		let number = header.number;
 		let timestamp = header.timestamp;
@@ -445,12 +430,9 @@ impl Backend {
 		method: String,
 		params: P,
 	) -> CommonResult<CallResult<R>> {
-		let block_hash = self
-			.get_block_hash(block_number)?
-			.ok_or(errors::ErrorKind::Data(format!(
-				"Unknown block number: {}",
-				block_number
-			)))?;
+		let block_hash = self.get_block_hash(block_number)?.ok_or_else(|| {
+			errors::ErrorKind::Data(format!("Unknown block number: {}", block_number))
+		})?;
 		self.execute_call_with_block_hash(&block_hash, sender, module, method, params)
 	}
 
@@ -486,38 +468,29 @@ impl Backend {
 		let number = build_block_params.number;
 		let timestamp = build_block_params.timestamp;
 		let parent_number = number - 1;
-		let parent_hash = self
-			.get_block_hash(&parent_number)?
-			.ok_or(errors::ErrorKind::Data(format!(
-				"Invalid block number: {}",
-				parent_number
-			)))?;
+		let parent_hash = self.get_block_hash(&parent_number)?.ok_or_else(|| {
+			errors::ErrorKind::Data(format!("Invalid block number: {}", parent_number))
+		})?;
 		let env = ContextEnv { number, timestamp };
 
-		let parent_header = self
-			.get_header(&parent_hash)?
-			.ok_or(errors::ErrorKind::Data(format!(
-				"Invalid block hash: {}",
-				parent_hash
-			)))?;
+		let parent_header = self.get_header(&parent_hash)?.ok_or_else(|| {
+			errors::ErrorKind::Data(format!("Invalid block hash: {}", parent_hash))
+		})?;
 
-		let meta_state_root = parent_header.meta_state_root.clone();
+		let meta_state_root = parent_header.meta_state_root;
 
 		let execution_number = build_block_params.execution_number;
 
-		let execution_block_hash =
-			self.get_block_hash(&execution_number)?
-				.ok_or(errors::ErrorKind::Data(format!(
-					"Invalid block number: {}",
-					execution_number
-				)))?;
+		let execution_block_hash = self.get_block_hash(&execution_number)?.ok_or_else(|| {
+			errors::ErrorKind::Data(format!("Invalid block number: {}", execution_number))
+		})?;
 
-		let execution =
-			self.get_execution(&execution_block_hash)?
-				.ok_or(errors::ErrorKind::Data(format!(
-					"Not execution block hash: {}",
-					execution_block_hash
-				)))?;
+		let execution = self.get_execution(&execution_block_hash)?.ok_or_else(|| {
+			errors::ErrorKind::Data(format!(
+				"Not execution block hash: {}",
+				execution_block_hash
+			))
+		})?;
 
 		let block_execution_gap = (number - execution_number) as ExecutionGap;
 		let block_execution = execution;
@@ -599,17 +572,12 @@ impl Backend {
 		}
 
 		let confirmed = {
-			let confirmed_number =
-				self.get_confirmed_number()?
-					.ok_or(errors::ErrorKind::Data(format!(
-						"Confirmed number not found"
-					)))?;
-			let block_hash =
-				self.get_block_hash(&confirmed_number)?
-					.ok_or(errors::ErrorKind::Data(format!(
-						"Invalid block number: {}",
-						confirmed_number
-					)))?;
+			let confirmed_number = self
+				.get_confirmed_number()?
+				.ok_or_else(|| errors::ErrorKind::Data("Confirmed number not found".to_string()))?;
+			let block_hash = self.get_block_hash(&confirmed_number)?.ok_or_else(|| {
+				errors::ErrorKind::Data(format!("Invalid block number: {}", confirmed_number))
+			})?;
 			(confirmed_number, block_hash)
 		};
 
@@ -632,7 +600,7 @@ impl Backend {
 			number, block_hash, meta_tx_count, payload_tx_count,
 		);
 
-		self.on_block_committed(number, block_hash.clone())?;
+		self.on_block_committed(number, block_hash)?;
 
 		Ok(())
 	}
@@ -735,47 +703,31 @@ impl Backend {
 	}
 
 	fn update_current_state(&self) -> CommonResult<()> {
-		let confirmed_number =
-			self.get_confirmed_number()?
-				.ok_or(errors::ErrorKind::Data(format!(
-					"Confirmed number not found"
-				)))?;
-		let confirmed_block_hash =
-			self.get_block_hash(&confirmed_number)?
-				.ok_or(errors::ErrorKind::Data(format!(
-					"Invalid block number: {}",
-					confirmed_number
-				)))?;
-		let header = self
-			.get_header(&confirmed_block_hash)?
-			.ok_or(errors::ErrorKind::Data(format!(
-				"Invalid block hash: {}",
-				confirmed_number
-			)))?;
+		let confirmed_number = self
+			.get_confirmed_number()?
+			.ok_or_else(|| errors::ErrorKind::Data("Confirmed number not found".to_string()))?;
+		let confirmed_block_hash = self.get_block_hash(&confirmed_number)?.ok_or_else(|| {
+			errors::ErrorKind::Data(format!("Invalid block number: {}", confirmed_number))
+		})?;
+		let header = self.get_header(&confirmed_block_hash)?.ok_or_else(|| {
+			errors::ErrorKind::Data(format!("Invalid block hash: {}", confirmed_number))
+		})?;
 
-		let executed_number =
-			self.get_execution_number()?
-				.ok_or(errors::ErrorKind::Data(format!(
-					"Executed number not found"
-				)))?;
-		let executed_block_hash =
-			self.get_block_hash(&executed_number)?
-				.ok_or(errors::ErrorKind::Data(format!(
-					"Invalid block number: {}",
-					executed_number
-				)))?;
-		let execution =
-			self.get_execution(&executed_block_hash)?
-				.ok_or(errors::ErrorKind::Data(format!(
-					"Not executed block hash: {}",
-					executed_block_hash
-				)))?;
+		let executed_number = self
+			.get_execution_number()?
+			.ok_or_else(|| errors::ErrorKind::Data("Executed number not found".to_string()))?;
+		let executed_block_hash = self.get_block_hash(&executed_number)?.ok_or_else(|| {
+			errors::ErrorKind::Data(format!("Invalid block number: {}", executed_number))
+		})?;
+		let execution = self.get_execution(&executed_block_hash)?.ok_or_else(|| {
+			errors::ErrorKind::Data(format!("Not executed block hash: {}", executed_block_hash))
+		})?;
 
 		let number = confirmed_number + 1;
 		let timestamp = SystemTime::now()
 			.duration_since(SystemTime::UNIX_EPOCH)
 			.map(|timestamp| timestamp.as_millis() as u64)
-			.map_err(|_| errors::ErrorKind::Data(format!("Timestamp error")))?;
+			.map_err(|_| errors::ErrorKind::Data("Timestamp error".to_string()))?;
 
 		let meta_state_root = header.meta_state_root;
 		let payload_state_root = execution.payload_execution_state_root;
@@ -799,7 +751,7 @@ impl Backend {
 				"get_meta".to_string(),
 				EmptyParams,
 			)?
-			.map_err(|e| ErrorKind::Call(e))?;
+			.map_err(ErrorKind::Call)?;
 
 		let current_state = CurrentState {
 			context_essence,
@@ -830,8 +782,9 @@ impl Backend {
 		let spec = match genesis_inited {
 			true => {
 				let spec = db.get(node_db::columns::GLOBAL, node_db::global_key::SPEC)?;
-				let spec = spec.ok_or(errors::ErrorKind::Spec("Missing spec in db".to_string()))?;
-				let spec: String = codec::decode(&mut &spec[..])
+				let spec =
+					spec.ok_or_else(|| errors::ErrorKind::Spec("Missing spec in db".to_string()))?;
+				let spec: String = codec::decode(&spec)
 					.map_err(|_| errors::ErrorKind::Spec("Serde error".to_string()))?;
 				spec
 			}
@@ -840,10 +793,9 @@ impl Backend {
 					.home
 					.join(main_base::CONFIG)
 					.join(main_base::SPEC_FILE);
-				let spec = fs::read_to_string(&spec_path).map_err(|_| {
+				fs::read_to_string(&spec_path).map_err(|_| {
 					errors::ErrorKind::Spec(format!("Failed to read spec file: {:?}", spec_path))
-				})?;
-				spec
+				})?
 			}
 		};
 		let spec = toml::from_str(&spec)

@@ -14,7 +14,7 @@
 
 //! Common lib for subcommands
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use app_dirs::get_app_root;
 use app_dirs::{AppDataType, AppInfo};
@@ -50,17 +50,16 @@ pub fn get_default_home() -> CommonResult<PathBuf> {
 		author: AUTHOR,
 	};
 
-	let home =
-		get_app_root(AppDataType::UserData, &app_info).map_err(|e| errors::ErrorKind::AppDir(e))?;
+	let home = get_app_root(AppDataType::UserData, &app_info).map_err(errors::ErrorKind::AppDir)?;
 	Ok(home)
 }
 
 /// Get the config file path, <home>/config.toml
-pub fn get_config_path(home: &PathBuf) -> PathBuf {
+pub fn get_config_path(home: &Path) -> PathBuf {
 	home.join(CONFIG)
 }
 
 /// Get the config file path, <home>/spec.toml
-pub fn get_data_path(home: &PathBuf) -> PathBuf {
+pub fn get_data_path(home: &Path) -> PathBuf {
 	home.join(DATA)
 }

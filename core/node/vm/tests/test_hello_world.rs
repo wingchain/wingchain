@@ -34,7 +34,7 @@ fn test_vm_hw_validate_contract() {
 		VMConfig::default(),
 		tx_hash,
 		Some(contract_address),
-		Some(account1.3.clone()),
+		Some(account1.address.clone()),
 		executor_context,
 	);
 
@@ -89,7 +89,7 @@ fn test_vm_hw_init() {
 		VMConfig::default(),
 		tx_hash,
 		Some(contract_address),
-		Some(account1.3.clone()),
+		Some(account1.address.clone()),
 		executor_context,
 	);
 
@@ -115,7 +115,7 @@ fn test_vm_hw_hello() {
 		VMConfig::default(),
 		tx_hash,
 		Some(contract_address),
-		Some(account1.3),
+		Some(account1.address),
 		executor_context,
 	);
 
@@ -133,13 +133,17 @@ fn test_vm_hw_pay_value() {
 
 	let executor_context = TestExecutorContext::new();
 	let tx_hash = Some(Hash(vec![1]));
-	endow(executor_context.clone(), vec![(account1.3.clone(), 1000)]).unwrap();
+	endow(
+		executor_context.clone(),
+		vec![(account1.address.clone(), 1000)],
+	)
+	.unwrap();
 
 	let context = TestVMContext::new(
 		VMConfig::default(),
 		tx_hash,
 		Some(contract_address),
-		Some(account1.3),
+		Some(account1.address),
 		executor_context,
 	);
 
@@ -161,7 +165,7 @@ fn test_vm_hw_error() {
 		VMConfig::default(),
 		tx_hash,
 		Some(contract_address),
-		Some(account1.3),
+		Some(account1.address),
 		executor_context,
 	);
 
@@ -188,7 +192,7 @@ fn test_vm_hw_get_env() {
 		VMConfig::default(),
 		tx_hash,
 		Some(contract_address),
-		Some(account1.3),
+		Some(account1.address),
 		executor_context,
 	);
 
@@ -210,7 +214,7 @@ fn test_vm_hw_get_call_env() {
 		VMConfig::default(),
 		tx_hash,
 		Some(contract_address),
-		Some(account1.3),
+		Some(account1.address),
 		executor_context,
 	);
 
@@ -228,13 +232,17 @@ fn test_vm_hw_get_contract_env() {
 
 	let executor_context = TestExecutorContext::new();
 	let tx_hash = Some(Hash(vec![1]));
-	endow(executor_context.clone(), vec![(account1.3.clone(), 1000)]).unwrap();
+	endow(
+		executor_context.clone(),
+		vec![(account1.address.clone(), 1000)],
+	)
+	.unwrap();
 
 	let context = TestVMContext::new(
 		VMConfig::default(),
 		tx_hash,
 		Some(contract_address),
-		Some(account1.3),
+		Some(account1.address),
 		executor_context,
 	);
 
@@ -260,7 +268,7 @@ fn test_vm_hw_value() {
 		VMConfig::default(),
 		tx_hash,
 		Some(contract_address),
-		Some(account1.3),
+		Some(account1.address),
 		executor_context,
 	);
 
@@ -289,7 +297,7 @@ fn test_vm_hw_map() {
 		VMConfig::default(),
 		tx_hash,
 		Some(contract_address),
-		Some(account1.3),
+		Some(account1.address),
 		executor_context,
 	);
 
@@ -318,7 +326,7 @@ fn test_vm_hw_event() {
 		VMConfig::default(),
 		tx_hash,
 		Some(contract_address),
-		Some(account1.3),
+		Some(account1.address),
 		executor_context.clone(),
 	);
 
@@ -344,7 +352,7 @@ fn test_vm_hw_hash() {
 		VMConfig::default(),
 		tx_hash,
 		Some(contract_address),
-		Some(account1.3),
+		Some(account1.address),
 		executor_context,
 	);
 
@@ -369,7 +377,7 @@ fn test_vm_hw_address() {
 		VMConfig::default(),
 		tx_hash,
 		Some(contract_address),
-		Some(account1.3),
+		Some(account1.address),
 		executor_context,
 	);
 
@@ -394,7 +402,7 @@ fn test_vm_hw_verify_address() {
 		VMConfig::default(),
 		tx_hash,
 		Some(contract_address),
-		Some(account1.3),
+		Some(account1.address),
 		executor_context,
 	);
 
@@ -421,14 +429,18 @@ fn test_vm_hw_balance() {
 	let contract_address = Address(vec![1]);
 
 	let executor_context = TestExecutorContext::new();
-	endow(executor_context.clone(), vec![(account1.3.clone(), 1000)]).unwrap();
+	endow(
+		executor_context.clone(),
+		vec![(account1.address.clone(), 1000)],
+	)
+	.unwrap();
 
 	let tx_hash = Some(Hash(vec![1]));
 	let context = TestVMContext::new(
 		VMConfig::default(),
 		tx_hash,
 		Some(contract_address),
-		Some(account1.3),
+		Some(account1.address),
 		executor_context,
 	);
 
@@ -448,17 +460,21 @@ fn test_vm_hw_balance_transfer_success() {
 
 	let executor_context = TestExecutorContext::new();
 	let tx_hash = Some(Hash(vec![1]));
-	endow(executor_context.clone(), vec![(account1.3.clone(), 1000)]).unwrap();
+	endow(
+		executor_context.clone(),
+		vec![(account1.address.clone(), 1000)],
+	)
+	.unwrap();
 
 	let context = TestVMContext::new(
 		VMConfig::default(),
 		tx_hash,
 		Some(contract_address.clone()),
-		Some(account1.3.clone()),
+		Some(account1.address.clone()),
 		executor_context.clone(),
 	);
 
-	let params = &format!(r#"{{"recipient":"{}", "value": 10}}"#, account2.3)
+	let params = &format!(r#"{{"recipient":"{}", "value": 10}}"#, account2.address)
 		.as_bytes()
 		.to_vec();
 	let _result = vm_execute(&context, Mode::Call, "balance_transfer", &params, 100);
@@ -478,15 +494,15 @@ fn test_vm_hw_balance_transfer_success() {
 		VMConfig::default(),
 		tx_hash,
 		Some(contract_address),
-		Some(account1.3.clone()),
+		Some(account1.address.clone()),
 		executor_context,
 	);
 
-	let account1_balance = context.module_balance_get(&account1.3).unwrap();
+	let account1_balance = context.module_balance_get(&account1.address).unwrap();
 	let contract_balance = context
 		.module_balance_get(&context.contract_env().contract_address.as_ref().unwrap())
 		.unwrap();
-	let account2_balance = context.module_balance_get(&account2.3).unwrap();
+	let account2_balance = context.module_balance_get(&account2.address).unwrap();
 
 	assert_eq!(account1_balance, 900);
 	assert_eq!(contract_balance, 90);
@@ -503,18 +519,22 @@ fn test_vm_hw_balance_transfer_failed() {
 
 	let executor_context = TestExecutorContext::new();
 
-	endow(executor_context.clone(), vec![(account1.3.clone(), 1000)]).unwrap();
+	endow(
+		executor_context.clone(),
+		vec![(account1.address.clone(), 1000)],
+	)
+	.unwrap();
 
 	let tx_hash = Some(Hash(vec![1]));
 	let context = TestVMContext::new(
 		VMConfig::default(),
 		tx_hash,
 		Some(contract_address.clone()),
-		Some(account1.3.clone()),
+		Some(account1.address.clone()),
 		executor_context.clone(),
 	);
 
-	let params = &format!(r#"{{"recipient":"{}", "value": 200}}"#, account2.3)
+	let params = &format!(r#"{{"recipient":"{}", "value": 200}}"#, account2.address)
 		.as_bytes()
 		.to_vec();
 	let _result = vm_execute(&context, Mode::Call, "balance_transfer", &params, 100);
@@ -534,15 +554,15 @@ fn test_vm_hw_balance_transfer_failed() {
 		VMConfig::default(),
 		tx_hash,
 		Some(contract_address),
-		Some(account1.3.clone()),
+		Some(account1.address.clone()),
 		executor_context,
 	));
 
-	let account1_balance = context.module_balance_get(&account1.3).unwrap();
+	let account1_balance = context.module_balance_get(&account1.address).unwrap();
 	let contract_balance = context
 		.module_balance_get(&context.contract_env().contract_address.as_ref().unwrap())
 		.unwrap();
-	let account2_balance = context.module_balance_get(&account2.3).unwrap();
+	let account2_balance = context.module_balance_get(&account2.address).unwrap();
 
 	assert_eq!(account1_balance, 1000);
 	assert_eq!(contract_balance, 0);
@@ -559,18 +579,22 @@ fn test_vm_hw_balance_transfer_partial_failed() {
 
 	let executor_context = TestExecutorContext::new();
 
-	endow(executor_context.clone(), vec![(account1.3.clone(), 1000)]).unwrap();
+	endow(
+		executor_context.clone(),
+		vec![(account1.address.clone(), 1000)],
+	)
+	.unwrap();
 
 	let tx_hash = Some(Hash(vec![1]));
 	let context = TestVMContext::new(
 		VMConfig::default(),
 		tx_hash,
 		Some(contract_address.clone()),
-		Some(account1.3.clone()),
+		Some(account1.address.clone()),
 		executor_context.clone(),
 	);
 
-	let params = &format!(r#"{{"recipient":"{}", "value": 200}}"#, account2.3)
+	let params = &format!(r#"{{"recipient":"{}", "value": 200}}"#, account2.address)
 		.as_bytes()
 		.to_vec();
 	let result = vm_execute(&context, Mode::Call, "balance_transfer_ea", &params, 100);
@@ -591,15 +615,15 @@ fn test_vm_hw_balance_transfer_partial_failed() {
 		VMConfig::default(),
 		tx_hash,
 		Some(contract_address),
-		Some(account1.3.clone()),
+		Some(account1.address.clone()),
 		executor_context,
 	);
 
-	let account1_balance = context.module_balance_get(&account1.3).unwrap();
+	let account1_balance = context.module_balance_get(&account1.address).unwrap();
 	let contract_balance = context
 		.module_balance_get(&context.contract_env().contract_address.as_ref().unwrap())
 		.unwrap();
-	let account2_balance = context.module_balance_get(&account2.3).unwrap();
+	let account2_balance = context.module_balance_get(&account2.address).unwrap();
 
 	assert_eq!(account1_balance, 900);
 	assert_eq!(contract_balance, 100);
@@ -618,7 +642,7 @@ fn test_vm_hw_nested_contract_execute() {
 
 	base::create_contract(
 		&contract_address,
-		&account1.3,
+		&account1.address,
 		get_code(),
 		executor_context.clone(),
 		"init",
@@ -632,7 +656,7 @@ fn test_vm_hw_nested_contract_execute() {
 		VMConfig::default(),
 		tx_hash,
 		Some(contract_address.clone()),
-		Some(account1.3.clone()),
+		Some(account1.address.clone()),
 		executor_context.clone(),
 	);
 

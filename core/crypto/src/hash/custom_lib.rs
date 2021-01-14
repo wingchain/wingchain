@@ -15,7 +15,7 @@
 use std::convert::TryInto;
 use std::ffi::CStr;
 use std::os::raw::{c_char, c_uchar, c_uint};
-use std::path::PathBuf;
+use std::path::Path;
 
 #[cfg(unix)]
 use libloading::os::unix as imp;
@@ -44,8 +44,8 @@ pub struct CustomLib {
 }
 
 impl CustomLib {
-	pub fn new(path: &PathBuf) -> CommonResult<Self> {
-		let err = |_| errors::ErrorKind::CustomLibLoadFailed(path.to_owned());
+	pub fn new(path: &Path) -> CommonResult<Self> {
+		let err = |_| errors::ErrorKind::CustomLibLoadFailed(path.to_path_buf());
 
 		let lib = Library::new(path).map_err(err)?;
 
@@ -81,7 +81,7 @@ impl CustomLib {
 	fn name(
 		call_name: &imp::Symbol<CallName>,
 		call_name_free: &imp::Symbol<CallNameFree>,
-		path: &PathBuf,
+		path: &Path,
 	) -> CommonResult<String> {
 		let err = |_| errors::ErrorKind::InvalidName(format!("{:?}", path));
 
@@ -132,13 +132,13 @@ macro_rules! declare_hash_custom_lib {
 		use std::os::raw::{c_char, c_uchar, c_uint};
 
 		#[no_mangle]
-		pub extern "C" fn _crypto_hash_custom_name() -> *mut c_char {
+		pub unsafe extern "C" fn _crypto_hash_custom_name() -> *mut c_char {
 			let name = $impl.name();
 			CString::new(name).expect("qed").into_raw()
 		}
 
 		#[no_mangle]
-		pub extern "C" fn _crypto_hash_custom_name_free(name: *mut c_char) {
+		pub unsafe extern "C" fn _crypto_hash_custom_name_free(name: *mut c_char) {
 			unsafe {
 				assert!(!name.is_null());
 				CString::from_raw(name)
@@ -152,7 +152,7 @@ macro_rules! declare_hash_custom_lib {
 		}
 
 		#[no_mangle]
-		pub extern "C" fn _crypto_hash_custom_hash(
+		pub unsafe extern "C" fn _crypto_hash_custom_hash(
 			out: *mut c_uchar,
 			out_len: c_uint,
 			data: *const c_uchar,

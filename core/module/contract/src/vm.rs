@@ -33,12 +33,14 @@ use crate::module_to_vm_error;
 
 const CONTRACT_DATA_STORAGE_KEY: &[u8] = b"contract_data";
 
+type Stack<T> = Rc<VecDeque<Rc<RefCell<T>>>>;
+
 #[derive(Clone)]
 struct StackedExecutorContext<EC: Context> {
 	executor_context: EC,
-	meta_buffer_stack: Rc<VecDeque<Rc<RefCell<HashMap<DBKey, Option<DBValue>>>>>>,
-	payload_buffer_stack: Rc<VecDeque<Rc<RefCell<HashMap<DBKey, Option<DBValue>>>>>>,
-	events_stack: Rc<VecDeque<Rc<RefCell<Vec<Event>>>>>,
+	meta_buffer_stack: Stack<HashMap<DBKey, Option<DBValue>>>,
+	payload_buffer_stack: Stack<HashMap<DBKey, Option<DBValue>>>,
+	events_stack: Stack<Vec<Event>>,
 }
 
 impl<EC: Context> StackedExecutorContext<EC> {
@@ -368,11 +370,10 @@ impl<M: Module> VMContext for DefaultVMContext<M> {
 	}
 	fn payload_set(&self, key: &[u8], value: Option<DBValue>) -> VMResult<()> {
 		let key = &self.vm_to_module_key(key)?;
-		let result = self
-			.base_context
+		self.base_context
 			.payload_set(key, value)
 			.map_err(module_to_vm_error)?;
-		Ok(result)
+		Ok(())
 	}
 	fn payload_drain_buffer(&self) -> VMResult<Vec<(DBKey, Option<DBValue>)>> {
 		let result = self
