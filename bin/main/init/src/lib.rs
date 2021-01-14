@@ -16,7 +16,7 @@
 //! init the config file, spec file before running a node
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::Path;
 
 use chrono::TimeZone;
 use log::info;
@@ -48,7 +48,7 @@ pub fn run(opt: InitOpt) -> CommonResult<()> {
 	Ok(())
 }
 
-fn init_config(home: &PathBuf) -> CommonResult<()> {
+fn init_config(home: &Path) -> CommonResult<()> {
 	let config_path = base::get_config_path(home);
 
 	fs::create_dir_all(&config_path).map_err(errors::ErrorKind::IO)?;
@@ -59,7 +59,7 @@ fn init_config(home: &PathBuf) -> CommonResult<()> {
 	Ok(())
 }
 
-fn init_spec_file(config_path: &PathBuf) -> CommonResult<()> {
+fn init_spec_file(config_path: &Path) -> CommonResult<()> {
 	let template = &include_bytes!("./res/spec.toml")[..];
 
 	let template = String::from_utf8_lossy(template);
@@ -74,7 +74,7 @@ fn init_spec_file(config_path: &PathBuf) -> CommonResult<()> {
 	Ok(())
 }
 
-fn init_config_file(config_path: &PathBuf) -> CommonResult<()> {
+fn init_config_file(config_path: &Path) -> CommonResult<()> {
 	let template = &include_bytes!("./res/config.toml")[..];
 
 	let template = String::from_utf8_lossy(template).to_string();
@@ -100,7 +100,7 @@ fn gen_time() -> String {
 	chrono::Local.timestamp_millis(millis).to_rfc3339()
 }
 
-fn init_data(home: &PathBuf) -> CommonResult<()> {
+fn init_data(home: &Path) -> CommonResult<()> {
 	let data_path = base::get_data_path(home);
 
 	fs::create_dir_all(data_path).map_err(errors::ErrorKind::IO)?;

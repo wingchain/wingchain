@@ -14,7 +14,7 @@
 
 //! Key value db based on rocksdb
 
-use std::path::PathBuf;
+use std::path::Path;
 
 use parking_lot::RwLock;
 use rocksdb::{
@@ -42,7 +42,7 @@ pub struct DB {
 
 impl DB {
 	/// Open the db from the given path
-	pub fn open(path: &PathBuf) -> CommonResult<DB> {
+	pub fn open(path: &Path) -> CommonResult<DB> {
 		let col_count = columns::COLUMN_NAMES.len();
 		let db_opts = gen_db_opts(col_count);
 		let block_opts = gen_block_opts();

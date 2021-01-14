@@ -14,6 +14,7 @@
 
 //! Contract sdk
 #![allow(clippy::too_many_arguments)]
+#![allow(clippy::unnecessary_wraps)]
 
 #[allow(unused_imports)]
 #[macro_use]

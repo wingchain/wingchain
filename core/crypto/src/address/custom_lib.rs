@@ -15,7 +15,7 @@
 use std::convert::TryInto;
 use std::ffi::CStr;
 use std::os::raw::{c_char, c_uchar, c_uint};
-use std::path::PathBuf;
+use std::path::Path;
 
 #[cfg(unix)]
 use libloading::os::unix as imp;
@@ -43,8 +43,8 @@ pub struct CustomLib {
 }
 
 impl CustomLib {
-	pub fn new(path: &PathBuf) -> CommonResult<Self> {
-		let err = |_| errors::ErrorKind::CustomLibLoadFailed(path.clone());
+	pub fn new(path: &Path) -> CommonResult<Self> {
+		let err = |_| errors::ErrorKind::CustomLibLoadFailed(path.to_path_buf());
 
 		let lib = Library::new(path).map_err(err)?;
 
@@ -82,7 +82,7 @@ impl CustomLib {
 	fn name(
 		call_name: &imp::Symbol<CallName>,
 		call_name_free: &imp::Symbol<CallNameFree>,
-		path: &PathBuf,
+		path: &Path,
 	) -> CommonResult<String> {
 		let err = |_| errors::ErrorKind::InvalidName(format!("{:?}", path));
 
