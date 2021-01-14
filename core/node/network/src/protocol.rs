@@ -512,9 +512,9 @@ impl NetworkBehaviour for Protocol {
 				let should_open = match endpoint {
 					ConnectedPoint::Dialer { .. } => true,
 					ConnectedPoint::Listener { .. } => {
-						let dialer_connection_exist = connected_list.iter().any(|(_k, v)| {
-							matches!(v.connected_point, ConnectedPoint::Dialer { .. })
-						});
+						let dialer_connection_exist = connected_list.iter().any(
+							|(_k, v)| matches!(v.connected_point, ConnectedPoint::Dialer { .. }),
+						);
 						dialer_connection_exist
 					}
 				};
@@ -560,9 +560,9 @@ impl NetworkBehaviour for Protocol {
 				let should_open = match endpoint {
 					ConnectedPoint::Dialer { .. } => true,
 					ConnectedPoint::Listener { .. } => {
-						let dialer_connection_exist = connected_list.iter().any(|(_k, v)| {
-							matches!(v.connected_point, ConnectedPoint::Dialer { .. })
-						});
+						let dialer_connection_exist = connected_list.iter().any(
+							|(_k, v)| matches!(v.connected_point, ConnectedPoint::Dialer { .. }),
+						);
 						dialer_connection_exist
 					}
 				};
