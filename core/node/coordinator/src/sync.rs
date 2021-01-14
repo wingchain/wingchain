@@ -84,7 +84,7 @@ where
 		let (block_hash, header) = self
 			.support
 			.get_header_by_number(&self.support.get_confirmed_number()?)?;
-		self.announce_block(block_hash, header, MessageTarget::One(peer_id.clone()))?;
+		self.announce_block(block_hash, header, MessageTarget::One(peer_id))?;
 
 		Ok(())
 	}
