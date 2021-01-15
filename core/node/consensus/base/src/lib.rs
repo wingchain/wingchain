@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use primitives::errors::CommonResult;
-use primitives::SecretKey;
+use primitives::{Header, Proof, SecretKey};
 
 pub mod errors;
 pub mod support;
@@ -24,4 +24,5 @@ pub struct ConsensusConfig {
 
 pub trait Consensus {
 	fn generate(&self) -> CommonResult<()>;
+	fn verify_proof(&self, header: &Header, proof: &Proof) -> CommonResult<()>;
 }

@@ -68,6 +68,7 @@ where
 			method::chain_get_block_by_number::<S>,
 		)
 		.with_method("chain_getBlockByHash", method::chain_get_block_by_hash::<S>)
+		.with_method("chain_getProofByHash", method::chain_get_proof_by_hash::<S>)
 		.with_method(
 			"chain_getTransactionByHash",
 			method::chain_get_transaction_by_hash::<S>,

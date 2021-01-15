@@ -37,7 +37,7 @@ use primitives::errors::{Catchable, CommonResult};
 use primitives::types::{CallResult, ExecutionGap};
 use primitives::{
 	Address, Block, BlockNumber, Body, BuildBlockParams, BuildExecutionParams, Call, DBKey,
-	Execution, Hash, Header, Nonce, OpaqueCallResult, Receipt, SecretKey, Transaction,
+	Execution, Hash, Header, Nonce, OpaqueCallResult, Proof, Receipt, SecretKey, Transaction,
 };
 
 use crate::errors::{CommitBlockError, ErrorKind, ValidateTxError};
@@ -359,6 +359,15 @@ impl Backend {
 		)
 	}
 
+	/// Get the proof by block hash
+	pub fn get_proof(&self, block_hash: &Hash) -> CommonResult<Option<Proof>> {
+		self.db.get_with(
+			node_db::columns::PROOF,
+			&DBKey::from_slice(&block_hash.0),
+			|x| codec::decode(&x[..]),
+		)
+	}
+
 	/// Get the transaction by transaction hash
 	pub fn get_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Transaction>> {
 		self.db
@@ -539,6 +548,7 @@ impl Backend {
 		};
 
 		let block_hash = self.hash(&header)?;
+		let proof = Default::default();
 
 		let block = ChainCommitBlockParams {
 			block_hash,
@@ -551,6 +561,7 @@ impl Backend {
 			meta_receipts,
 			payload_txs,
 			meta_transaction,
+			proof,
 		};
 
 		Ok(block)
@@ -898,6 +909,7 @@ impl Backend {
 		};
 
 		let block_hash = self.hash(&header)?;
+		let proof = Default::default();
 
 		let commit_block_params = ChainCommitBlockParams {
 			block_hash: block_hash.clone(),
@@ -910,6 +922,7 @@ impl Backend {
 			meta_receipts,
 			payload_txs,
 			meta_transaction,
+			proof,
 		};
 
 		let execution = Execution {
@@ -1002,14 +1015,21 @@ fn commit_block(
 		);
 	}
 
-	// 6. block hash
+	// 6. proof
+	transaction.put_owned(
+		node_db::columns::PROOF,
+		DBKey::from_slice(&block_hash.0),
+		codec::encode(&commit_block_params.proof)?,
+	);
+
+	// 7. block hash
 	transaction.put_owned(
 		node_db::columns::BLOCK_HASH,
 		DBKey::from_slice(&codec::encode(&commit_block_params.header.number)?),
 		codec::encode(&commit_block_params.block_hash)?,
 	);
 
-	// 7. confirmed number
+	// 8. confirmed number
 	transaction.put_owned(
 		node_db::columns::GLOBAL,
 		DBKey::from_slice(node_db::global_key::CONFIRMED_NUMBER),

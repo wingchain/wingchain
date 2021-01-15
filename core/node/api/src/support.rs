@@ -24,8 +24,8 @@ use node_txpool::support::DefaultTxPoolSupport;
 use node_txpool::TxPool;
 use primitives::errors::CommonResult;
 use primitives::{
-	Address, Block, BlockNumber, Call, Hash, Header, Nonce, OpaqueCallResult, Receipt, SecretKey,
-	Transaction,
+	Address, Block, BlockNumber, Call, Hash, Header, Nonce, OpaqueCallResult, Proof, Receipt,
+	SecretKey, Transaction,
 };
 
 #[async_trait]
@@ -36,6 +36,7 @@ pub trait ApiSupport {
 	fn get_block_hash(&self, number: &BlockNumber) -> CommonResult<Option<Hash>>;
 	fn get_block(&self, block_hash: &Hash) -> CommonResult<Option<Block>>;
 	fn get_header(&self, block_hash: &Hash) -> CommonResult<Option<Header>>;
+	fn get_proof(&self, block_hash: &Hash) -> CommonResult<Option<Proof>>;
 	fn get_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Transaction>>;
 	fn get_raw_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Vec<u8>>>;
 	fn get_receipt(&self, tx_hash: &Hash) -> CommonResult<Option<Receipt>>;
@@ -94,6 +95,9 @@ impl ApiSupport for DefaultApiSupport {
 	}
 	fn get_header(&self, block_hash: &Hash) -> CommonResult<Option<Header>> {
 		self.chain.get_header(block_hash)
+	}
+	fn get_proof(&self, block_hash: &Hash) -> CommonResult<Option<Proof>> {
+		self.chain.get_proof(block_hash)
 	}
 	fn get_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Transaction>> {
 		self.chain.get_transaction(tx_hash)

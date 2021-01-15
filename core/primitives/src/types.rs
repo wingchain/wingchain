@@ -91,6 +91,12 @@ pub struct Block {
 	pub body: Body,
 }
 
+#[derive(Clone, Debug, Encode, Decode, PartialEq)]
+pub struct Proof {
+	pub name: String,
+	pub data: Vec<u8>,
+}
+
 #[derive(Debug, PartialEq)]
 pub struct FullTransaction {
 	pub tx: Transaction,
@@ -126,6 +132,7 @@ pub struct CommitBlockParams<T> {
 	pub meta_receipts: Vec<Arc<FullReceipt>>,
 	pub payload_txs: Vec<Arc<FullTransaction>>,
 	pub meta_transaction: T,
+	pub proof: Proof,
 }
 
 #[derive(Debug, PartialEq)]

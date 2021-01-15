@@ -15,7 +15,7 @@
 use std::convert::{TryFrom, TryInto};
 
 use primitives::codec::{Decode, Encode};
-use primitives::{BlockNumber, Hash, Header, Transaction};
+use primitives::{BlockNumber, Hash, Header, Proof, Transaction};
 
 #[derive(Debug, PartialEq)]
 pub enum ProtocolMessage {
@@ -61,8 +61,9 @@ pub struct TxPropagate {
 pub struct RequestId(pub u64);
 
 pub type Fields = u32;
-pub const FIELDS_HEADER: u32 = 0b01;
-pub const FIELDS_BODY: u32 = 0b10;
+pub const FIELDS_HEADER: u32 = 0b0001;
+pub const FIELDS_BODY: u32 = 0b0010;
+pub const FIELDS_PROOF: u32 = 0b0100;
 
 #[derive(Encode, Decode, Debug, PartialEq)]
 pub enum BlockId {
@@ -82,6 +83,7 @@ pub struct BlockData {
 	pub block_hash: Hash,
 	pub header: Option<Header>,
 	pub body: Option<BodyData>,
+	pub proof: Option<Proof>,
 }
 
 #[derive(Encode, Decode, Debug, PartialEq)]

@@ -19,6 +19,7 @@ use serde::{de, ser, Deserialize, Serialize};
 
 use crate::errors::{CommonError, CommonErrorKind, CommonResult};
 use crate::types::{Address, Event, Hash, Transaction, TransactionForHash};
+use crate::Proof;
 
 impl fmt::Debug for Hash {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -206,5 +207,14 @@ impl Event {
 		let vec = serde_json::to_vec(&event)
 			.map_err(|e| CommonError::new(CommonErrorKind::Codec, Box::new(e)))?;
 		Ok(Self(vec))
+	}
+}
+
+impl Default for Proof {
+	fn default() -> Self {
+		Proof {
+			name: "".to_string(),
+			data: vec![],
+		}
 	}
 }

@@ -16,6 +16,7 @@
 //! one node append new blocks at a certain frequency specified by block interval
 
 use std::collections::HashSet;
+use std::convert::TryInto;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::Context;
@@ -27,23 +28,28 @@ use futures::{Future, Stream};
 use futures_timer::Delay;
 use log::{debug, info, trace, warn};
 
+use crate::proof::Proof;
 use crypto::address::Address as AddressT;
 use crypto::dsa::{Dsa, KeyPair};
 use node_consensus_base::{support::ConsensusSupport, Consensus as ConsensusT, ConsensusConfig};
+use node_consensus_primitives::CONSENSUS_POA;
 use node_executor::module;
 use node_executor::module::poa::Meta;
 use node_executor_primitives::EmptyParams;
 use primitives::errors::{Catchable, CommonResult};
 use primitives::types::ExecutionGap;
-use primitives::{Address, BlockNumber, BuildBlockParams, FullTransaction, SecretKey};
+use primitives::{
+	codec, Address, BlockNumber, BuildBlockParams, FullTransaction, Header, SecretKey,
+};
 
-pub mod errors;
+pub mod proof;
 
 pub struct Poa<S>
 where
 	S: ConsensusSupport + Send + Sync + 'static,
 {
 	stream: Arc<PoaStream<S>>,
+	support: Arc<S>,
 }
 
 impl<S> Poa<S>
@@ -53,8 +59,9 @@ where
 	pub fn new(config: ConsensusConfig, support: Arc<S>) -> CommonResult<Self> {
 		let poa_meta = get_poa_meta(&support, &0)?;
 
-		let current_address = if let Some(secret_key) = &config.secret_key {
-			Some(get_current_address(secret_key, &support)?)
+		let current_secret_key = config.secret_key;
+		let current_address = if let Some(secret_key) = &current_secret_key {
+			Some(get_address(secret_key, &support)?)
 		} else {
 			None
 		};
@@ -68,16 +75,17 @@ where
 		);
 
 		let stream = Arc::new(PoaStream {
-			support,
+			support: support.clone(),
 			poa_meta,
 			current_address,
+			current_secret_key,
 		});
 
 		tokio::spawn(start(stream.clone()));
 
 		info!("Initializing consensus poa");
 
-		let poa = Poa { stream };
+		let poa = Poa { stream, support };
 
 		Ok(poa)
 	}
@@ -97,6 +105,41 @@ where
 		self.stream.work(schedule_info)?;
 		Ok(())
 	}
+
+	fn verify_proof(&self, header: &Header, proof: &primitives::Proof) -> CommonResult<()> {
+		let name = &proof.name;
+		if name != CONSENSUS_POA {
+			return Err(
+				node_consensus_base::errors::ErrorKind::VerifyProofError(format!(
+					"Unexpected consensus: {}",
+					name
+				))
+				.into(),
+			);
+		}
+		let data = &proof.data;
+		let proof: Proof = codec::decode(data).map_err(|_| {
+			node_consensus_base::errors::ErrorKind::VerifyProofError("Decode error".to_string())
+		})?;
+
+		let address = {
+			let addresser = self.support.get_basic()?.address.clone();
+			let address_len = addresser.length().into();
+			let mut address = vec![0u8; address_len];
+			addresser.address(&mut address, &proof.public_key.0);
+			Address(address)
+		};
+
+		let authority_address = get_poa_authority(&self.support, &(header.number - 1))?;
+		let is_authority = address == authority_address;
+		if !is_authority {
+			return Err(node_consensus_base::errors::ErrorKind::VerifyProofError(
+				"Not authority".to_string(),
+			)
+			.into());
+		}
+		Ok(())
+	}
 }
 
 struct PoaStream<S>
@@ -105,6 +148,7 @@ where
 {
 	support: Arc<S>,
 	poa_meta: Meta,
+	current_secret_key: Option<SecretKey>,
 	current_address: Option<Address>,
 }
 
@@ -190,7 +234,15 @@ where
 			execution_number,
 		};
 
-		let commit_block_params = self.support.build_block(build_block_params)?;
+		let mut commit_block_params = self.support.build_block(build_block_params)?;
+
+		let current_secret_key = self.current_secret_key.as_ref().expect("qed");
+		let proof = Proof::new(
+			&commit_block_params.block_hash,
+			current_secret_key,
+			self.support.get_basic()?.dsa.clone(),
+		)?;
+		commit_block_params.proof = proof.try_into()?;
 
 		self.support
 			.commit_block(commit_block_params)
@@ -277,7 +329,7 @@ fn get_poa_authority<S: ConsensusSupport>(
 		.map(|x| x.expect("qed"))
 }
 
-fn get_current_address<S: ConsensusSupport>(
+fn get_address<S: ConsensusSupport>(
 	secret_key: &SecretKey,
 	support: &Arc<S>,
 ) -> CommonResult<Address> {

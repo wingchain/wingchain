@@ -15,8 +15,8 @@
 pub use crate::types::{
 	Address, Balance, Block, BlockNumber, Body, BuildBlockParams, BuildExecutionParams, Call,
 	CallResult, CommitBlockParams, CommitExecutionParams, DBKey, DBValue, Event, Execution,
-	FullTransaction, Hash, Header, Nonce, OpaqueCallResult, Params, PublicKey, Receipt, SecretKey,
-	Signature, Transaction, TransactionForHash, Witness,
+	FullTransaction, Hash, Header, Nonce, OpaqueCallResult, Params, Proof, PublicKey, Receipt,
+	SecretKey, Signature, Transaction, TransactionForHash, Witness,
 };
 
 pub mod codec;

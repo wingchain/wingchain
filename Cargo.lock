@@ -2997,6 +2997,7 @@ dependencies = [
  "node-chain",
  "node-consensus",
  "node-consensus-base",
+ "node-consensus-poa",
  "node-coordinator",
  "node-txpool",
  "num_cpus",
@@ -3086,8 +3087,10 @@ dependencies = [
  "log",
  "node-chain",
  "node-consensus-base",
+ "node-consensus-primitives",
  "node-executor",
  "node-executor-primitives",
+ "parity-scale-codec",
  "primitives",
  "tokio 1.0.0",
 ]

@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::convert::TryInto;
 use std::sync::Arc;
 
 use crypto::address::AddressImpl;
 use crypto::dsa::DsaImpl;
 use node_consensus_base::Consensus;
 use node_executor::module;
-use primitives::{codec, Balance, Event, Receipt};
+use primitives::{codec, Balance, Event, Proof, Receipt};
 use utils_test::test_accounts;
 
 mod base;
@@ -30,9 +31,15 @@ async fn test_poa_balance() {
 	let dsa = Arc::new(DsaImpl::Ed25519);
 	let address = Arc::new(AddressImpl::Blake2b160);
 
-	let (account1, account2) = test_accounts(dsa, address);
+	let (account1, account2) = test_accounts(dsa.clone(), address);
 
 	let (chain, txpool, consensus) = base::get_service(&account1);
+
+	let proof = chain
+		.get_proof(&chain.get_block_hash(&0).unwrap().unwrap())
+		.unwrap()
+		.unwrap();
+	assert_eq!(proof, Default::default());
 
 	let tx1_hash = base::insert_tx(
 		&chain,
@@ -59,6 +66,16 @@ async fn test_poa_balance() {
 	// generate block 1
 	consensus.generate().unwrap();
 	base::wait_block_execution(&chain).await;
+
+	let block_hash = chain.get_block_hash(&1).unwrap().unwrap();
+	let proof = chain.get_proof(&block_hash).unwrap().unwrap();
+	let expected_proof: Proof = {
+		let proof =
+			node_consensus_poa::proof::Proof::new(&block_hash, &account1.secret_key, dsa.clone())
+				.unwrap();
+		proof.try_into().unwrap()
+	};
+	assert_eq!(proof, expected_proof);
 
 	let tx2_hash = base::insert_tx(
 		&chain,

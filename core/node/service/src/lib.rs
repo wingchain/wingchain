@@ -112,6 +112,7 @@ impl Service {
 		let coordinator_support = Arc::new(DefaultCoordinatorSupport::new(
 			chain.clone(),
 			txpool.clone(),
+			consensus.clone(),
 		));
 		let coordinator = Arc::new(Coordinator::new(
 			global_config.coordinator,

@@ -29,8 +29,8 @@ use primitives::errors::CommonResult;
 use primitives::types::CallResult;
 use primitives::{
 	Address, Block, BlockNumber, Body, BuildBlockParams, Call, CommitBlockParams,
-	CommitExecutionParams, Execution, Hash, Header, Nonce, OpaqueCallResult, Receipt, SecretKey,
-	Transaction,
+	CommitExecutionParams, Execution, Hash, Header, Nonce, OpaqueCallResult, Proof, Receipt,
+	SecretKey, Transaction,
 };
 
 use crate::backend::Backend;
@@ -98,6 +98,11 @@ impl Chain {
 	/// Get the execution by block hash
 	pub fn get_execution(&self, block_hash: &Hash) -> CommonResult<Option<Execution>> {
 		self.backend.get_execution(block_hash)
+	}
+
+	/// Get the proof by block hash
+	pub fn get_proof(&self, block_hash: &Hash) -> CommonResult<Option<Proof>> {
+		self.backend.get_proof(block_hash)
 	}
 
 	/// Get the transaction by transaction hash

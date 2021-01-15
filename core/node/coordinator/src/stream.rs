@@ -23,7 +23,7 @@ use node_network::{BytesMut, NetworkInMessage, NetworkOutMessage, PMInMessage, P
 use node_txpool::TxPoolOutMessage;
 use primitives::codec::Decode;
 use primitives::errors::CommonResult;
-use primitives::{BlockNumber, Body, Hash, Header, Transaction};
+use primitives::{BlockNumber, Body, Hash, Header, Proof, Transaction};
 
 use crate::protocol::{BlockAnnounce, BlockRequest, BlockResponse, ProtocolMessage, TxPropagate};
 use crate::support::CoordinatorSupport;
@@ -304,6 +304,13 @@ where
 	pub fn get_header_by_block_hash(&self, block_hash: &Hash) -> CommonResult<Header> {
 		let header = self.support.get_header(block_hash)?.ok_or_else(|| {
 			errors::ErrorKind::Data(format!("Missing header: block_hash: {:?}", block_hash))
+		})?;
+		Ok(header)
+	}
+
+	pub fn get_proof_by_block_hash(&self, block_hash: &Hash) -> CommonResult<Proof> {
+		let header = self.support.get_proof(block_hash)?.ok_or_else(|| {
+			errors::ErrorKind::Data(format!("Missing proof: block_hash: {:?}", block_hash))
 		})?;
 		Ok(header)
 	}

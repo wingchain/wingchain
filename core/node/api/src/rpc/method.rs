@@ -127,6 +127,22 @@ pub async fn chain_get_block_by_hash<S: ApiSupport>(
 	Ok(block)
 }
 
+pub async fn chain_get_proof_by_hash<S: ApiSupport>(
+	data: Data<Arc<S>>,
+	Params((hash,)): Params<(Hash,)>,
+) -> CustomResult<Option<Proof>> {
+	let hash = hash.try_into()?;
+	let support = data.0;
+	let proof: Option<Proof> = support.get_proof(&hash)?.map(Into::into);
+
+	let proof = proof.map(|mut x| {
+		x.hash = Some(hash.into());
+		x
+	});
+
+	Ok(proof)
+}
+
 pub async fn chain_get_transaction_by_hash<S: ApiSupport>(
 	data: Data<Arc<S>>,
 	Params((hash,)): Params<(Hash,)>,
@@ -329,6 +345,14 @@ pub struct Body {
 }
 
 #[derive(Serialize)]
+pub struct Proof {
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub hash: Option<Hash>,
+	pub name: String,
+	pub data: Hex,
+}
+
+#[derive(Serialize)]
 pub struct Transaction {
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub hash: Option<Hash>,
@@ -528,6 +552,16 @@ impl From<primitives::Receipt> for Receipt {
 				.map(|x| serde_json::from_slice(&x.0).unwrap_or(serde_json::Value::Null))
 				.collect(),
 			result: receipt.result.map(Into::into),
+		}
+	}
+}
+
+impl From<primitives::Proof> for Proof {
+	fn from(proof: primitives::Proof) -> Self {
+		Self {
+			hash: None,
+			name: proof.name,
+			data: proof.data.into(),
 		}
 	}
 }
