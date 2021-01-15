@@ -16,6 +16,7 @@ use std::sync::Arc;
 
 use crypto::address::AddressImpl;
 use crypto::dsa::DsaImpl;
+use node_consensus_base::Consensus;
 use node_executor::module;
 use primitives::{codec, Balance, Event, Receipt};
 use utils_test::test_accounts;
@@ -31,7 +32,7 @@ async fn test_poa_balance() {
 
 	let (account1, account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, poa) = base::get_service(&account1);
+	let (chain, txpool, consensus) = base::get_service(&account1);
 
 	let tx1_hash = base::insert_tx(
 		&chain,
@@ -56,7 +57,7 @@ async fn test_poa_balance() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 1
-	poa.generate_block().await.unwrap();
+	consensus.generate().unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx2_hash = base::insert_tx(
@@ -82,7 +83,7 @@ async fn test_poa_balance() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 2
-	poa.generate_block().await.unwrap();
+	consensus.generate().unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx3_hash = base::insert_tx(
@@ -108,7 +109,7 @@ async fn test_poa_balance() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 3
-	poa.generate_block().await.unwrap();
+	consensus.generate().unwrap();
 	base::wait_block_execution(&chain).await;
 
 	// check block 1
@@ -185,5 +186,5 @@ async fn test_poa_balance() {
 		}
 	);
 
-	base::safe_close(chain, txpool, poa).await;
+	base::safe_close(chain, txpool, consensus).await;
 }

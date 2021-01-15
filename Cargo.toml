@@ -20,6 +20,7 @@ members = [
 	"core/node/api",
     "core/node/api/rt",
 	"core/node/consensus",
+    "core/node/consensus/base",
 	"core/node/consensus/poa",
 	"core/node/vm",
 	"core/node/vm/contract-sdk",

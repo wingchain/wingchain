@@ -7,8 +7,23 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-async-trait = "0.1.30"
+log = "0.4.8"
+
+primitives = { path = "../../primitives" }
+node-consensus-primitives = { path = "primitives" }
+node-consensus-base = { path = "base" }
+node-consensus-poa = { path = "./poa" }
+
+[dev-dependencies]
+tokio = { version = "1.0", features = ["rt-multi-thread", "time", "sync", "macros"] }
+tempfile = "3.1.0"
+env_logger = "0.7.1"
+hex = "0.4.2"
+futures-timer = "3.0.2"
 
 node-chain = { path = "../chain" }
 node-txpool = { path = "../txpool" }
-primitives = { path = "../../primitives" }
+node-executor = { path = "../executor" }
+node-executor-primitives = { path = "../executor/primitives" }
+crypto = { path = "../../crypto" }
+utils-test = { path = "../../../utils/test" }

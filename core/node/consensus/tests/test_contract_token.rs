@@ -17,6 +17,7 @@ use std::sync::Arc;
 use crypto::address::AddressImpl;
 use crypto::dsa::DsaImpl;
 use node_chain::{Chain, ChainConfig};
+use node_consensus_base::Consensus;
 use node_executor::module;
 use primitives::codec::{Decode, Encode};
 use primitives::Address;
@@ -33,7 +34,7 @@ async fn test_poa_contract_token_read() {
 
 	let (account1, _account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, poa) = base::get_service(&account1);
+	let (chain, txpool, consensus) = base::get_service(&account1);
 
 	let ori_code = get_code().to_vec();
 
@@ -58,7 +59,7 @@ async fn test_poa_contract_token_read() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 1
-	poa.generate_block().await.unwrap();
+	consensus.generate().unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -171,7 +172,7 @@ async fn test_poa_contract_token_read() {
 	log::info!("result: {}", result);
 	assert_eq!(result, r#"2100000000000000"#.to_string(),);
 
-	base::safe_close(chain, txpool, poa).await;
+	base::safe_close(chain, txpool, consensus).await;
 }
 
 #[tokio::test]
@@ -183,7 +184,7 @@ async fn test_poa_contract_token_transfer() {
 
 	let (account1, account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, poa) = base::get_service(&account1);
+	let (chain, txpool, consensus) = base::get_service(&account1);
 
 	let ori_code = get_code().to_vec();
 
@@ -208,7 +209,7 @@ async fn test_poa_contract_token_transfer() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 1
-	poa.generate_block().await.unwrap();
+	consensus.generate().unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -246,7 +247,7 @@ async fn test_poa_contract_token_transfer() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 2
-	poa.generate_block().await.unwrap();
+	consensus.generate().unwrap();
 	base::wait_block_execution(&chain).await;
 
 	// sender balance
@@ -299,7 +300,7 @@ async fn test_poa_contract_token_transfer() {
 	log::info!("result: {}", result);
 	assert_eq!(result, r#"100000000000000"#.to_string(),);
 
-	base::safe_close(chain, txpool, poa).await;
+	base::safe_close(chain, txpool, consensus).await;
 }
 
 #[tokio::test]
@@ -311,7 +312,7 @@ async fn test_poa_contract_token_transfer_from() {
 
 	let (account1, account2) = test_accounts(dsa, address);
 
-	let (chain, txpool, poa) = base::get_service(&account1);
+	let (chain, txpool, consensus) = base::get_service(&account1);
 
 	let ori_code = get_code().to_vec();
 
@@ -336,7 +337,7 @@ async fn test_poa_contract_token_transfer_from() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 1
-	poa.generate_block().await.unwrap();
+	consensus.generate().unwrap();
 	base::wait_block_execution(&chain).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
@@ -374,7 +375,7 @@ async fn test_poa_contract_token_transfer_from() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 2
-	poa.generate_block().await.unwrap();
+	consensus.generate().unwrap();
 	base::wait_block_execution(&chain).await;
 
 	// check allowance after approving
@@ -434,7 +435,7 @@ async fn test_poa_contract_token_transfer_from() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 3
-	poa.generate_block().await.unwrap();
+	consensus.generate().unwrap();
 	base::wait_block_execution(&chain).await;
 
 	// allowance after transferring from
@@ -513,7 +514,7 @@ async fn test_poa_contract_token_transfer_from() {
 	log::info!("result: {}", result);
 	assert_eq!(result, r#"100000000"#.to_string(),);
 
-	base::safe_close(chain, txpool, poa).await;
+	base::safe_close(chain, txpool, consensus).await;
 }
 
 #[tokio::test]
@@ -625,6 +626,6 @@ async fn test_poa_contract_build_call_balance() {
 
 fn get_code() -> &'static [u8] {
 	let code =
-		include_bytes!("../../../vm/contract-samples/token/release/contract_samples_token_bg.wasm");
+		include_bytes!("../../vm/contract-samples/token/release/contract_samples_token_bg.wasm");
 	code
 }

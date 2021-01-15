@@ -12,24 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::error::Error;
-use std::fmt::Debug;
+use primitives::errors::CommonResult;
+use primitives::SecretKey;
 
-use primitives::errors::{CommonError, CommonErrorKind, Display};
+pub mod errors;
+pub mod support;
 
-#[derive(Debug, Display)]
-pub enum ErrorKind {
-	#[display(fmt = "Time error")]
-	TimeError,
-
-	#[display(fmt = "{}", _0)]
-	Other(String),
+pub struct ConsensusConfig {
+	pub secret_key: Option<SecretKey>,
 }
 
-impl Error for ErrorKind {}
-
-impl From<ErrorKind> for CommonError {
-	fn from(error: ErrorKind) -> Self {
-		CommonError::new(CommonErrorKind::Consensus, Box::new(error))
-	}
+pub trait Consensus {
+	fn generate(&self) -> CommonResult<()>;
 }

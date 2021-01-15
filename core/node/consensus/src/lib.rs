@@ -12,7 +12,51 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Common lib for consensus
+//! Consensus
 
-pub mod errors;
-pub mod support;
+use node_consensus_base::support::ConsensusSupport;
+use node_consensus_base::{Consensus as ConsensusT, ConsensusConfig};
+use node_consensus_poa::Poa;
+use node_consensus_primitives::CONSENSUS_POA;
+use primitives::errors::CommonResult;
+use std::sync::Arc;
+
+pub enum Consensus<S>
+where
+	S: ConsensusSupport + Send + Sync + 'static,
+{
+	Poa(Poa<S>),
+}
+
+impl<S> Consensus<S>
+where
+	S: ConsensusSupport + Send + Sync + 'static,
+{
+	pub fn new(config: ConsensusConfig, support: Arc<S>) -> CommonResult<Self> {
+		let system_meta = &support.get_current_state().system_meta;
+		let consensus = system_meta.consensus.as_str();
+
+		let consensus = match consensus {
+			CONSENSUS_POA => {
+				let poa = Poa::new(config, support)?;
+				Self::Poa(poa)
+			}
+			other => {
+				panic!("Unknown consensus: {}", other);
+			}
+		};
+
+		Ok(consensus)
+	}
+}
+
+impl<S> ConsensusT for Consensus<S>
+where
+	S: ConsensusSupport + Send + Sync + 'static,
+{
+	fn generate(&self) -> CommonResult<()> {
+		match self {
+			Consensus::Poa(poa) => poa.generate(),
+		}
+	}
+}

@@ -2874,12 +2874,14 @@ dependencies = [
  "node-executor-primitives",
  "parity-scale-codec",
  "primitives",
+ "serde",
 ]
 
 [[package]]
 name = "module-system"
 version = "0.1.0"
 dependencies = [
+ "node-consensus-primitives",
  "node-executor-macro",
  "node-executor-primitives",
  "parity-scale-codec",
@@ -2994,7 +2996,7 @@ dependencies = [
  "node-api-rt",
  "node-chain",
  "node-consensus",
- "node-consensus-poa",
+ "node-consensus-base",
  "node-coordinator",
  "node-txpool",
  "num_cpus",
@@ -3045,7 +3047,29 @@ dependencies = [
 name = "node-consensus"
 version = "0.1.0"
 dependencies = [
- "async-trait",
+ "crypto",
+ "env_logger",
+ "futures-timer",
+ "hex",
+ "log",
+ "node-chain",
+ "node-consensus-base",
+ "node-consensus-poa",
+ "node-consensus-primitives",
+ "node-executor",
+ "node-executor-primitives",
+ "node-txpool",
+ "primitives",
+ "tempfile",
+ "tokio 1.0.0",
+ "utils-test",
+]
+
+[[package]]
+name = "node-consensus-base"
+version = "0.1.0"
+dependencies = [
+ "futures",
  "node-chain",
  "node-txpool",
  "primitives",
@@ -3055,22 +3079,22 @@ dependencies = [
 name = "node-consensus-poa"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "crypto",
- "env_logger",
  "futures",
  "futures-timer",
- "hex",
  "log",
  "node-chain",
- "node-consensus",
+ "node-consensus-base",
  "node-executor",
  "node-executor-primitives",
- "node-txpool",
  "primitives",
- "tempfile",
  "tokio 1.0.0",
- "utils-test",
 ]
+
+[[package]]
+name = "node-consensus-primitives"
+version = "0.1.0"
 
 [[package]]
 name = "node-coordinator"
@@ -3085,7 +3109,7 @@ dependencies = [
  "lru",
  "node-chain",
  "node-consensus",
- "node-consensus-poa",
+ "node-consensus-base",
  "node-executor",
  "node-executor-primitives",
  "node-network",
@@ -3193,7 +3217,7 @@ dependencies = [
  "node-api",
  "node-chain",
  "node-consensus",
- "node-consensus-poa",
+ "node-consensus-base",
  "node-coordinator",
  "node-db",
  "node-executor",

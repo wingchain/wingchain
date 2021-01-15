@@ -68,6 +68,7 @@ fn test_executor() {
 						timestamp,
 						max_until_gap: 20,
 						max_execution_gap: 8,
+						consensus: "poa".to_string(),
 					},
 				)
 				.unwrap(),
@@ -421,6 +422,10 @@ fn expected_block_0_meta_state_root(txs: &Vec<Arc<FullTransaction>>) -> Hash {
 		(
 			DBKey::from_slice(b"system_max_execution_gap"),
 			Some(codec::encode(&params.max_execution_gap).unwrap()),
+		),
+		(
+			DBKey::from_slice(b"system_consensus"),
+			Some(codec::encode(&params.consensus).unwrap()),
 		),
 	]
 	.into_iter()

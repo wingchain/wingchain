@@ -20,8 +20,9 @@ use std::time::Duration;
 use tempfile::tempdir;
 
 use node_chain::{Chain, ChainConfig};
-use node_consensus::support::DefaultConsensusSupport;
-use node_consensus_poa::{Poa, PoaConfig};
+use node_consensus::Consensus;
+use node_consensus_base::support::DefaultConsensusSupport;
+use node_consensus_base::ConsensusConfig;
 use node_coordinator::support::DefaultCoordinatorSupport;
 use node_coordinator::{
 	Coordinator, CoordinatorConfig, Keypair, LinkedHashMap, Multiaddr, NetworkConfig, PeerId,
@@ -40,7 +41,7 @@ pub fn get_service(
 ) -> (
 	Arc<Chain>,
 	Arc<TxPool<DefaultTxPoolSupport>>,
-	Poa<DefaultConsensusSupport>,
+	Consensus<DefaultConsensusSupport>,
 	Arc<Coordinator<DefaultCoordinatorSupport>>,
 ) {
 	let chain = get_chain(&authority_account.2);
@@ -52,11 +53,11 @@ pub fn get_service(
 
 	let support = Arc::new(DefaultConsensusSupport::new(chain.clone(), txpool.clone()));
 
-	let poa_config = PoaConfig {
-		secret_key: account.0.clone(),
+	let consensus_config = ConsensusConfig {
+		secret_key: Some(account.0.clone()),
 	};
 
-	let poa = Poa::new(poa_config, support).unwrap();
+	let consensus = Consensus::new(consensus_config, support).unwrap();
 
 	let coordinator_support = Arc::new(DefaultCoordinatorSupport::new(
 		chain.clone(),
@@ -64,7 +65,7 @@ pub fn get_service(
 	));
 	let coordinator = get_coordinator(local_key_pair, port, bootnodes, coordinator_support);
 
-	(chain, txpool, poa, coordinator)
+	(chain, txpool, consensus, coordinator)
 }
 
 pub async fn wait_txpool(txpool: &Arc<TxPool<DefaultTxPoolSupport>>, count: usize) {
@@ -98,12 +99,12 @@ pub async fn wait_block_execution(chain: &Arc<Chain>) {
 pub async fn safe_close(
 	chain: Arc<Chain>,
 	txpool: Arc<TxPool<DefaultTxPoolSupport>>,
-	poa: Poa<DefaultConsensusSupport>,
+	consensus: Consensus<DefaultConsensusSupport>,
 	coordinator: Arc<Coordinator<DefaultCoordinatorSupport>>,
 ) {
 	drop(chain);
 	drop(txpool);
-	drop(poa);
+	drop(consensus);
 	drop(coordinator);
 	tokio::time::sleep(Duration::from_millis(50)).await;
 }
@@ -172,7 +173,8 @@ params = '''
     "chain_id": "chain-test",
     "timestamp": "2020-04-29T15:51:36.502+08:00",
     "max_until_gap": 20,
-    "max_execution_gap": 8
+    "max_execution_gap": 8,
+    "consensus": "poa"
 }}
 '''
 

@@ -21,7 +21,7 @@ use crypto::dsa::{Dsa, DsaImpl, KeyPair};
 use main_base::config::Config as FileConfig;
 use node_api::ApiConfig;
 use node_chain::Basic;
-use node_consensus_poa::PoaConfig;
+use node_consensus_base::ConsensusConfig;
 use node_coordinator::{
 	ed25519, CoordinatorConfig, Keypair, LinkedHashMap, Multiaddr, PeerId, Protocol,
 };
@@ -35,7 +35,7 @@ use crate::{errors, ServiceConfig};
 pub struct Config {
 	pub txpool: TxPoolConfig,
 	pub api: ApiConfig,
-	pub poa: PoaConfig,
+	pub consensus: ConsensusConfig,
 	pub coordinator: CoordinatorConfig,
 }
 
@@ -47,7 +47,7 @@ pub fn get_config(chain_config: &ServiceConfig, basic: Arc<Basic>) -> CommonResu
 	let config = Config {
 		txpool: get_txpool_config(&file_config)?,
 		api: get_api_config(&file_config)?,
-		poa: get_poa_config(&file_config, home, basic)?,
+		consensus: get_consensus_config(&file_config, home, basic)?,
 		coordinator: get_coordinator_config(&file_config, home, agent_version)?,
 	};
 	Ok(config)
@@ -69,23 +69,25 @@ fn get_api_config(file_config: &FileConfig) -> CommonResult<ApiConfig> {
 	Ok(api)
 }
 
-fn get_poa_config(
+fn get_consensus_config(
 	file_config: &FileConfig,
 	home: &PathBuf,
 	basic: Arc<Basic>,
-) -> CommonResult<PoaConfig> {
-	let secret_key = {
-		let file = &file_config.validator.secret_key_file;
+) -> CommonResult<ConsensusConfig> {
+	let secret_key = if let Some(secret_key_file) = &file_config.validator.secret_key_file {
+		let file = &secret_key_file;
 		let secret_key = read_secret_key_file(file, home)?;
 		let _key_pair = basic
 			.dsa
 			.key_pair_from_secret_key(&secret_key)
 			.map_err(|_| errors::ErrorKind::Config(format!("Invalid secret key in: {:?}", file)))?;
-		SecretKey(secret_key)
+		Some(SecretKey(secret_key))
+	} else {
+		None
 	};
 
-	let poa = PoaConfig { secret_key };
-	Ok(poa)
+	let consensus = ConsensusConfig { secret_key };
+	Ok(consensus)
 }
 
 fn get_coordinator_config(
