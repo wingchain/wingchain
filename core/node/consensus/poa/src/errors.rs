@@ -19,8 +19,6 @@ use primitives::errors::{CommonError, Display};
 
 #[derive(Debug, Display)]
 pub enum ErrorKind {
-	#[display(fmt = "Not authority")]
-	NotAuthority,
 }
 
 impl Error for ErrorKind {}
