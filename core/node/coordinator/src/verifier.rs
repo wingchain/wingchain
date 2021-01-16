@@ -17,7 +17,9 @@ use std::sync::Arc;
 
 use node_chain::ChainCommitBlockParams;
 use primitives::errors::{Catchable, CommonResult, Display};
-use primitives::{BlockNumber, BuildBlockParams, FullTransaction, Hash, Header, Transaction};
+use primitives::{
+	BlockNumber, BuildBlockParams, FullTransaction, Hash, Header, Proof, Transaction,
+};
 
 use crate::errors;
 use crate::errors::ErrorKind;
@@ -68,6 +70,9 @@ pub enum VerifyError {
 	/// Transaction invalid
 	#[display(fmt = "Invalid tx: {}", _0)]
 	InvalidTx(String),
+	/// Proof invalid
+	#[display(fmt = "Invalid proof: {}", _0)]
+	InvalidProof(String),
 }
 
 impl<S> Verifier<S>
@@ -96,6 +101,9 @@ where
 		let block_data = block_data.take().expect("qed");
 		let header = block_data.header.expect("qed");
 		let body = block_data.body.expect("qed");
+		let proof = block_data.proof.expect("qed");
+
+		self.verify_proof(&header, &proof)?;
 
 		let (meta_txs, payload_txs) = self.verify_body(body)?;
 
@@ -111,6 +119,11 @@ where
 		};
 
 		let _body = match &block_data.body {
+			Some(v) => v,
+			None => return Err(ErrorKind::VerifyError(VerifyError::Bad).into()),
+		};
+
+		let _proof = match &block_data.proof {
 			Some(v) => v,
 			None => return Err(ErrorKind::VerifyError(VerifyError::Bad).into()),
 		};
@@ -191,6 +204,19 @@ where
 			return Err(ErrorKind::VerifyError(VerifyError::ShouldWait).into());
 		}
 
+		Ok(())
+	}
+
+	fn verify_proof(&self, header: &Header, proof: &Proof) -> CommonResult<()> {
+		self.support
+			.ori_support()
+			.consensus_verify_proof(header, proof)
+			.or_else_catch::<node_consensus_base::errors::ErrorKind, _>(|e| match e {
+				node_consensus_base::errors::ErrorKind::VerifyProofError(e) => Some(Err(
+					ErrorKind::VerifyError(VerifyError::InvalidProof(e.clone())).into(),
+				)),
+				_ => None,
+			})?;
 		Ok(())
 	}
 

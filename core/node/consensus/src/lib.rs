@@ -19,6 +19,7 @@ use node_consensus_base::{Consensus as ConsensusT, ConsensusConfig};
 use node_consensus_poa::Poa;
 use node_consensus_primitives::CONSENSUS_POA;
 use primitives::errors::CommonResult;
+use primitives::{Header, Proof};
 use std::sync::Arc;
 
 pub enum Consensus<S>
@@ -57,6 +58,12 @@ where
 	fn generate(&self) -> CommonResult<()> {
 		match self {
 			Consensus::Poa(poa) => poa.generate(),
+		}
+	}
+
+	fn verify_proof(&self, header: &Header, proof: &Proof) -> CommonResult<()> {
+		match self {
+			Consensus::Poa(poa) => poa.verify_proof(header, proof),
 		}
 	}
 }

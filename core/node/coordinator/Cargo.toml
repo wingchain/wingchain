@@ -20,6 +20,8 @@ node-executor = { path = "../executor" }
 node-executor-primitives = { path = "../executor/primitives" }
 node-network = { path = "../network" }
 primitives = { path = "../../primitives" }
+node-consensus = { path = "../consensus" }
+node-consensus-base = { path = "../consensus/base" }
 
 [dev-dependencies]
 tempfile = "3.1.0"
@@ -27,7 +29,5 @@ env_logger = "0.7.1"
 futures-timer = "3.0.2"
 tokio = { version = "1.0", features = ["rt-multi-thread", "time", "sync", "macros"] }
 
-node-consensus = { path = "../consensus" }
-node-consensus-base = { path = "../consensus/base" }
 crypto = { path = "../../crypto" }
 utils-test = { path = "../../../utils/test" }

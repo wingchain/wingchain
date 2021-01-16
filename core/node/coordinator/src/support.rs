@@ -12,21 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use futures::channel::mpsc::UnboundedReceiver;
 
 use node_chain::{Chain, ChainCommitBlockParams, ChainOutMessage, CurrentState};
+use node_consensus::Consensus;
+use node_consensus_base::support::DefaultConsensusSupport;
+use node_consensus_base::Consensus as ConsensusT;
 use node_txpool::support::DefaultTxPoolSupport;
 use node_txpool::{TxPool, TxPoolOutMessage};
 use primitives::codec::{Decode, Encode};
 use primitives::errors::CommonResult;
 use primitives::{
-	Address, BlockNumber, Body, BuildBlockParams, CallResult, FullTransaction, Hash, Header,
+	Address, BlockNumber, Body, BuildBlockParams, CallResult, FullTransaction, Hash, Header, Proof,
 	Transaction,
 };
-use std::collections::HashSet;
 
 #[async_trait]
 pub trait CoordinatorSupport {
@@ -36,6 +39,7 @@ pub trait CoordinatorSupport {
 	fn get_block_hash(&self, number: &BlockNumber) -> CommonResult<Option<Hash>>;
 	fn get_header(&self, block_hash: &Hash) -> CommonResult<Option<Header>>;
 	fn get_body(&self, block_hash: &Hash) -> CommonResult<Option<Body>>;
+	fn get_proof(&self, block_hash: &Hash) -> CommonResult<Option<Proof>>;
 	fn get_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Transaction>>;
 	fn build_block(
 		&self,
@@ -63,16 +67,26 @@ pub trait CoordinatorSupport {
 	fn txpool_get_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Arc<FullTransaction>>>;
 	fn txpool_insert_transaction(&self, tx: Transaction) -> CommonResult<()>;
 	fn txpool_remove_transactions(&self, tx_hash_set: &HashSet<Hash>) -> CommonResult<()>;
+	fn consensus_verify_proof(&self, header: &Header, proof: &Proof) -> CommonResult<()>;
 }
 
 pub struct DefaultCoordinatorSupport {
 	chain: Arc<Chain>,
 	txpool: Arc<TxPool<DefaultTxPoolSupport>>,
+	consensus: Arc<Consensus<DefaultConsensusSupport>>,
 }
 
 impl DefaultCoordinatorSupport {
-	pub fn new(chain: Arc<Chain>, txpool: Arc<TxPool<DefaultTxPoolSupport>>) -> Self {
-		Self { chain, txpool }
+	pub fn new(
+		chain: Arc<Chain>,
+		txpool: Arc<TxPool<DefaultTxPoolSupport>>,
+		consensus: Arc<Consensus<DefaultConsensusSupport>>,
+	) -> Self {
+		Self {
+			chain,
+			txpool,
+			consensus,
+		}
 	}
 }
 
@@ -95,6 +109,9 @@ impl CoordinatorSupport for DefaultCoordinatorSupport {
 	}
 	fn get_body(&self, block_hash: &Hash) -> CommonResult<Option<Body>> {
 		self.chain.get_body(block_hash)
+	}
+	fn get_proof(&self, block_hash: &Hash) -> CommonResult<Option<Proof>> {
+		self.chain.get_proof(block_hash)
 	}
 	fn get_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Transaction>> {
 		self.chain.get_transaction(tx_hash)
@@ -150,5 +167,8 @@ impl CoordinatorSupport for DefaultCoordinatorSupport {
 	}
 	fn txpool_remove_transactions(&self, tx_hash_set: &HashSet<Hash>) -> CommonResult<()> {
 		self.txpool.remove(tx_hash_set)
+	}
+	fn consensus_verify_proof(&self, header: &Header, proof: &Proof) -> CommonResult<()> {
+		self.consensus.verify_proof(header, proof)
 	}
 }

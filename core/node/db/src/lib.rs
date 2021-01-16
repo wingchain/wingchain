@@ -212,7 +212,7 @@ impl Default for DBTransaction {
 
 pub mod columns {
 	/// column names, which should be corresponding to the following const
-	pub const COLUMN_NAMES: [&str; 10] = [
+	pub const COLUMN_NAMES: [&str; 11] = [
 		"global",
 		"block_hash",
 		"header",
@@ -223,6 +223,7 @@ pub mod columns {
 		"tx",
 		"receipt",
 		"execution",
+		"proof",
 	];
 
 	/// see global_key
@@ -254,6 +255,9 @@ pub mod columns {
 
 	/// block hash to execution
 	pub const EXECUTION: u32 = 9;
+
+	/// block hash to proof
+	pub const PROOF: u32 = 10;
 }
 
 pub mod global_key {

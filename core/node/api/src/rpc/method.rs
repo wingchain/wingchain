@@ -127,6 +127,55 @@ pub async fn chain_get_block_by_hash<S: ApiSupport>(
 	Ok(block)
 }
 
+pub async fn chain_get_proof_by_number<S: ApiSupport>(
+	data: Data<Arc<S>>,
+	Params((block_number,)): Params<(BlockNumber,)>,
+) -> CustomResult<Option<Proof>> {
+	let number_enum: BlockNumberEnum = block_number.try_into()?;
+
+	let support = data.0;
+	let number = match number_enum {
+		BlockNumberEnum::Confirmed => support.get_confirmed_number()?,
+		BlockNumberEnum::ConfirmedExecuted => support.get_confirmed_executed_number()?,
+		BlockNumberEnum::Number(number) => Some(number),
+	};
+
+	let number = match number {
+		Some(number) => number,
+		None => return Ok(None),
+	};
+
+	let block_hash = match support.get_block_hash(&number)? {
+		Some(block_hash) => block_hash,
+		None => return Ok(None),
+	};
+
+	let proof: Option<Proof> = support.get_proof(&block_hash)?.map(Into::into);
+
+	let proof = proof.map(|mut x| {
+		x.hash = Some(block_hash.into());
+		x
+	});
+
+	Ok(proof)
+}
+
+pub async fn chain_get_proof_by_hash<S: ApiSupport>(
+	data: Data<Arc<S>>,
+	Params((hash,)): Params<(Hash,)>,
+) -> CustomResult<Option<Proof>> {
+	let hash = hash.try_into()?;
+	let support = data.0;
+	let proof: Option<Proof> = support.get_proof(&hash)?.map(Into::into);
+
+	let proof = proof.map(|mut x| {
+		x.hash = Some(hash.into());
+		x
+	});
+
+	Ok(proof)
+}
+
 pub async fn chain_get_transaction_by_hash<S: ApiSupport>(
 	data: Data<Arc<S>>,
 	Params((hash,)): Params<(Hash,)>,
@@ -329,6 +378,14 @@ pub struct Body {
 }
 
 #[derive(Serialize)]
+pub struct Proof {
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub hash: Option<Hash>,
+	pub name: String,
+	pub data: Hex,
+}
+
+#[derive(Serialize)]
 pub struct Transaction {
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub hash: Option<Hash>,
@@ -528,6 +585,16 @@ impl From<primitives::Receipt> for Receipt {
 				.map(|x| serde_json::from_slice(&x.0).unwrap_or(serde_json::Value::Null))
 				.collect(),
 			result: receipt.result.map(Into::into),
+		}
+	}
+}
+
+impl From<primitives::Proof> for Proof {
+	fn from(proof: primitives::Proof) -> Self {
+		Self {
+			hash: None,
+			name: proof.name,
+			data: proof.data.into(),
 		}
 	}
 }

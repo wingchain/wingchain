@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::convert::TryInto;
 use std::sync::Arc;
 
 use log::info;
@@ -25,6 +26,7 @@ use node_chain::module;
 use node_consensus_base::Consensus;
 use node_coordinator::{Keypair, LinkedHashMap, Multiaddr, PeerId, Protocol};
 use primitives::codec::Encode;
+use primitives::Proof;
 use utils_test::test_accounts;
 
 mod base;
@@ -36,7 +38,7 @@ async fn test_api() {
 	let dsa = Arc::new(DsaImpl::Ed25519);
 	let address = Arc::new(AddressImpl::Blake2b160);
 
-	let (account1, account2) = test_accounts(dsa, address);
+	let (account1, account2) = test_accounts(dsa.clone(), address);
 
 	let account1 = (account1.secret_key, account1.public_key, account1.address);
 	let account2 = (account2.secret_key, account2.public_key, account2.address);
@@ -190,6 +192,26 @@ async fn test_api() {
 	let response = call_rpc(&request).await;
 	let expected = r#"{"jsonrpc":"2.0","result":"0x0900000000000000","id":1}"#;
 	info!("chain_executeCall response: {}", response);
+	assert_eq!(response, expected);
+
+	// chain_getProofByHash
+	let request = format!(
+		r#"{{"jsonrpc": "2.0", "method": "chain_getProofByHash", "params": ["0x{}"], "id": 1}}"#,
+		hex::encode(&block1_hash.0)
+	);
+	let response = call_rpc(&request).await;
+	let expected = {
+		let proof =
+			node_consensus_poa::proof::Proof::new(&block1_hash, &account1.0, dsa.clone()).unwrap();
+		let proof: Proof = proof.try_into().unwrap();
+		format!(
+			r#"{{"jsonrpc":"2.0","result":{{"hash":"0x{}","name":"{}","data":"0x{}"}},"id":1}}"#,
+			hex::encode(&block1_hash.0),
+			proof.name,
+			hex::encode(&proof.data)
+		)
+	};
+	info!("chain_getProofByHash response: {}", response);
 	assert_eq!(response, expected);
 
 	// wait chain1 to sync

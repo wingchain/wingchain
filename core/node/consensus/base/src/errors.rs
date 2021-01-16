@@ -22,8 +22,8 @@ pub enum ErrorKind {
 	#[display(fmt = "Time error")]
 	Time,
 
-	#[display(fmt = "Consensus error: {}", _0)]
-	Consensus(Box<dyn Error + Send + Sync>),
+	#[display(fmt = "Verify proof error: {}", _0)]
+	VerifyProofError(String),
 }
 
 impl Error for ErrorKind {}

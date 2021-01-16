@@ -39,7 +39,7 @@ pub fn get_service(
 ) -> (
 	Arc<Chain>,
 	Arc<TxPool<DefaultTxPoolSupport>>,
-	Consensus<DefaultConsensusSupport>,
+	Arc<Consensus<DefaultConsensusSupport>>,
 	Arc<Coordinator<DefaultCoordinatorSupport>>,
 ) {
 	let chain = get_chain(&authority_account.2);
@@ -55,11 +55,12 @@ pub fn get_service(
 		secret_key: Some(account.0.clone()),
 	};
 
-	let consensus = Consensus::new(consensus_config, support).unwrap();
+	let consensus = Arc::new(Consensus::new(consensus_config, support).unwrap());
 
 	let coordinator_support = Arc::new(DefaultCoordinatorSupport::new(
 		chain.clone(),
 		txpool.clone(),
+		consensus.clone(),
 	));
 	let coordinator = get_coordinator(local_key_pair, port, bootnodes, coordinator_support);
 
@@ -108,7 +109,7 @@ pub async fn wait_block_execution(chain: &Arc<Chain>) {
 pub async fn safe_close(
 	chain: Arc<Chain>,
 	txpool: Arc<TxPool<DefaultTxPoolSupport>>,
-	consensus: Consensus<DefaultConsensusSupport>,
+	consensus: Arc<Consensus<DefaultConsensusSupport>>,
 	coordinator: Arc<Coordinator<DefaultCoordinatorSupport>>,
 ) {
 	drop(chain);

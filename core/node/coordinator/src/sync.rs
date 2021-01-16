@@ -28,7 +28,7 @@ use primitives::{BlockNumber, FullTransaction, Hash, Header};
 use crate::errors::ErrorKind;
 use crate::protocol::{
 	BlockAnnounce, BlockData, BlockId, BlockRequest, BlockResponse, BodyData, Direction,
-	ProtocolMessage, RequestId, TxPropagate, FIELDS_BODY, FIELDS_HEADER,
+	ProtocolMessage, RequestId, TxPropagate, FIELDS_BODY, FIELDS_HEADER, FIELDS_PROOF,
 };
 use crate::stream::StreamSupport;
 use crate::support::CoordinatorSupport;
@@ -179,11 +179,19 @@ where
 				None
 			};
 
+			let proof = if (fields & FIELDS_PROOF) == FIELDS_PROOF {
+				let proof = self.support.get_proof_by_block_hash(block_hash.as_ref())?;
+				Some(proof)
+			} else {
+				None
+			};
+
 			let block_data = BlockData {
 				number,
 				block_hash: (*block_hash).clone(),
 				header,
 				body,
+				proof,
 			};
 			blocks.push(block_data);
 
@@ -338,7 +346,7 @@ where
 				let request_id = Self::next_request_id(&mut self.next_request_id);
 				let block_request = ProtocolMessage::BlockRequest(BlockRequest {
 					request_id: request_id.clone(),
-					fields: FIELDS_HEADER | FIELDS_BODY,
+					fields: FIELDS_HEADER | FIELDS_BODY | FIELDS_PROOF,
 					block_id: BlockId::Number(number),
 					count: size,
 					direction: Direction::Asc,
@@ -401,11 +409,16 @@ where
 			};
 
 			let result = self.verifier.verify_block(&mut block_data);
+			let result_desc = match &result {
+				Ok(_v) => "Ok".to_string(),
+				Err(e) => e.to_string(),
+			};
 			let action = self.on_verify_result(result)?;
 
 			trace!(
-				"Maintain downloaded: block: {}, action: {:?}",
+				"Maintain downloaded: block: {}, result: {}, action: {:?}",
 				first_downloaded_number,
+				result_desc,
 				action,
 			);
 
@@ -522,6 +535,7 @@ where
 			VerifyError::InvalidHeader(_) => VerifyAction::Reset,
 			VerifyError::DuplicatedTx(_) => VerifyAction::Reset,
 			VerifyError::InvalidTx(_) => VerifyAction::Reset,
+			VerifyError::InvalidProof(_) => VerifyAction::Reset,
 		};
 		Ok(action)
 	}
