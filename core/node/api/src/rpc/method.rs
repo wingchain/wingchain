@@ -127,6 +127,39 @@ pub async fn chain_get_block_by_hash<S: ApiSupport>(
 	Ok(block)
 }
 
+pub async fn chain_get_proof_by_number<S: ApiSupport>(
+	data: Data<Arc<S>>,
+	Params((block_number,)): Params<(BlockNumber,)>,
+) -> CustomResult<Option<Proof>> {
+	let number_enum: BlockNumberEnum = block_number.try_into()?;
+
+	let support = data.0;
+	let number = match number_enum {
+		BlockNumberEnum::Confirmed => support.get_confirmed_number()?,
+		BlockNumberEnum::ConfirmedExecuted => support.get_confirmed_executed_number()?,
+		BlockNumberEnum::Number(number) => Some(number),
+	};
+
+	let number = match number {
+		Some(number) => number,
+		None => return Ok(None),
+	};
+
+	let block_hash = match support.get_block_hash(&number)? {
+		Some(block_hash) => block_hash,
+		None => return Ok(None),
+	};
+
+	let proof: Option<Proof> = support.get_proof(&block_hash)?.map(Into::into);
+
+	let proof = proof.map(|mut x| {
+		x.hash = Some(block_hash.into());
+		x
+	});
+
+	Ok(proof)
+}
+
 pub async fn chain_get_proof_by_hash<S: ApiSupport>(
 	data: Data<Arc<S>>,
 	Params((hash,)): Params<(Hash,)>,
