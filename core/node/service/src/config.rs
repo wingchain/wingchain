@@ -40,24 +40,38 @@ pub struct OtherConfig {
 	pub coordinator: CoordinatorConfig,
 }
 
-pub fn get_chain_config(service_config: &ServiceConfig) -> CommonResult<ChainConfig> {
+pub fn get_file_config(home: &Path) -> CommonResult<FileConfig> {
+	let config_path = home.join(main_base::CONFIG).join(main_base::CONFIG_FILE);
+	let config = fs::read_to_string(&config_path).map_err(|_| {
+		errors::ErrorKind::Config(format!("Failed to read config file: {:?}", config_path))
+	})?;
+
+	let config = toml::from_str(&config)
+		.map_err(|e| errors::ErrorKind::Config(format!("Failed to parse config file: {:?}", e)))?;
+
+	Ok(config)
+}
+
+pub fn get_chain_config(
+	file_config: &FileConfig,
+	service_config: &ServiceConfig,
+) -> CommonResult<ChainConfig> {
 	let home = &service_config.home;
-	let file_config = get_file_config(home)?;
-	let db = get_db_config(&file_config, home)?;
+	let db = get_db_config(file_config, home)?;
 	let chain_config = ChainConfig {
-		home: service_config.home.clone(),
+		home: home.to_path_buf(),
 		db,
 	};
 	Ok(chain_config)
 }
 
 pub fn get_other_config(
+	file_config: &FileConfig,
 	service_config: &ServiceConfig,
 	basic: Arc<Basic>,
 ) -> CommonResult<OtherConfig> {
 	let home = &service_config.home;
 	let agent_version = &service_config.agent_version;
-	let file_config = get_file_config(home)?;
 	let config = OtherConfig {
 		txpool: get_txpool_config(&file_config)?,
 		api: get_api_config(&file_config)?,
@@ -89,7 +103,7 @@ fn get_db_config(file_config: &FileConfig, home: &Path) -> CommonResult<DBConfig
 			.db
 			.path
 			.clone()
-			.unwrap_or_else(||PathBuf::from(main_base::DATA).join(main_base::DB));
+			.unwrap_or_else(|| PathBuf::from(main_base::DATA).join(main_base::DB));
 		get_abs_path(&path, home)
 	};
 	let partitions = match &file_config.db.partitions {
@@ -173,18 +187,6 @@ fn get_coordinator_config(
 	};
 
 	let config = CoordinatorConfig { network_config };
-	Ok(config)
-}
-
-fn get_file_config(home: &Path) -> CommonResult<FileConfig> {
-	let config_path = home.join(main_base::CONFIG).join(main_base::CONFIG_FILE);
-	let config = fs::read_to_string(&config_path).map_err(|_| {
-		errors::ErrorKind::Config(format!("Failed to read config file: {:?}", config_path))
-	})?;
-
-	let config = toml::from_str(&config)
-		.map_err(|e| errors::ErrorKind::Config(format!("Failed to parse config file: {:?}", e)))?;
-
 	Ok(config)
 }
 

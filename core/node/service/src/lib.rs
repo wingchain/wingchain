@@ -61,7 +61,7 @@ use node_txpool::support::DefaultTxPoolSupport;
 use node_txpool::TxPool;
 use primitives::errors::CommonResult;
 
-use crate::config::{get_chain_config, get_other_config};
+use crate::config::{get_chain_config, get_file_config, get_other_config};
 use crate::errors::ErrorKind;
 
 mod config;
@@ -91,11 +91,13 @@ pub struct Service {
 
 impl Service {
 	pub fn new(config: ServiceConfig) -> CommonResult<Self> {
+		let file_config = get_file_config(&config.home)?;
+
 		// init chain
-		let chain_config = get_chain_config(&config)?;
+		let chain_config = get_chain_config(&file_config, &config)?;
 		let chain = Arc::new(Chain::new(chain_config)?);
 
-		let other_config = get_other_config(&config, chain.get_basic())?;
+		let other_config = get_other_config(&file_config, &config, chain.get_basic())?;
 		// init txpool
 		let txpool_support = Arc::new(DefaultTxPoolSupport::new(chain.clone()));
 		let txpool = Arc::new(TxPool::new(other_config.txpool, txpool_support)?);
