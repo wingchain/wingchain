@@ -18,6 +18,7 @@ use chrono::DateTime;
 use serde::Deserialize;
 use tempfile::tempdir;
 
+use base::config::Config;
 use base::spec::Spec;
 use base::SharedParams;
 use main_init::cli::InitOpt;
@@ -50,7 +51,6 @@ fn test_init() {
 	};
 
 	let result = run(opt);
-
 	assert!(result.is_ok());
 
 	let spec: Spec =
@@ -79,6 +79,10 @@ fn test_init() {
 	let param: BalanceInitParams = serde_json::from_str(&tx.params).unwrap();
 
 	assert_eq!(param.endow.len(), 0);
+
+	let _config: Config =
+		toml::from_str(&fs::read_to_string(home.join("config").join("config.toml")).unwrap())
+			.unwrap();
 }
 
 #[cfg(feature = "build-dep-test")]
@@ -127,4 +131,8 @@ fn test_init_command() {
 	let param: BalanceInitParams = serde_json::from_str(&tx.params).unwrap();
 
 	assert_eq!(param.endow.len(), 0);
+
+	let _config: Config =
+		toml::from_str(&fs::read_to_string(home.join("config").join("config.toml")).unwrap())
+			.unwrap();
 }

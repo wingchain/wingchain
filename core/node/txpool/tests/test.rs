@@ -21,7 +21,7 @@ use tempfile::tempdir;
 
 use crypto::address::AddressImpl;
 use crypto::dsa::DsaImpl;
-use node_chain::{module, Chain, ChainConfig};
+use node_chain::{module, Chain, ChainConfig, DBConfig};
 use node_txpool::support::DefaultTxPoolSupport;
 use node_txpool::{TxPool, TxPoolConfig};
 use primitives::{Address, FullTransaction};
@@ -300,7 +300,12 @@ fn get_chain(address: &Address) -> Arc<Chain> {
 
 	init(&home, address);
 
-	let chain_config = ChainConfig { home };
+	let db = DBConfig {
+		memory_budget: 1 * 1024 * 1024,
+		path: home.join("data").join("db"),
+		partitions: vec![],
+	};
+	let chain_config = ChainConfig { home, db };
 
 	let chain = Arc::new(Chain::new(chain_config).unwrap());
 

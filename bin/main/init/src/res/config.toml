@@ -9,17 +9,37 @@ rpc_addr = "0.0.0.0:3109"
 rpc_workers = 0
 rpc_maxconn = 10240
 
+[db]
+path = "data/db"
+memory_budget = 134_217_728
+
+# DB partition list
+# [[db.partitions]]
+# path = "data/db/db0"
+# target_size = 10_737_418_240
+
 [validator]
-secret_key_file = "secret_key.dat"
+secret_key_file = "config/secret_key.dat"
 
 [network]
 max_in_peers = 32
 max_out_peers = 32
+
+# Listen address list
+# The item is socket address, e.g. 0.0.0.0:3110
 listen_addresses = [ "0.0.0.0:3110" ]
+
+# External address list
+# The item is socket address, e.g. 8.8.8.8:3110
 external_addresses = []
-# libp2p multaddr, e.g. /ip4/127.0.0.1/tcp/3110/p2p/12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN
+
+# Bootnodes list
+# The item is libp2p multaddr, e.g. /ip4/127.0.0.1/tcp/3110/p2p/12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN
 bootnodes = []
-# libp2p multaddr, e.g. /ip4/127.0.0.1/tcp/3110/p2p/12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN
+
+# Reserved nodes list
+# The item is libp2p multaddr, e.g. /ip4/127.0.0.1/tcp/3110/p2p/12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN
 reserved_nodes = []
+
 reserved_only = false
-secret_key_file = "network_secret_key.dat"
+secret_key_file = "config/network_secret_key.dat"

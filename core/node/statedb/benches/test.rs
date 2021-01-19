@@ -21,7 +21,7 @@ use std::sync::Arc;
 use test::{black_box, Bencher};
 
 use crypto::hash::HashImpl;
-use node_db::DB;
+use node_db::{DBConfig, DB};
 use node_statedb::StateDB;
 use primitives::DBKey;
 
@@ -67,7 +67,13 @@ fn prepare_statedb(records: usize) -> (StateDB, Vec<u8>) {
 	let path = tempdir().expect("Could not create a temp dir");
 	let path = path.into_path();
 
-	let db = Arc::new(DB::open(&path).unwrap());
+	let db_config = DBConfig {
+		memory_budget: 128 * 1024 * 1024,
+		path,
+		partitions: vec![],
+	};
+
+	let db = Arc::new(DB::open(db_config).unwrap());
 
 	let hasher = Arc::new(HashImpl::Blake2b160);
 

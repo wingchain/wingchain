@@ -52,7 +52,7 @@ use tokio::time::Duration;
 
 use node_api::support::DefaultApiSupport;
 use node_api::Api;
-use node_chain::{Chain, ChainConfig};
+use node_chain::Chain;
 use node_consensus::Consensus;
 use node_consensus_base::support::DefaultConsensusSupport;
 use node_coordinator::support::DefaultCoordinatorSupport;
@@ -61,7 +61,7 @@ use node_txpool::support::DefaultTxPoolSupport;
 use node_txpool::TxPool;
 use primitives::errors::CommonResult;
 
-use crate::config::get_config;
+use crate::config::{get_chain_config, get_other_config};
 use crate::errors::ErrorKind;
 
 mod config;
@@ -92,21 +92,18 @@ pub struct Service {
 impl Service {
 	pub fn new(config: ServiceConfig) -> CommonResult<Self> {
 		// init chain
-		let chain_config = ChainConfig {
-			home: config.home.clone(),
-		};
+		let chain_config = get_chain_config(&config)?;
 		let chain = Arc::new(Chain::new(chain_config)?);
 
-		let global_config = get_config(&config, chain.get_basic())?;
-
+		let other_config = get_other_config(&config, chain.get_basic())?;
 		// init txpool
 		let txpool_support = Arc::new(DefaultTxPoolSupport::new(chain.clone()));
-		let txpool = Arc::new(TxPool::new(global_config.txpool, txpool_support)?);
+		let txpool = Arc::new(TxPool::new(other_config.txpool, txpool_support)?);
 
 		// init consensus poa
 		let consensus_support =
 			Arc::new(DefaultConsensusSupport::new(chain.clone(), txpool.clone()));
-		let consensus = Arc::new(Consensus::new(global_config.consensus, consensus_support)?);
+		let consensus = Arc::new(Consensus::new(other_config.consensus, consensus_support)?);
 
 		// init coordinator
 		let coordinator_support = Arc::new(DefaultCoordinatorSupport::new(
@@ -115,7 +112,7 @@ impl Service {
 			consensus.clone(),
 		));
 		let coordinator = Arc::new(Coordinator::new(
-			global_config.coordinator,
+			other_config.coordinator,
 			coordinator_support,
 		)?);
 
@@ -125,7 +122,7 @@ impl Service {
 			txpool.clone(),
 			coordinator.clone(),
 		));
-		let api = Arc::new(Api::new(global_config.api, api_support));
+		let api = Arc::new(Api::new(other_config.api, api_support));
 
 		Ok(Self {
 			config,

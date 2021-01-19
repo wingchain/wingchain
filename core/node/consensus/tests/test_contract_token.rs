@@ -16,10 +16,9 @@ use std::sync::Arc;
 
 use crypto::address::AddressImpl;
 use crypto::dsa::DsaImpl;
-use node_chain::{Chain, ChainConfig};
 use node_consensus_base::Consensus;
 use node_executor::module;
-use primitives::codec::{Decode, Encode};
+use primitives::codec::Decode;
 use primitives::Address;
 use utils_test::test_accounts;
 
@@ -515,113 +514,6 @@ async fn test_poa_contract_token_transfer_from() {
 	assert_eq!(result, r#"100000000"#.to_string(),);
 
 	base::safe_close(chain, txpool, consensus).await;
-}
-
-#[tokio::test]
-async fn test_poa_contract_build_tx_create() {
-	let nonce = match option_env!("TEST_NONCE") {
-		Some(v) => match str::parse::<u32>(v) {
-			Ok(v) => v,
-			Err(_) => return,
-		},
-		_ => return,
-	};
-
-	let until = match option_env!("TEST_UNTIL") {
-		Some(v) => match str::parse::<u64>(v) {
-			Ok(v) => v,
-			Err(_) => return,
-		},
-		_ => return,
-	};
-
-	let home = match option_env!("TEST_HOME") {
-		Some(v) => v,
-		_ => return,
-	}
-	.into();
-
-	let _ = env_logger::try_init();
-
-	let dsa = Arc::new(DsaImpl::Ed25519);
-	let address = Arc::new(AddressImpl::Blake2b160);
-
-	let (account1, _account2) = test_accounts(dsa, address);
-
-	let chain_config = ChainConfig { home };
-
-	let chain = Arc::new(Chain::new(chain_config).unwrap());
-
-	let ori_code = get_code().to_vec();
-
-	let tx = chain
-        .build_transaction(
-            Some((account1.secret_key.clone(), nonce, until)),
-			chain.build_call("contract".to_string(),
-            "create".to_string(),
-            module::contract::CreateParams {
-                code: ori_code.clone(),
-                init_pay_value: 0,
-                init_method: "init".to_string(),
-                init_params: r#"{"name":"Bitcoin","symbol":"BTC","decimals":8,"total_supply":2100000000000000}"#.as_bytes().to_vec(),
-            }).unwrap(),
-        ).unwrap();
-	let tx = tx.encode();
-	let tx = hex::encode(tx);
-	log::info!("tx: 0x{}", tx);
-}
-
-#[tokio::test]
-async fn test_poa_contract_build_call_balance() {
-	let home = match option_env!("TEST_HOME") {
-		Some(v) => v,
-		_ => return,
-	}
-	.into();
-
-	let contract_address = match option_env!("TEST_CONTRACT_ADDRESS") {
-		Some(v) => Address(hex::decode(v).unwrap()),
-		_ => return,
-	}
-	.into();
-
-	let _ = env_logger::try_init();
-
-	let dsa = Arc::new(DsaImpl::Ed25519);
-	let address = Arc::new(AddressImpl::Blake2b160);
-
-	let (account1, _account2) = test_accounts(dsa, address);
-
-	let chain_config = ChainConfig { home };
-
-	let chain = Arc::new(Chain::new(chain_config).unwrap());
-
-	let tx = chain
-		.build_transaction(
-			Some((account1.secret_key.clone(), 0, 0)),
-			chain
-				.build_call(
-					"contract".to_string(),
-					"execute".to_string(),
-					module::contract::ExecuteParams {
-						contract_address,
-						method: "balance".to_string(),
-						params: format!(
-							r#"{{"address":"{}"}}"#,
-							Address((account1.address).0.clone())
-						)
-						.as_bytes()
-						.to_vec(),
-						pay_value: 0,
-					},
-				)
-				.unwrap(),
-		)
-		.unwrap();
-
-	let params = hex::encode(tx.call.params.0);
-
-	log::info!("params: 0x{}", params);
 }
 
 fn get_code() -> &'static [u8] {
