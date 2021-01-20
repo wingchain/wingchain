@@ -14,17 +14,18 @@
 
 use std::fs;
 use std::net::SocketAddrV4;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use crypto::dsa::{Dsa, DsaImpl, KeyPair};
 use main_base::config::Config as FileConfig;
 use node_api::ApiConfig;
-use node_chain::Basic;
+use node_chain::{Basic, ChainConfig};
 use node_consensus_base::ConsensusConfig;
 use node_coordinator::{
 	ed25519, CoordinatorConfig, Keypair, LinkedHashMap, Multiaddr, PeerId, Protocol,
 };
+use node_db::{DBConfig, Partition};
 use node_txpool::TxPoolConfig;
 use primitives::errors::CommonResult;
 use primitives::SecretKey;
@@ -32,19 +33,46 @@ use primitives::SecretKey;
 use crate::errors::ErrorKind;
 use crate::{errors, ServiceConfig};
 
-pub struct Config {
+pub struct OtherConfig {
 	pub txpool: TxPoolConfig,
 	pub api: ApiConfig,
 	pub consensus: ConsensusConfig,
 	pub coordinator: CoordinatorConfig,
 }
 
-pub fn get_config(chain_config: &ServiceConfig, basic: Arc<Basic>) -> CommonResult<Config> {
-	let home = &chain_config.home;
-	let agent_version = &chain_config.agent_version;
+pub fn get_file_config(home: &Path) -> CommonResult<FileConfig> {
+	let config_path = home.join(main_base::CONFIG).join(main_base::CONFIG_FILE);
+	let config = fs::read_to_string(&config_path).map_err(|_| {
+		errors::ErrorKind::Config(format!("Failed to read config file: {:?}", config_path))
+	})?;
 
-	let file_config = get_file_config(home)?;
-	let config = Config {
+	let config = toml::from_str(&config)
+		.map_err(|e| errors::ErrorKind::Config(format!("Failed to parse config file: {:?}", e)))?;
+
+	Ok(config)
+}
+
+pub fn get_chain_config(
+	file_config: &FileConfig,
+	service_config: &ServiceConfig,
+) -> CommonResult<ChainConfig> {
+	let home = &service_config.home;
+	let db = get_db_config(file_config, home)?;
+	let chain_config = ChainConfig {
+		home: home.to_path_buf(),
+		db,
+	};
+	Ok(chain_config)
+}
+
+pub fn get_other_config(
+	file_config: &FileConfig,
+	service_config: &ServiceConfig,
+	basic: Arc<Basic>,
+) -> CommonResult<OtherConfig> {
+	let home = &service_config.home;
+	let agent_version = &service_config.agent_version;
+	let config = OtherConfig {
 		txpool: get_txpool_config(&file_config)?,
 		api: get_api_config(&file_config)?,
 		consensus: get_consensus_config(&file_config, home, basic)?,
@@ -69,14 +97,44 @@ fn get_api_config(file_config: &FileConfig) -> CommonResult<ApiConfig> {
 	Ok(api)
 }
 
+fn get_db_config(file_config: &FileConfig, home: &Path) -> CommonResult<DBConfig> {
+	let path = {
+		let path = file_config
+			.db
+			.path
+			.clone()
+			.unwrap_or_else(|| PathBuf::from(main_base::DATA).join(main_base::DB));
+		get_abs_path(&path, home)
+	};
+	let partitions = match &file_config.db.partitions {
+		Some(partitions) => partitions
+			.iter()
+			.map(|p| {
+				let path = get_abs_path(&p.path, home);
+				Partition {
+					path,
+					target_size: p.target_size,
+				}
+			})
+			.collect(),
+		None => vec![],
+	};
+	let db = DBConfig {
+		memory_budget: file_config.db.memory_budget,
+		path,
+		partitions,
+	};
+	Ok(db)
+}
+
 fn get_consensus_config(
 	file_config: &FileConfig,
-	home: &PathBuf,
+	home: &Path,
 	basic: Arc<Basic>,
 ) -> CommonResult<ConsensusConfig> {
 	let secret_key = if let Some(secret_key_file) = &file_config.validator.secret_key_file {
-		let file = &secret_key_file;
-		let secret_key = read_secret_key_file(file, home)?;
+		let file = get_abs_path(secret_key_file, home);
+		let secret_key = read_secret_key_file(&file)?;
 		let _key_pair = basic
 			.dsa
 			.key_pair_from_secret_key(&secret_key)
@@ -92,7 +150,7 @@ fn get_consensus_config(
 
 fn get_coordinator_config(
 	file_config: &FileConfig,
-	home: &PathBuf,
+	home: &Path,
 	agent_version: &str,
 ) -> CommonResult<CoordinatorConfig> {
 	let listen_addresses = parse_from_socket_addresses(&file_config.network.listen_addresses)?;
@@ -102,7 +160,8 @@ fn get_coordinator_config(
 
 	let local_key_pair = {
 		let file = &file_config.network.secret_key_file;
-		let mut secret_key = read_secret_key_file(file, home)?;
+		let file = get_abs_path(file, home);
+		let mut secret_key = read_secret_key_file(&file)?;
 		let dsa = DsaImpl::Ed25519;
 		let key_pair = dsa.key_pair_from_secret_key(&secret_key)?;
 		let (_, public_key_len, _) = dsa.length().into();
@@ -128,18 +187,6 @@ fn get_coordinator_config(
 	};
 
 	let config = CoordinatorConfig { network_config };
-	Ok(config)
-}
-
-fn get_file_config(home: &PathBuf) -> CommonResult<FileConfig> {
-	let config_path = home.join(main_base::CONFIG).join(main_base::CONFIG_FILE);
-	let config = fs::read_to_string(&config_path).map_err(|_| {
-		errors::ErrorKind::Config(format!("Failed to read config file: {:?}", config_path))
-	})?;
-
-	let config = toml::from_str(&config)
-		.map_err(|e| errors::ErrorKind::Config(format!("Failed to parse config file: {:?}", e)))?;
-
 	Ok(config)
 }
 
@@ -173,7 +220,7 @@ fn parse_from_multi_addresses(
 				Some(Protocol::P2p(key)) => PeerId::from_multihash(key)
 					.map_err(|_| ErrorKind::Config(format!("Invalid multi address: {:?}", x)))?,
 				_ => {
-					return Err(ErrorKind::Config(format!("Invalid multi address: {:?}", x)).into())
+					return Err(ErrorKind::Config(format!("Invalid multi address: {:?}", x)).into());
 				}
 			};
 			Ok((peer_id, addr))
@@ -185,15 +232,7 @@ fn parse_from_multi_addresses(
 	Ok(result)
 }
 
-fn read_secret_key_file(file: &PathBuf, home: &PathBuf) -> CommonResult<Vec<u8>> {
-	let file = {
-		if file.starts_with("/") {
-			file.clone()
-		} else {
-			home.join(main_base::CONFIG).join(file)
-		}
-	};
-
+fn read_secret_key_file(file: &Path) -> CommonResult<Vec<u8>> {
 	let secret_key = {
 		let secret_key = fs::read_to_string(&file).map_err(|_| {
 			errors::ErrorKind::Config(format!("Failed to read secret key file: {:?}", file))
@@ -204,4 +243,12 @@ fn read_secret_key_file(file: &PathBuf, home: &PathBuf) -> CommonResult<Vec<u8>>
 	};
 
 	Ok(secret_key)
+}
+
+fn get_abs_path(path: &Path, home: &Path) -> PathBuf {
+	if path.starts_with("/") {
+		path.to_path_buf()
+	} else {
+		home.join(path)
+	}
 }

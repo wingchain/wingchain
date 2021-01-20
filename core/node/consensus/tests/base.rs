@@ -19,7 +19,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tempfile::tempdir;
 
-use node_chain::{Chain, ChainConfig};
+use node_chain::{Chain, ChainConfig, DBConfig};
 use node_consensus::Consensus;
 use node_consensus_base::support::DefaultConsensusSupport;
 use node_consensus_base::ConsensusConfig;
@@ -108,7 +108,13 @@ fn get_chain(address: &Address) -> Arc<Chain> {
 
 	init(&home, address);
 
-	let chain_config = ChainConfig { home };
+	let db = DBConfig {
+		memory_budget: 1 * 1024 * 1024,
+		path: home.join("data").join("db"),
+		partitions: vec![],
+	};
+
+	let chain_config = ChainConfig { home, db };
 
 	let chain = Arc::new(Chain::new(chain_config).unwrap());
 

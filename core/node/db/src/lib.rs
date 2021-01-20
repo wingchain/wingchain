@@ -14,7 +14,7 @@
 
 //! Key value db based on rocksdb
 
-use std::path::Path;
+use std::path::PathBuf;
 
 use parking_lot::RwLock;
 use rocksdb::{
@@ -25,10 +25,30 @@ use rocksdb::{
 use primitives::errors::CommonResult;
 use primitives::{DBKey, DBValue};
 
-use crate::config::{gen_block_opts, gen_cf_opts, gen_db_opts, gen_read_opts, gen_write_opts};
+use crate::config::{
+	gen_block_opts, gen_cf_opts, gen_col_memory_budgets, gen_db_opts, gen_read_opts, gen_write_opts,
+};
 
 pub mod config;
 pub mod errors;
+
+#[derive(Clone)]
+pub struct Partition {
+	/// partition path
+	pub path: PathBuf,
+	/// partition max size in bytes
+	pub target_size: u64,
+}
+
+#[derive(Clone)]
+pub struct DBConfig {
+	/// db memory budget in bytes
+	pub memory_budget: u64,
+	/// db data path
+	pub path: PathBuf,
+	/// db partitions
+	pub partitions: Vec<Partition>,
+}
 
 pub struct DB {
 	db: RwLock<RocksDB>,
@@ -42,23 +62,32 @@ pub struct DB {
 
 impl DB {
 	/// Open the db from the given path
-	pub fn open(path: &Path) -> CommonResult<DB> {
-		let col_count = columns::COLUMN_NAMES.len();
-		let db_opts = gen_db_opts(col_count);
-		let block_opts = gen_block_opts();
+	pub fn open(config: DBConfig) -> CommonResult<DB> {
+		let db_opts = gen_db_opts(&config)?;
+		let block_opts = gen_block_opts(&config)?;
 		let read_opts = gen_read_opts();
 		let write_opts = gen_write_opts();
+		let col_memory_budgets = gen_col_memory_budgets(&config);
 
-		let cfs = columns::COLUMN_NAMES
-			.iter()
-			.map(|&name| ColumnFamilyDescriptor::new(name, gen_cf_opts(col_count, &block_opts)));
+		let cfs = columns::COLUMN_NAMES.iter().map(|&name| {
+			ColumnFamilyDescriptor::new(
+				name,
+				gen_cf_opts(*col_memory_budgets.get(name).expect("qed"), &block_opts),
+			)
+		});
 
-		let rocksdb = match RocksDB::open_cf_descriptors(&db_opts, path, cfs) {
-			Err(_) => match RocksDB::open_cf(&db_opts, path, &[] as &[&str]) {
+		let rocksdb = match RocksDB::open_cf_descriptors(&db_opts, &config.path, cfs) {
+			Err(_) => match RocksDB::open_cf(&db_opts, &config.path, &[] as &[&str]) {
 				Ok(mut db) => {
 					for &name in columns::COLUMN_NAMES.iter() {
 						let _ = db
-							.create_cf(name, &gen_cf_opts(col_count, &block_opts))
+							.create_cf(
+								name,
+								&gen_cf_opts(
+									*col_memory_budgets.get(name).expect("qed"),
+									&block_opts,
+								),
+							)
 							.map_err(errors::ErrorKind::RocksDB)?;
 					}
 					db
@@ -116,15 +145,11 @@ impl DB {
 			match op {
 				DBOp::Insert { col, key, value } => {
 					let cf = Self::get_cf(&db, col);
-					batch
-						.put_cf(cf, &key, &value)
-						.map_err(errors::ErrorKind::RocksDB)?;
+					batch.put_cf(cf, &key, &value);
 				}
 				DBOp::Delete { col, key } => {
 					let cf = Self::get_cf(&db, col);
-					batch
-						.delete_cf(cf, &key)
-						.map_err(errors::ErrorKind::RocksDB)?;
+					batch.delete_cf(cf, &key);
 				}
 			};
 		}

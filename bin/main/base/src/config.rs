@@ -21,6 +21,7 @@ use std::path::PathBuf;
 pub struct Config {
 	pub txpool: TxPoolConfig,
 	pub api: ApiConfig,
+	pub db: DBConfig,
 	pub validator: ValidatorConfig,
 	pub network: NetworkConfig,
 }
@@ -35,6 +36,19 @@ pub struct ApiConfig {
 	pub rpc_addr: String,
 	pub rpc_workers: usize,
 	pub rpc_maxconn: usize,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct DBConfig {
+	pub memory_budget: u64,
+	pub path: Option<PathBuf>,
+	pub partitions: Option<Vec<Partition>>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct Partition {
+	pub path: PathBuf,
+	pub target_size: u64,
 }
 
 #[derive(Deserialize, Debug)]

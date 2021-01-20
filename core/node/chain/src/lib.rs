@@ -22,6 +22,7 @@ use futures::channel::mpsc::UnboundedReceiver;
 use crypto::address::AddressImpl;
 use crypto::dsa::DsaImpl;
 use crypto::hash::HashImpl;
+pub use node_db::DBConfig;
 use node_db::DBTransaction;
 pub use node_executor::module;
 use primitives::codec::{Decode, Encode};
@@ -48,6 +49,8 @@ pub type ChainCommitExecutionParams = CommitExecutionParams<DBTransaction>;
 pub struct ChainConfig {
 	/// Home path
 	pub home: PathBuf,
+	/// DB config
+	pub db: DBConfig,
 }
 
 pub struct Chain {

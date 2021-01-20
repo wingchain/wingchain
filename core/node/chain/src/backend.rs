@@ -782,8 +782,7 @@ impl Backend {
 	/// from the db if the chain is inited
 	/// from the spec file if the chain is not inited
 	fn get_spec(config: &ChainConfig) -> CommonResult<(bool, DB, Spec)> {
-		let db_path = config.home.join(main_base::DATA).join(main_base::DB);
-		let db = DB::open(&db_path)?;
+		let db = DB::open(config.db.clone())?;
 		let genesis_inited = db
 			.get(
 				node_db::columns::GLOBAL,

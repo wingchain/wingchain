@@ -22,7 +22,7 @@ use mut_static::MutStatic;
 use crypto::hash::Hash;
 use crypto::hash::HashImpl;
 use lazy_static::lazy_static;
-use node_db::DB;
+use node_db::{DBConfig, DB};
 use node_statedb::{StateDB, TrieRoot};
 use primitives::{codec, DBKey};
 
@@ -105,7 +105,13 @@ fn test_statedb_256_reopen() {
 	let path = tempdir().expect("Could not create a temp dir");
 	let path = path.into_path();
 
-	let db = Arc::new(DB::open(&path).unwrap());
+	let db_config = DBConfig {
+		memory_budget: 1 * 1024 * 1024,
+		path,
+		partitions: vec![],
+	};
+
+	let db = Arc::new(DB::open(db_config.clone()).unwrap());
 
 	let hasher = HashImpl::Blake2b512;
 
@@ -149,7 +155,7 @@ fn test_statedb_256_reopen() {
 	drop(db);
 
 	let hasher_clone = hasher.clone();
-	let db = Arc::new(DB::open(&path).unwrap());
+	let db = Arc::new(DB::open(db_config).unwrap());
 	let statedb = StateDB::new(db, node_db::columns::PAYLOAD_STATE, hasher_clone).unwrap();
 
 	let result = statedb.get(&update_2_root, &b"abc"[..]).unwrap();
@@ -167,7 +173,13 @@ fn test_statedb_for_hasher(hasher: HashImpl) {
 	let path = tempdir().expect("Could not create a temp dir");
 	let path = path.into_path();
 
-	let db = Arc::new(DB::open(&path).unwrap());
+	let db_config = DBConfig {
+		memory_budget: 1 * 1024 * 1024,
+		path,
+		partitions: vec![],
+	};
+
+	let db = Arc::new(DB::open(db_config).unwrap());
 
 	let hasher = Arc::new(hasher);
 

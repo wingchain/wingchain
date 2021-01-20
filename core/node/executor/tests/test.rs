@@ -18,7 +18,7 @@ use std::sync::Arc;
 use crypto::address::AddressImpl;
 use crypto::dsa::DsaImpl;
 use crypto::hash::HashImpl;
-use node_db::DB;
+use node_db::{DBConfig, DB};
 use node_executor::{module, Context, ContextEssence, Executor};
 use node_executor_primitives::ContextEnv;
 use node_statedb::{StateDB, TrieRoot};
@@ -36,7 +36,13 @@ fn test_executor() {
 	let path = tempdir().expect("Could not create a temp dir");
 	let path = path.into_path();
 
-	let db = Arc::new(DB::open(&path).unwrap());
+	let db_config = DBConfig {
+		memory_budget: 1 * 1024 * 1024,
+		path,
+		partitions: vec![],
+	};
+
+	let db = Arc::new(DB::open(db_config).unwrap());
 	let hasher = Arc::new(HashImpl::Blake2b256);
 	let dsa = Arc::new(DsaImpl::Ed25519);
 	let address = Arc::new(AddressImpl::Blake2b160);
@@ -243,7 +249,13 @@ fn test_executor_validate_tx() {
 	let path = tempdir().expect("Could not create a temp dir");
 	let path = path.into_path();
 
-	let db = Arc::new(DB::open(&path).unwrap());
+	let db_config = DBConfig {
+		memory_budget: 1 * 1024 * 1024,
+		path,
+		partitions: vec![],
+	};
+
+	let db = Arc::new(DB::open(db_config).unwrap());
 
 	let hasher = Arc::new(HashImpl::Blake2b256);
 	let dsa = Arc::new(DsaImpl::Ed25519);
@@ -436,7 +448,13 @@ fn expected_block_0_meta_state_root(txs: &Vec<Arc<FullTransaction>>) -> Hash {
 	let path = tempdir().expect("Could not create a temp dir");
 	let path = path.into_path();
 
-	let db = Arc::new(DB::open(&path).unwrap());
+	let db_config = DBConfig {
+		memory_budget: 1 * 1024 * 1024,
+		path,
+		partitions: vec![],
+	};
+
+	let db = Arc::new(DB::open(db_config).unwrap());
 	let hasher = Arc::new(HashImpl::Blake2b256);
 
 	let statedb =
@@ -472,7 +490,13 @@ fn expected_block_0_payload_state_root(txs: &Vec<Arc<FullTransaction>>) -> Hash 
 	let path = tempdir().expect("Could not create a temp dir");
 	let path = path.into_path();
 
-	let db = Arc::new(DB::open(&path).unwrap());
+	let db_config = DBConfig {
+		memory_budget: 1 * 1024 * 1024,
+		path,
+		partitions: vec![],
+	};
+
+	let db = Arc::new(DB::open(db_config).unwrap());
 	let hasher = Arc::new(HashImpl::Blake2b256);
 
 	let statedb = Arc::new(
@@ -505,7 +529,13 @@ fn expected_block_1_payload_state_root(
 	let path = tempdir().expect("Could not create a temp dir");
 	let path = path.into_path();
 
-	let db = Arc::new(DB::open(&path).unwrap());
+	let db_config = DBConfig {
+		memory_budget: 1 * 1024 * 1024,
+		path,
+		partitions: vec![],
+	};
+
+	let db = Arc::new(DB::open(db_config).unwrap());
 	let hasher = Arc::new(HashImpl::Blake2b256);
 
 	let statedb = Arc::new(
