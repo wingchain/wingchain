@@ -30,6 +30,7 @@ use crate::support::CoordinatorSupport;
 use futures::channel::mpsc::{unbounded, UnboundedSender};
 
 mod errors;
+mod peer_report;
 mod protocol;
 mod stream;
 pub mod support;

@@ -50,13 +50,16 @@ pub enum CommitBlockError {
 	NotBest,
 }
 
-#[derive(Debug, Display)]
+#[derive(Debug, Display, Clone)]
 pub enum ValidateTxError {
-	#[display(fmt = "Invalid tx witness: {}", _0)]
-	InvalidTxWitness(String),
+	#[display(fmt = "Duplicated tx: {}", _0)]
+	DuplicatedTx(String),
 
 	#[display(fmt = "Invalid tx until: {}", _0)]
 	InvalidTxUntil(String),
+
+	#[display(fmt = "Invalid tx witness: {}", _0)]
+	InvalidTxWitness(String),
 
 	#[display(fmt = "Invalid tx module: {}", _0)]
 	InvalidTxModule(String),
@@ -67,8 +70,8 @@ pub enum ValidateTxError {
 	#[display(fmt = "Invalid tx params: {}", _0)]
 	InvalidTxParams(String),
 
-	#[display(fmt = "Duplicated tx: {}", _0)]
-	DuplicatedTx(String),
+	#[display(fmt = "{}", _0)]
+	Application(String),
 }
 
 impl Error for ErrorKind {}

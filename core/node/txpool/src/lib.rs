@@ -23,7 +23,7 @@ use futures::StreamExt;
 use log::{info, trace};
 use parking_lot::RwLock;
 
-use primitives::errors::CommonResult;
+use primitives::errors::{Catchable, CommonResult};
 use primitives::{FullTransaction, Hash, Transaction};
 
 use crate::errors::InsertError;
@@ -179,7 +179,15 @@ where
 
 	/// Validate a transaction
 	fn validate_transaction(&self, tx_hash: &Hash, tx: &Transaction) -> CommonResult<()> {
-		self.support.validate_transaction(tx_hash, &tx, true)?;
+		self.support
+			.validate_transaction(tx_hash, &tx, true)
+			.or_else_catch::<node_chain::errors::ErrorKind, _>(|e| match e {
+				node_chain::errors::ErrorKind::ValidateTxError(e) => Some(Err(
+					errors::ErrorKind::InsertError(errors::InsertError::InvalidTx(e.clone()))
+						.into(),
+				)),
+				_ => None,
+			})?;
 		Ok(())
 	}
 

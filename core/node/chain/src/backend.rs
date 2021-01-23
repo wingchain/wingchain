@@ -210,6 +210,9 @@ impl Backend {
 				node_executor_primitives::errors::ErrorKind::InvalidTxParams(e) => {
 					Some(ValidateTxError::InvalidTxParams(e.clone()))
 				}
+				node_executor_primitives::errors::ErrorKind::Application(e) => {
+					Some(ValidateTxError::Application(e.clone()))
+				}
 				_ => None,
 			};
 			match vte {

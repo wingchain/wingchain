@@ -20,7 +20,9 @@ use futures_timer::Delay;
 use libp2p::PeerId;
 use linked_hash_map::LinkedHashMap;
 
-use node_peer_manager::{InMessage, IncomingId, OutMessage, PeerManager, PeerManagerConfig};
+use node_peer_manager::{
+	InMessage, IncomingId, OutMessage, PeerManager, PeerManagerConfig, PeerReport,
+};
 
 #[tokio::test]
 async fn test_peer_manager_out_full() {
@@ -254,6 +256,35 @@ async fn test_peer_manager_in_full() {
 	peer_manager.incoming(peer_id_2.clone(), incoming_id_2.clone());
 	let message = peer_manager.next().await;
 	assert_eq!(message, Some(OutMessage::Reject(incoming_id_2.clone())));
+}
+
+#[tokio::test]
+async fn test_peer_manager_score() {
+	let config = PeerManagerConfig {
+		max_in_peers: 2,
+		max_out_peers: 3,
+		bootnodes: LinkedHashMap::new(),
+		reserved: LinkedHashMap::new(),
+		reserved_only: false,
+	};
+	let mut peer_manager = PeerManager::new(config);
+
+	let peer_id_0 = PeerId::random();
+	peer_manager.discovered(peer_id_0.clone());
+	let message = peer_manager.next().await;
+	assert_eq!(message, Some(OutMessage::Connect(peer_id_0.clone())));
+
+	let _ = peer_manager.tx().unbounded_send(InMessage::ReportPeer(
+		peer_id_0.clone(),
+		PeerReport::new(-50, ""),
+	));
+	let _ = peer_manager.tx().unbounded_send(InMessage::ReportPeer(
+		peer_id_0.clone(),
+		PeerReport::new(-51, ""),
+	));
+
+	let message = peer_manager.next().await;
+	assert_eq!(message, Some(OutMessage::Drop(peer_id_0.clone())));
 }
 
 fn sleep(duration: Duration) -> Delay {

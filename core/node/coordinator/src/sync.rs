@@ -26,6 +26,7 @@ use primitives::errors::{Catchable, CommonResult};
 use primitives::{BlockNumber, FullTransaction, Hash, Header};
 
 use crate::errors::ErrorKind;
+use crate::peer_report::{PEER_REPORT_INVALID_BLOCK, PEER_REPORT_INVALID_TX};
 use crate::protocol::{
 	BlockAnnounce, BlockData, BlockId, BlockRequest, BlockResponse, BodyData, Direction,
 	ProtocolMessage, RequestId, TxPropagate, FIELDS_BODY, FIELDS_HEADER, FIELDS_PROOF,
@@ -440,7 +441,7 @@ where
 				}
 				VerifyAction::Reset => {
 					let peer_id = match pending_block.state {
-						PendingBlockState::Downloaded { from, .. } => from.clone(),
+						PendingBlockState::Downloaded { from, .. } => from,
 						_ => unreachable!("qed"),
 					};
 					self.pending_blocks
@@ -452,7 +453,13 @@ where
 								}
 							}
 							_ => (),
-						})
+						});
+					self.support
+						.peer_manager_send_message(PMInMessage::ReportPeer(
+							(*peer_id).clone(),
+							PEER_REPORT_INVALID_BLOCK,
+						));
+					break;
 				}
 			}
 		}
@@ -652,7 +659,10 @@ where
 				match e {
 					node_txpool::errors::InsertError::InvalidTx(_e) => {
 						self.support
-							.peer_manager_send_message(PMInMessage::DiscardPeer(peer_id.clone()));
+							.peer_manager_send_message(PMInMessage::ReportPeer(
+								peer_id.clone(),
+								PEER_REPORT_INVALID_TX,
+							));
 					}
 					_ => (),
 				}

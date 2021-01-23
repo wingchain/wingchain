@@ -33,6 +33,7 @@ pub use {
 	futures_codec::BytesMut, libp2p::core::Multiaddr, libp2p::identity::ed25519,
 	libp2p::identity::Keypair, libp2p::multiaddr::Protocol, libp2p::PeerId,
 	linked_hash_map::LinkedHashMap, node_peer_manager::InMessage as PMInMessage,
+	node_peer_manager::PeerReport,
 };
 
 use crate::behaviour::{Behaviour, BehaviourConfig};
@@ -41,6 +42,7 @@ use crate::stream::{start, NetworkStream};
 mod behaviour;
 mod discovery;
 mod errors;
+mod peer_report;
 mod protocol;
 mod stream;
 mod transport;
