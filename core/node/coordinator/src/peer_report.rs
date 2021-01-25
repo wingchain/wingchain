@@ -17,3 +17,5 @@ use node_network::PeerReport;
 pub const PEER_REPORT_INVALID_TX: PeerReport = PeerReport::new(-10, "Invalid tx");
 pub const PEER_REPORT_HANDSHAKE_FAILED: PeerReport = PeerReport::new_fatal("Handshake failed");
 pub const PEER_REPORT_INVALID_BLOCK: PeerReport = PeerReport::new(-20, "Invalid block");
+pub const PEER_REPORT_BLOCK_REQUEST_TIMEOUT: PeerReport =
+	PeerReport::new(-4, "Block request timeout");

@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use derive_more::Display;
 use std::convert::{TryFrom, TryInto};
 
 use primitives::codec::{Decode, Encode};
@@ -57,7 +58,7 @@ pub struct TxPropagate {
 	pub txs: Vec<Transaction>,
 }
 
-#[derive(Encode, Decode, Debug, PartialEq, Clone)]
+#[derive(Encode, Decode, Debug, PartialEq, Clone, Display)]
 pub struct RequestId(pub u64);
 
 pub type Fields = u32;

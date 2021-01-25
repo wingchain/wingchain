@@ -26,7 +26,9 @@ use primitives::errors::{Catchable, CommonResult};
 use primitives::{BlockNumber, FullTransaction, Hash, Header};
 
 use crate::errors::ErrorKind;
-use crate::peer_report::{PEER_REPORT_INVALID_BLOCK, PEER_REPORT_INVALID_TX};
+use crate::peer_report::{
+	PEER_REPORT_BLOCK_REQUEST_TIMEOUT, PEER_REPORT_INVALID_BLOCK, PEER_REPORT_INVALID_TX,
+};
 use crate::protocol::{
 	BlockAnnounce, BlockData, BlockId, BlockRequest, BlockResponse, BodyData, Direction,
 	ProtocolMessage, RequestId, TxPropagate, FIELDS_BODY, FIELDS_HEADER, FIELDS_PROOF,
@@ -34,12 +36,18 @@ use crate::protocol::{
 use crate::stream::StreamSupport;
 use crate::support::CoordinatorSupport;
 use crate::verifier::{Verifier, VerifyError};
+use futures::future::BoxFuture;
+use futures::stream::FuturesUnordered;
+use futures::FutureExt;
+use futures_timer::Delay;
+use tokio::time::Duration;
 
 const PEER_KNOWN_BLOCKS_SIZE: u32 = 1024;
 const PENDING_BLOCKS_SIZE: u32 = 2560;
 const PEER_REQUEST_BLOCK_SIZE: u32 = 128;
 const PEER_KNOWN_TXS_SIZE: u32 = 10240;
 const TX_PROPAGATE_MAX_BLOCK_BEHIND: u32 = 8;
+const BLOCK_REQUEST_TIMEOUT_S: u64 = 30;
 
 pub struct ChainSync<S>
 where
@@ -50,6 +58,7 @@ where
 	support: Arc<StreamSupport<S>>,
 	verifier: Verifier<S>,
 	next_request_id: RequestId,
+	pub block_request_timer: FuturesUnordered<BoxFuture<'static, (PeerId, RequestId)>>,
 }
 
 /// Handle peers open/close
@@ -66,6 +75,7 @@ where
 			support,
 			verifier,
 			next_request_id: RequestId(0),
+			block_request_timer: FuturesUnordered::new(),
 		})
 	}
 
@@ -230,6 +240,47 @@ where
 		Ok(())
 	}
 
+	pub fn on_block_request_timer_trigger(
+		&mut self,
+		peer_id: PeerId,
+		request_id: RequestId,
+	) -> CommonResult<()> {
+		if let Some(peer_info) = self.peers.get_mut(&peer_id) {
+			match &peer_info.state {
+				PeerState::Downloading {
+					request_id: rid,
+					number,
+					count,
+				} if rid == &request_id => {
+					trace!("Maintain downloading: block request timeout from {}, number: {}, count: {}, request_id: {}",
+						   peer_id, number, count, request_id);
+					peer_info.state = PeerState::Vacant;
+
+					for pending_block_info in self.pending_blocks.values_mut() {
+						match &pending_block_info.state {
+							PendingBlockState::Downloading {
+								request_id: rid, ..
+							} if **rid == request_id => {
+								pending_block_info.state = PendingBlockState::Seen;
+							}
+							_ => (),
+						}
+					}
+
+					self.support
+						.peer_manager_send_message(PMInMessage::ReportPeer(
+							peer_id.clone(),
+							PEER_REPORT_BLOCK_REQUEST_TIMEOUT,
+						));
+
+					self.sync()?;
+				}
+				_ => (),
+			}
+		}
+		Ok(())
+	}
+
 	pub fn on_block_response(
 		&mut self,
 		peer_id: PeerId,
@@ -241,23 +292,22 @@ where
 					request_id,
 					number,
 					count,
-				} => {
-					if request_id == &block_response.request_id {
-						trace!("Maintain downloading: receive block response from {}, number: {}, count: {}", peer_id, number, count);
+				} if request_id == &block_response.request_id => {
+					trace!("Maintain downloading: receive block response from {}, number: {}, count: {}, request_id: {}",
+							   peer_id, number, count, request_id);
 
-						let from = Arc::new(peer_id);
-						for block_data in block_response.blocks {
-							let number = block_data.number;
-							let pending_block_info = PendingBlockInfo {
-								state: PendingBlockState::Downloaded {
-									from: from.clone(),
-									block_data: Some(block_data),
-								},
-							};
-							self.pending_blocks.insert(number, pending_block_info);
-						}
-						peer_info.state = PeerState::Vacant;
+					let from = Arc::new(peer_id);
+					for block_data in block_response.blocks {
+						let number = block_data.number;
+						let pending_block_info = PendingBlockInfo {
+							state: PendingBlockState::Downloaded {
+								from: from.clone(),
+								block_data: Some(block_data),
+							},
+						};
+						self.pending_blocks.insert(number, pending_block_info);
 					}
+					peer_info.state = PeerState::Vacant;
 				}
 				_ => (),
 			}
@@ -372,6 +422,15 @@ where
 						}
 					}
 				}
+				// setup timer
+				let timer_result = (peer_id.clone(), (*request_id).clone());
+				self.block_request_timer.push(
+					async {
+						Delay::new(Duration::from_secs(BLOCK_REQUEST_TIMEOUT_S)).await;
+						timer_result
+					}
+					.boxed(),
+				);
 
 				trace!(
 					"Maintain seen: send block request to {}, number: {}, count: {}",
