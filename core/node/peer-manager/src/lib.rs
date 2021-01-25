@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::VecDeque;
+use std::collections::{hash_map::Entry, HashMap, VecDeque};
 use std::pin::Pin;
 
 use futures::channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
@@ -23,6 +23,8 @@ use linked_hash_map::LinkedHashMap;
 use log::trace;
 
 mod errors;
+
+const MIN_SCORE: i32 = -100;
 
 pub struct PeerManagerConfig {
 	pub max_in_peers: u32,
@@ -61,11 +63,29 @@ pub enum OutMessage {
 	Reject(IncomingId),
 }
 
+#[derive(Debug)]
+pub struct PeerReport {
+	score_diff: i32,
+	desc: &'static str,
+}
+
+impl PeerReport {
+	pub const fn new(score_diff: i32, desc: &'static str) -> Self {
+		Self { score_diff, desc }
+	}
+	pub const fn new_fatal(desc: &'static str) -> Self {
+		Self {
+			score_diff: MIN_SCORE,
+			desc,
+		}
+	}
+}
+
 pub enum InMessage {
 	AddReservedPeer(PeerId),
 	RemoveReservedPeer(PeerId),
 	SetReservedOnly(bool),
-	DiscardPeer(PeerId),
+	ReportPeer(PeerId, PeerReport),
 }
 
 pub struct PeerManager {
@@ -81,6 +101,8 @@ pub struct PeerManager {
 	in_rx: UnboundedReceiver<InMessage>,
 	/// out messages
 	out_messages: VecDeque<OutMessage>,
+	/// peer scores
+	scores: HashMap<PeerId, i32>,
 }
 
 impl PeerManager {
@@ -111,6 +133,7 @@ impl PeerManager {
 			in_tx,
 			in_rx,
 			out_messages: VecDeque::new(),
+			scores: HashMap::new(),
 		};
 		peer_manager.activate();
 
@@ -243,14 +266,42 @@ impl PeerManager {
 		self.activate();
 	}
 
-	fn on_discard_peer(&mut self, peer_id: PeerId) {
-		let is_active = self.active.contains(&peer_id);
-		self.active.remove_peer(&peer_id);
-		self.inactive.remove_peer(&peer_id);
-		if is_active {
-			self.send(OutMessage::Drop(peer_id));
+	fn on_report_peer(&mut self, peer_id: PeerId, peer_report: PeerReport) {
+		let score_diff = peer_report.score_diff;
+		let new_score = match self.scores.entry(peer_id.clone()) {
+			Entry::Vacant(v) => {
+				v.insert(score_diff);
+				score_diff
+			}
+			Entry::Occupied(mut v) => {
+				let v = v.get_mut();
+				*v = v.checked_add(score_diff).unwrap_or(if score_diff >= 0 {
+					i32::MAX
+				} else {
+					i32::MIN
+				});
+				*v
+			}
+		};
+		let should_drop = new_score < MIN_SCORE;
+
+		trace!(
+			"Report peer: {}, report: {:?}, new score: {}, should drop: {}",
+			peer_id,
+			peer_report,
+			new_score,
+			should_drop
+		);
+
+		if should_drop {
+			let is_active = self.active.contains(&peer_id);
+			self.active.remove_peer(&peer_id);
+			self.inactive.remove_peer(&peer_id);
+			if is_active {
+				self.send(OutMessage::Drop(peer_id));
+			}
+			self.activate();
 		}
-		self.activate();
 	}
 }
 
@@ -273,7 +324,9 @@ impl Stream for PeerManager {
 				InMessage::AddReservedPeer(peer_id) => self.on_add_reserved_peer(peer_id),
 				InMessage::RemoveReservedPeer(peer_id) => self.on_remove_reserved_peer(peer_id),
 				InMessage::SetReservedOnly(reserved) => self.on_set_reserved_only(reserved),
-				InMessage::DiscardPeer(peer_id) => self.on_discard_peer(peer_id),
+				InMessage::ReportPeer(peer_id, peer_report) => {
+					self.on_report_peer(peer_id, peer_report)
+				}
 			}
 		}
 	}

@@ -34,7 +34,9 @@ use log::{debug, info};
 
 use node_peer_manager::{IncomingId, OutMessage, PeerManager};
 
+use crate::peer_report::{PEER_REPORT_DIAL_FAILURE, PEER_REPORT_PROTOCOL_ERROR};
 use crate::protocol::handler::{HandlerIn, HandlerOut, HandlerProto};
+use crate::PMInMessage;
 
 mod handler;
 mod upgrade;
@@ -829,10 +831,17 @@ impl NetworkBehaviour for Protocol {
 									.insert(source.clone(), Instant::now() + DELAY);
 								self.events
 									.push_back(NetworkBehaviourAction::NotifyHandler {
-										peer_id: source,
+										peer_id: source.clone(),
 										handler: NotifyHandler::One(conn),
 										event: HandlerIn::Close,
 									});
+								let _ =
+									self.peer_manager
+										.tx()
+										.unbounded_send(PMInMessage::ReportPeer(
+											source,
+											PEER_REPORT_PROTOCOL_ERROR,
+										));
 							}
 						}
 						*entry = PeerState::Connected { connected_list };
@@ -853,10 +862,17 @@ impl NetworkBehaviour for Protocol {
 									.insert(source.clone(), Instant::now() + DELAY);
 								self.events
 									.push_back(NetworkBehaviourAction::NotifyHandler {
-										peer_id: source,
+										peer_id: source.clone(),
 										handler: NotifyHandler::One(conn),
 										event: HandlerIn::Close,
 									});
+								let _ =
+									self.peer_manager
+										.tx()
+										.unbounded_send(PMInMessage::ReportPeer(
+											source,
+											PEER_REPORT_PROTOCOL_ERROR,
+										));
 							}
 						}
 						*entry = PeerState::ProtocolOpened {
@@ -902,6 +918,13 @@ impl NetworkBehaviour for Protocol {
 			PeerState::Init { .. } => {
 				debug!("Libp2p => Dial failure for {}", peer_id);
 				debug!("PeerManager <= Dropped({})", peer_id);
+				let _ = self
+					.peer_manager
+					.tx()
+					.unbounded_send(PMInMessage::ReportPeer(
+						peer_id.clone(),
+						PEER_REPORT_DIAL_FAILURE,
+					));
 				self.peer_manager.dropped(peer_id.clone());
 				self.delay_peers
 					.insert(peer_id.clone(), Instant::now() + DELAY);

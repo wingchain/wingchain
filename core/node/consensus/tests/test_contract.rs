@@ -162,7 +162,7 @@ async fn test_poa_contract_create_fail() {
 		.unwrap_err();
 	assert_eq!(
 		tx1_error.to_string(),
-		"Executor Error: ContractError: InvalidParams".to_string()
+		"Chain Error: Validate tx error: ContractError: InvalidParams".to_string()
 	);
 
 	let tx1 = chain
@@ -188,7 +188,7 @@ async fn test_poa_contract_create_fail() {
 
 	assert_eq!(
 		tx1_error.to_string(),
-		"Executor Error: PreCompileError: ValidationError: Bad magic number (at offset 0)"
+		"Chain Error: Validate tx error: PreCompileError: ValidationError: Bad magic number (at offset 0)"
 			.to_string()
 	);
 

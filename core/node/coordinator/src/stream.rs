@@ -25,6 +25,7 @@ use primitives::codec::Decode;
 use primitives::errors::CommonResult;
 use primitives::{BlockNumber, Body, Hash, Header, Proof, Transaction};
 
+use crate::peer_report::PEER_REPORT_HANDSHAKE_FAILED;
 use crate::protocol::{BlockAnnounce, BlockRequest, BlockResponse, ProtocolMessage, TxPropagate};
 use crate::support::CoordinatorSupport;
 use crate::sync::ChainSync;
@@ -158,7 +159,10 @@ where
 		if !handshake_ok {
 			warn!("Discard {} for handshake failure", peer_id);
 			self.support
-				.peer_manager_send_message(PMInMessage::DiscardPeer(peer_id));
+				.peer_manager_send_message(PMInMessage::ReportPeer(
+					peer_id,
+					PEER_REPORT_HANDSHAKE_FAILED,
+				));
 			return Ok(());
 		}
 		info!("Complete handshake with {}", peer_id);

@@ -35,7 +35,7 @@ pub enum InsertError {
 	DuplicatedTx(String),
 
 	#[display(fmt = "Invalid tx: {}", _0)]
-	InvalidTx(String),
+	InvalidTx(node_chain::errors::ValidateTxError),
 }
 
 impl Error for ErrorKind {}

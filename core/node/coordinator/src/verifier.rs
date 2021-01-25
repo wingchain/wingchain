@@ -69,7 +69,7 @@ pub enum VerifyError {
 	DuplicatedTx(String),
 	/// Transaction invalid
 	#[display(fmt = "Invalid tx: {}", _0)]
-	InvalidTx(String),
+	InvalidTx(node_chain::errors::ValidateTxError),
 	/// Proof invalid
 	#[display(fmt = "Invalid proof: {}", _0)]
 	InvalidProof(String),
@@ -293,7 +293,7 @@ where
 			.validate_transaction(tx_hash, &tx, true)
 			.or_else_catch::<node_chain::errors::ErrorKind, _>(|e| match e {
 				node_chain::errors::ErrorKind::ValidateTxError(e) => Some(Err(
-					ErrorKind::VerifyError(VerifyError::InvalidTx(e.to_string())).into(),
+					ErrorKind::VerifyError(VerifyError::InvalidTx(e.clone())).into(),
 				)),
 				_ => None,
 			})?;

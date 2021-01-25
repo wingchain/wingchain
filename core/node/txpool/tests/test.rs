@@ -165,7 +165,7 @@ async fn test_txpool_validate() {
 	let result = txpool.insert(tx.clone());
 	assert_eq!(
 		format!("{}", result.unwrap_err()),
-		"Chain Error: Validate tx error: Invalid tx witness: Invalid signature"
+		"TxPool Error: Insert error: Invalid tx: Invalid tx witness: Invalid signature"
 	);
 
 	let tx = chain
@@ -186,7 +186,7 @@ async fn test_txpool_validate() {
 	let result = txpool.insert(tx);
 	assert_eq!(
 		format!("{}", result.unwrap_err()),
-		"Chain Error: Validate tx error: Invalid tx until: Exceed max until: 21"
+		"TxPool Error: Insert error: Invalid tx: Invalid tx until: Exceed max until: 21"
 	);
 
 	let tx = chain
@@ -207,7 +207,7 @@ async fn test_txpool_validate() {
 	let result = txpool.insert(tx);
 	assert_eq!(
 		format!("{}", result.unwrap_err()),
-		"Chain Error: Validate tx error: Invalid tx until: Exceed min until: 0"
+		"TxPool Error: Insert error: Invalid tx: Invalid tx until: Exceed min until: 0"
 	);
 
 	safe_close(chain, txpool).await;
