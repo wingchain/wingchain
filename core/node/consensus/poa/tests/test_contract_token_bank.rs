@@ -725,13 +725,13 @@ async fn test_poa_contract_tb_ea() {
 
 fn get_token_bank_code() -> &'static [u8] {
 	let code = include_bytes!(
-		"../../vm/contract-samples/token-bank/release/contract_samples_token_bank_bg.wasm"
+		"../../../vm/contract-samples/token-bank/release/contract_samples_token_bank_bg.wasm"
 	);
 	code
 }
 
 fn get_token_code() -> &'static [u8] {
 	let code =
-		include_bytes!("../../vm/contract-samples/token/release/contract_samples_token_bg.wasm");
+		include_bytes!("../../../vm/contract-samples/token/release/contract_samples_token_bg.wasm");
 	code
 }

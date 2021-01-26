@@ -17,16 +17,3 @@ node-consensus-primitives = { path = "primitives" }
 node-consensus-base = { path = "base" }
 node-consensus-poa = { path = "./poa" }
 
-[dev-dependencies]
-tokio = { version = "1.0", features = ["rt-multi-thread", "time", "sync", "macros"] }
-tempfile = "3.1.0"
-env_logger = "0.7.1"
-hex = "0.4.2"
-futures-timer = "3.0.2"
-
-node-chain = { path = "../chain" }
-node-txpool = { path = "../txpool" }
-node-executor = { path = "../executor" }
-node-executor-primitives = { path = "../executor/primitives" }
-crypto = { path = "../../crypto" }
-utils-test = { path = "../../../utils/test" }

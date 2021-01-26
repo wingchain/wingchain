@@ -517,6 +517,6 @@ async fn test_poa_contract_token_transfer_from() {
 
 fn get_code() -> &'static [u8] {
 	let code =
-		include_bytes!("../../vm/contract-samples/token/release/contract_samples_token_bg.wasm");
+		include_bytes!("../../../vm/contract-samples/token/release/contract_samples_token_bg.wasm");
 	code
 }
