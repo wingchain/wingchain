@@ -36,7 +36,7 @@ use node_peer_manager::{IncomingId, OutMessage, PeerManager};
 
 use crate::peer_report::{PEER_REPORT_DIAL_FAILURE, PEER_REPORT_PROTOCOL_ERROR};
 use crate::protocol::handler::{HandlerIn, HandlerOut, HandlerProto};
-use crate::PMInMessage;
+use crate::{HandshakeBuilder, PMInMessage};
 
 mod handler;
 mod upgrade;
@@ -48,6 +48,7 @@ pub enum ProtocolOut {
 	ProtocolOpen {
 		peer_id: PeerId,
 		connected_point: ConnectedPoint,
+		nonce: u64,
 		handshake: Vec<u8>,
 	},
 	ProtocolClose {
@@ -85,12 +86,12 @@ pub enum PeerState {
 
 pub struct ProtocolConfig {
 	pub local_peer_id: PeerId,
-	pub handshake: Vec<u8>,
+	pub handshake_builder: Arc<dyn HandshakeBuilder>,
 }
 
 pub struct Protocol {
 	local_peer_id: PeerId,
-	handshake: Arc<Vec<u8>>,
+	handshake_builder: Arc<dyn HandshakeBuilder>,
 	peers: FnvHashMap<PeerId, PeerState>,
 	incoming_peers: FnvHashMap<IncomingId, PeerId>,
 	delay_peers: FnvHashMap<PeerId, Instant>,
@@ -103,7 +104,7 @@ impl Protocol {
 	pub fn new(config: ProtocolConfig, peer_manager: PeerManager) -> Self {
 		Self {
 			local_peer_id: config.local_peer_id,
-			handshake: Arc::new(config.handshake),
+			handshake_builder: config.handshake_builder,
 			peers: FnvHashMap::default(),
 			incoming_peers: FnvHashMap::default(),
 			delay_peers: FnvHashMap::default(),
@@ -428,7 +429,7 @@ impl NetworkBehaviour for Protocol {
 		HandlerProto::new(
 			self.local_peer_id.clone(),
 			Cow::Borrowed(PROTOCOL_NAME),
-			self.handshake.clone(),
+			self.handshake_builder.clone(),
 		)
 	}
 
@@ -692,7 +693,7 @@ impl NetworkBehaviour for Protocol {
 	#[allow(clippy::unnecessary_unwrap)]
 	fn inject_event(&mut self, source: PeerId, conn: ConnectionId, event: HandlerOut) {
 		match event {
-			HandlerOut::ProtocolOpen { handshake } => {
+			HandlerOut::ProtocolOpen { nonce, handshake } => {
 				let entry = self
 					.peers
 					.entry(source.clone())
@@ -718,6 +719,7 @@ impl NetworkBehaviour for Protocol {
 								ProtocolOut::ProtocolOpen {
 									peer_id: source,
 									connected_point: connection.connected_point.clone(),
+									nonce,
 									handshake,
 								},
 							));

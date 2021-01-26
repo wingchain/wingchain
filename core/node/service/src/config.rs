@@ -183,7 +183,7 @@ fn get_coordinator_config(
 		reserved_only: file_config.network.reserved_only,
 		agent_version: agent_version.to_string(),
 		local_key_pair,
-		handshake: vec![],
+		handshake_builder: None,
 	};
 
 	let config = CoordinatorConfig { network_config };

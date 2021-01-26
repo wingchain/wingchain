@@ -29,7 +29,7 @@ use crate::peer_report::PEER_REPORT_HANDSHAKE_FAILED;
 use crate::protocol::{BlockAnnounce, BlockRequest, BlockResponse, ProtocolMessage, TxPropagate};
 use crate::support::CoordinatorSupport;
 use crate::sync::ChainSync;
-use crate::{errors, CoordinatorInMessage};
+use crate::{errors, CoordinatorInMessage, DefaultHandshakeBuilder};
 
 pub struct CoordinatorStream<S>
 where
@@ -49,7 +49,7 @@ where
 {
 	#[allow(clippy::too_many_arguments)]
 	pub fn new(
-		genesis_hash: Hash,
+		handshake_builder: Arc<DefaultHandshakeBuilder>,
 		chain_rx: UnboundedReceiver<ChainOutMessage>,
 		txpool_rx: UnboundedReceiver<TxPoolOutMessage>,
 		peer_manager_tx: UnboundedSender<PMInMessage>,
@@ -59,7 +59,7 @@ where
 		support: Arc<S>,
 	) -> CommonResult<Self> {
 		let support = Arc::new(StreamSupport::new(
-			genesis_hash,
+			handshake_builder,
 			peer_manager_tx,
 			network_tx,
 			support,
@@ -135,29 +135,30 @@ where
 	S: CoordinatorSupport + Send + Sync + 'static,
 {
 	fn on_protocol_open(&mut self, peer_id: PeerId, handshake: Vec<u8>) -> CommonResult<()> {
-		let handshake_ok = match Decode::decode(&mut &handshake[..]) {
+		let handshake = match Decode::decode(&mut &handshake[..]) {
 			Ok(ProtocolMessage::Handshake(handshake)) => {
-				let local_genesis_hash = self.support.get_genesis_hash();
-				let ok = &handshake.genesis_hash == local_genesis_hash;
-				if !ok {
+				let local_genesis_hash = &self.support.get_handshake_builder().genesis_hash;
+				if &handshake.genesis_hash == local_genesis_hash {
+					Some(handshake)
+				} else {
 					warn!(
 						"Handshake from {} is different: local: {}, remote: {}",
 						peer_id, local_genesis_hash, handshake.genesis_hash
 					);
+					None
 				}
-				ok
 			}
 			Ok(_) => {
 				warn!("Handshake from {} is invalid", peer_id);
-				false
+				None
 			}
 			Err(e) => {
 				warn!("Handshake from {} cannot decode: {:?}", peer_id, e);
-				false
+				None
 			}
 		};
-		if !handshake_ok {
-			warn!("Discard {} for handshake failure", peer_id);
+		if handshake.is_none() {
+			warn!("Report {} for handshake failure", peer_id);
 			self.support
 				.peer_manager_send_message(PMInMessage::ReportPeer(
 					peer_id,
@@ -165,9 +166,10 @@ where
 				));
 			return Ok(());
 		}
-		info!("Complete handshake with {}", peer_id);
+		let handshake = handshake.expect("qed");
+		info!("Complete handshake with {}: {:?}", peer_id, handshake);
 
-		self.sync.on_protocol_open(peer_id)?;
+		self.sync.on_protocol_open(peer_id, handshake)?;
 
 		Ok(())
 	}
@@ -246,7 +248,7 @@ pub struct StreamSupport<S>
 where
 	S: CoordinatorSupport + Send + Sync + 'static,
 {
-	genesis_hash: Hash,
+	handshake_builder: Arc<DefaultHandshakeBuilder>,
 	peer_manager_tx: UnboundedSender<PMInMessage>,
 	network_tx: UnboundedSender<NetworkInMessage>,
 	support: Arc<S>,
@@ -257,13 +259,13 @@ where
 	S: CoordinatorSupport + Send + Sync + 'static,
 {
 	pub fn new(
-		genesis_hash: Hash,
+		handshake_builder: Arc<DefaultHandshakeBuilder>,
 		peer_manager_tx: UnboundedSender<PMInMessage>,
 		network_tx: UnboundedSender<NetworkInMessage>,
 		support: Arc<S>,
 	) -> CommonResult<Self> {
 		Ok(Self {
-			genesis_hash,
+			handshake_builder,
 			peer_manager_tx,
 			network_tx,
 			support,
@@ -286,8 +288,8 @@ where
 			.unwrap_or_else(|e| error!("Coordinator send message to network error: {}", e));
 	}
 
-	pub fn get_genesis_hash(&self) -> &Hash {
-		&self.genesis_hash
+	pub fn get_handshake_builder(&self) -> &Arc<DefaultHandshakeBuilder> {
+		&self.handshake_builder
 	}
 
 	pub fn get_confirmed_number(&self) -> CommonResult<BlockNumber> {
@@ -317,16 +319,6 @@ where
 			errors::ErrorKind::Data(format!("Missing proof: block_hash: {:?}", block_hash))
 		})?;
 		Ok(header)
-	}
-
-	pub fn get_header_by_number(&self, number: &BlockNumber) -> CommonResult<(Hash, Header)> {
-		let block_hash = self.support.get_block_hash(number)?.ok_or_else(|| {
-			errors::ErrorKind::Data(format!("Missing block hash: number: {}", number))
-		})?;
-		let header = self.support.get_header(&block_hash)?.ok_or_else(|| {
-			errors::ErrorKind::Data(format!("Missing header: block_hash: {:?}", block_hash))
-		})?;
-		Ok((block_hash, header))
 	}
 
 	pub fn get_body_by_block_hash(&self, block_hash: &Hash) -> CommonResult<Body> {

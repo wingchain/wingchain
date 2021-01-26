@@ -3119,6 +3119,7 @@ dependencies = [
  "node-network",
  "node-txpool",
  "parity-scale-codec",
+ "parking_lot 0.10.2",
  "primitives",
  "tempfile",
  "tokio 1.0.0",
@@ -3191,6 +3192,7 @@ dependencies = [
  "parking_lot 0.10.2",
  "pin-project 0.4.27",
  "primitives",
+ "rand 0.7.3",
  "tokio 1.0.0",
  "unsigned-varint",
 ]

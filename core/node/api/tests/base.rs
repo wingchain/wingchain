@@ -131,7 +131,7 @@ fn get_coordinator(
 		reserved_only: false,
 		agent_version,
 		local_key_pair,
-		handshake: vec![],
+		handshake_builder: None,
 	};
 	let config = CoordinatorConfig { network_config };
 

@@ -30,6 +30,9 @@ pub enum ProtocolMessage {
 #[derive(Encode, Decode, Debug, PartialEq)]
 pub struct Handshake {
 	pub genesis_hash: Hash,
+	pub confirmed_number: BlockNumber,
+	pub confirmed_hash: Hash,
+	pub nonce: u64,
 }
 
 #[derive(Encode, Decode, Debug, PartialEq)]
@@ -174,24 +177,34 @@ mod tests {
 	fn test_encode() {
 		let message = ProtocolMessage::Handshake(Handshake {
 			genesis_hash: Hash(vec![1, 2, 3]),
+			confirmed_number: 1,
+			confirmed_hash: Hash(vec![4, 5, 6]),
+			nonce: 2,
 		});
 		let encoded = message.encode();
 		assert_eq!(
 			encoded,
-			vec![36, 72, 97, 110, 100, 115, 104, 97, 107, 101, 16, 12, 1, 2, 3]
+			vec![
+				36, 72, 97, 110, 100, 115, 104, 97, 107, 101, 96, 12, 1, 2, 3, 1, 0, 0, 0, 0, 0, 0,
+				0, 12, 4, 5, 6, 2, 0, 0, 0, 0, 0, 0, 0
+			]
 		);
 	}
 
 	#[test]
 	fn test_decode() {
 		let encoded = vec![
-			36u8, 72, 97, 110, 100, 115, 104, 97, 107, 101, 16, 12, 1, 2, 3,
+			36, 72, 97, 110, 100, 115, 104, 97, 107, 101, 96, 12, 1, 2, 3, 1, 0, 0, 0, 0, 0, 0, 0,
+			12, 4, 5, 6, 2, 0, 0, 0, 0, 0, 0, 0,
 		];
 		let message: ProtocolMessage = Decode::decode(&mut &encoded[..]).unwrap();
 		assert_eq!(
 			message,
 			ProtocolMessage::Handshake(Handshake {
 				genesis_hash: Hash(vec![1, 2, 3]),
+				confirmed_number: 1,
+				confirmed_hash: Hash(vec![4, 5, 6]),
+				nonce: 2,
 			})
 		)
 	}

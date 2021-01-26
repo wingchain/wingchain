@@ -192,10 +192,12 @@ impl From<BehaviourOut> for NetworkOutMessage {
 			BehaviourOut::ProtocolOpen {
 				peer_id,
 				connected_point,
+				nonce,
 				handshake,
 			} => NetworkOutMessage::ProtocolOpen {
 				peer_id,
 				connected_point,
+				nonce,
 				handshake,
 			},
 			BehaviourOut::ProtocolClose {

@@ -28,6 +28,9 @@ use crate::protocol::{Handshake, ProtocolMessage};
 use crate::stream::{start, CoordinatorStream};
 use crate::support::CoordinatorSupport;
 use futures::channel::mpsc::{unbounded, UnboundedSender};
+use node_network::HandshakeBuilder;
+use parking_lot::RwLock;
+use primitives::{BlockNumber, Hash};
 
 mod errors;
 mod peer_report;
@@ -65,13 +68,21 @@ where
 			.get_block_hash(&0)?
 			.ok_or_else(|| errors::ErrorKind::Data("Missing genesis block".to_string()))?;
 
-		let handshake = ProtocolMessage::Handshake(Handshake {
-			genesis_hash: genesis_hash.clone(),
-		})
-		.encode();
+		let confirmed_number = support
+			.get_confirmed_number()?
+			.ok_or_else(|| errors::ErrorKind::Data("Missing confirmed number".to_string()))?;
+
+		let confirmed_hash = support.get_block_hash(&confirmed_number)?.ok_or_else(|| {
+			errors::ErrorKind::Data(format!("Missing block hash: number: {}", confirmed_number))
+		})?;
+
+		let handshake_builder = Arc::new(DefaultHandshakeBuilder {
+			genesis_hash,
+			confirmed: RwLock::new((confirmed_number, confirmed_hash)),
+		});
 
 		let mut network_config = config.network_config;
-		network_config.handshake = handshake;
+		network_config.handshake_builder = Some(handshake_builder.clone());
 
 		let network = Network::new(network_config)?;
 
@@ -85,7 +96,7 @@ where
 		let (in_tx, in_rx) = unbounded();
 
 		let stream = CoordinatorStream::new(
-			genesis_hash,
+			handshake_builder,
 			chain_rx,
 			txpool_rx,
 			peer_manager_tx,
@@ -108,5 +119,23 @@ where
 
 	pub fn coordinator_tx(&self) -> UnboundedSender<CoordinatorInMessage> {
 		self.coordinator_tx.clone()
+	}
+}
+
+pub struct DefaultHandshakeBuilder {
+	genesis_hash: Hash,
+	confirmed: RwLock<(BlockNumber, Hash)>,
+}
+
+impl HandshakeBuilder for DefaultHandshakeBuilder {
+	fn build(&self, nonce: u64) -> Vec<u8> {
+		let (confirmed_number, confirmed_hash) = (*self.confirmed.read()).clone();
+		ProtocolMessage::Handshake(Handshake {
+			genesis_hash: self.genesis_hash.clone(),
+			confirmed_number,
+			confirmed_hash,
+			nonce,
+		})
+		.encode()
 	}
 }

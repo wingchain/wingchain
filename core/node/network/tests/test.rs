@@ -22,7 +22,10 @@ use futures::channel::oneshot;
 use futures::future::{join, join3, select, Either};
 use futures::StreamExt;
 use log::info;
-use node_network::{Network, NetworkConfig, NetworkInMessage, NetworkOutMessage, NetworkState};
+use node_network::{
+	HandshakeBuilder, Network, NetworkConfig, NetworkInMessage, NetworkOutMessage, NetworkState,
+};
+use std::sync::Arc;
 use std::time::Duration;
 
 #[tokio::test]
@@ -210,7 +213,7 @@ fn start_network(
 		reserved_only: false,
 		agent_version,
 		local_key_pair,
-		handshake: b"wingchain".to_vec(),
+		handshake_builder: Some(Arc::new(DummyHandshakeBuilder)),
 	};
 
 	let network = Network::new(network_config).unwrap();
@@ -257,4 +260,11 @@ async fn get_network_state(network: &Network) -> NetworkState {
 		.unwrap();
 	let network_state = rx.await.unwrap();
 	network_state
+}
+
+struct DummyHandshakeBuilder;
+impl HandshakeBuilder for DummyHandshakeBuilder {
+	fn build(&self, _nonce: u64) -> Vec<u8> {
+		vec![]
+	}
 }

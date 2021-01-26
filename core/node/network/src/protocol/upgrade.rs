@@ -27,7 +27,6 @@ use futures_codec::{BytesMut, Framed};
 use libp2p::core::UpgradeInfo;
 use libp2p::swarm::protocols_handler::{InboundUpgradeSend, OutboundUpgradeSend};
 use libp2p::swarm::NegotiatedSubstream;
-use std::sync::Arc;
 use unsigned_varint::codec::UviBytes;
 
 const MAX_HANDSHAKE_LEN: usize = 1024;
@@ -88,7 +87,7 @@ impl InboundUpgradeSend for InProtocol {
 
 pub struct OutProtocol {
 	protocol_name: Cow<'static, [u8]>,
-	handshake: Arc<Vec<u8>>,
+	handshake: Vec<u8>,
 }
 
 #[pin_project::pin_project]
@@ -105,7 +104,7 @@ impl OutSubstream {
 }
 
 impl OutProtocol {
-	pub fn new(protocol_name: Cow<'static, [u8]>, handshake: Arc<Vec<u8>>) -> Self {
+	pub fn new(protocol_name: Cow<'static, [u8]>, handshake: Vec<u8>) -> Self {
 		Self {
 			protocol_name,
 			handshake,

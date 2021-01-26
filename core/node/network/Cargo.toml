@@ -24,6 +24,7 @@ lru = "0.6.1"
 linked-hash-map = "0.5.3"
 futures-timer = "3.0.2"
 parking_lot = "0.10.0"
+rand = "0.7.3"
 
 primitives = { path = "../../primitives" }
 node-peer-manager = { path = "../peer-manager" }

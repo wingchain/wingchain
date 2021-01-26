@@ -15,6 +15,7 @@ log = "0.4.8"
 lru = "0.6.1"
 futures-timer = "3.0.2"
 derive_more = "0.99"
+parking_lot = "0.10.0"
 
 node-chain = { path = "../chain" }
 node-txpool = { path = "../txpool" }
