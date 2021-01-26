@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+pub use node_network::PeerId;
 use primitives::errors::CommonResult;
 use primitives::{Header, Proof, SecretKey};
 
@@ -25,4 +26,24 @@ pub struct ConsensusConfig {
 pub trait Consensus {
 	fn generate(&self) -> CommonResult<()>;
 	fn verify_proof(&self, header: &Header, proof: &Proof) -> CommonResult<()>;
+	fn on_in_message(&self, in_message: ConsensusInMessage) -> CommonResult<()>;
+}
+
+pub enum ConsensusInMessage {
+	NetworkProtocolOpen {
+		peer_id: PeerId,
+		local_nonce: u64,
+		remote_nonce: u64,
+	},
+	NetworkProtocolClose {
+		peer_id: PeerId,
+	},
+	NetworkMessage {
+		peer_id: PeerId,
+		message: Vec<u8>,
+	},
+}
+
+pub enum ConsensusOutMessage {
+	NetworkMessage { peer_id: PeerId, message: Vec<u8> },
 }

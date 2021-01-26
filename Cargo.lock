@@ -3050,6 +3050,7 @@ version = "0.1.0"
 dependencies = [
  "crypto",
  "env_logger",
+ "futures",
  "futures-timer",
  "hex",
  "log",
@@ -3060,6 +3061,7 @@ dependencies = [
  "node-executor",
  "node-executor-primitives",
  "node-txpool",
+ "parking_lot 0.10.2",
  "primitives",
  "tempfile",
  "tokio 1.0.0",
@@ -3072,6 +3074,7 @@ version = "0.1.0"
 dependencies = [
  "futures",
  "node-chain",
+ "node-network",
  "node-txpool",
  "primitives",
 ]

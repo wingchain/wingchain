@@ -16,7 +16,6 @@ use std::sync::Arc;
 
 use crypto::address::AddressImpl;
 use crypto::dsa::DsaImpl;
-use node_consensus_base::Consensus;
 use node_executor::module;
 use node_executor_primitives::EmptyParams;
 use primitives::codec::Decode;

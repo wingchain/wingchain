@@ -21,7 +21,6 @@ use futures::channel::mpsc::UnboundedReceiver;
 use node_chain::{Chain, ChainCommitBlockParams, ChainOutMessage, CurrentState};
 use node_consensus::Consensus;
 use node_consensus_base::support::DefaultConsensusSupport;
-use node_consensus_base::Consensus as ConsensusT;
 use node_txpool::support::DefaultTxPoolSupport;
 use node_txpool::{TxPool, TxPoolOutMessage};
 use primitives::codec::{Decode, Encode};
@@ -32,7 +31,7 @@ use primitives::{
 };
 
 #[async_trait]
-pub trait CoordinatorSupport {
+pub trait CoordinatorSupport: Send + Sync + 'static {
 	fn chain_rx(&self) -> Option<UnboundedReceiver<ChainOutMessage>>;
 	fn get_confirmed_number(&self) -> CommonResult<Option<BlockNumber>>;
 	fn get_execution_number(&self) -> CommonResult<Option<BlockNumber>>;

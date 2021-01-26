@@ -15,7 +15,6 @@
 use crypto::address::AddressImpl;
 use crypto::dsa::DsaImpl;
 use log::info;
-use node_consensus_base::Consensus;
 use node_executor::module;
 use node_network::{Keypair, LinkedHashMap, Multiaddr, PeerId, Protocol};
 use std::sync::Arc;

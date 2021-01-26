@@ -29,14 +29,14 @@ use crate::support::CoordinatorSupport;
 
 pub struct Verifier<S>
 where
-	S: CoordinatorSupport + Send + Sync + 'static,
+	S: CoordinatorSupport,
 {
 	support: Arc<StreamSupport<S>>,
 }
 
 impl<S> Verifier<S>
 where
-	S: CoordinatorSupport + Send + Sync + 'static,
+	S: CoordinatorSupport,
 {
 	pub fn new(support: Arc<StreamSupport<S>>) -> CommonResult<Self> {
 		let verifier = Self { support };
@@ -77,7 +77,7 @@ pub enum VerifyError {
 
 impl<S> Verifier<S>
 where
-	S: CoordinatorSupport + Send + Sync + 'static,
+	S: CoordinatorSupport,
 {
 	/// block_data may be taken
 	pub fn verify_block(

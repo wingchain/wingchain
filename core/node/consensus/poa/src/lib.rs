@@ -31,7 +31,11 @@ use log::{debug, info, trace, warn};
 use crate::proof::Proof;
 use crypto::address::Address as AddressT;
 use crypto::dsa::{Dsa, KeyPair};
-use node_consensus_base::{support::ConsensusSupport, Consensus as ConsensusT, ConsensusConfig};
+use futures::channel::mpsc::UnboundedSender;
+use node_consensus_base::{
+	support::ConsensusSupport, Consensus as ConsensusT, ConsensusConfig, ConsensusInMessage,
+	ConsensusOutMessage,
+};
 use node_consensus_primitives::CONSENSUS_POA;
 use node_executor::module;
 use node_executor::module::poa::Meta;
@@ -46,7 +50,7 @@ pub mod proof;
 
 pub struct Poa<S>
 where
-	S: ConsensusSupport + Send + Sync + 'static,
+	S: ConsensusSupport,
 {
 	stream: Arc<PoaStream<S>>,
 	support: Arc<S>,
@@ -54,9 +58,13 @@ where
 
 impl<S> Poa<S>
 where
-	S: ConsensusSupport + Send + Sync + 'static,
+	S: ConsensusSupport,
 {
-	pub fn new(config: ConsensusConfig, support: Arc<S>) -> CommonResult<Self> {
+	pub fn new(
+		config: ConsensusConfig,
+		_out_tx: UnboundedSender<ConsensusOutMessage>,
+		support: Arc<S>,
+	) -> CommonResult<Self> {
 		let poa_meta = get_poa_meta(&support, &0)?;
 
 		let current_secret_key = config.secret_key;
@@ -93,7 +101,7 @@ where
 
 impl<S> ConsensusT for Poa<S>
 where
-	S: ConsensusSupport + Send + Sync + 'static,
+	S: ConsensusSupport,
 {
 	fn generate(&self) -> CommonResult<()> {
 		let timestamp = SystemTime::now();
@@ -140,11 +148,15 @@ where
 		}
 		Ok(())
 	}
+
+	fn on_in_message(&self, _in_message: ConsensusInMessage) -> CommonResult<()> {
+		Ok(())
+	}
 }
 
 struct PoaStream<S>
 where
-	S: ConsensusSupport + Send + Sync + 'static,
+	S: ConsensusSupport,
 {
 	support: Arc<S>,
 	poa_meta: Meta,
@@ -154,7 +166,7 @@ where
 
 impl<S> PoaStream<S>
 where
-	S: ConsensusSupport + Send + Sync + 'static,
+	S: ConsensusSupport,
 {
 	fn work(&self, schedule_info: ScheduleInfo) -> CommonResult<()> {
 		let current_state = &self.support.get_current_state();
@@ -273,7 +285,7 @@ where
 
 async fn start<S>(stream: Arc<PoaStream<S>>) -> CommonResult<()>
 where
-	S: ConsensusSupport + Send + Sync + 'static,
+	S: ConsensusSupport,
 {
 	let block_interval = match stream.poa_meta.block_interval {
 		Some(v) => v,

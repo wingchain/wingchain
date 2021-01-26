@@ -51,7 +51,7 @@ const BLOCK_REQUEST_TIMEOUT_S: u64 = 30;
 
 pub struct ChainSync<S>
 where
-	S: CoordinatorSupport + Send + Sync + 'static,
+	S: CoordinatorSupport,
 {
 	peers: HashMap<PeerId, PeerInfo>,
 	pending_blocks: BTreeMap<BlockNumber, PendingBlockInfo>,
@@ -64,7 +64,7 @@ where
 /// Handle peers open/close
 impl<S> ChainSync<S>
 where
-	S: CoordinatorSupport + Send + Sync + 'static,
+	S: CoordinatorSupport,
 {
 	pub fn new(support: Arc<StreamSupport<S>>) -> CommonResult<Self> {
 		let verifier = Verifier::new(support.clone())?;
@@ -79,7 +79,12 @@ where
 		})
 	}
 
-	pub fn on_protocol_open(&mut self, peer_id: PeerId, handshake: Handshake) -> CommonResult<()> {
+	pub fn on_protocol_open(
+		&mut self,
+		peer_id: PeerId,
+		nonce: u64,
+		handshake: Handshake,
+	) -> CommonResult<()> {
 		self.peers.insert(
 			peer_id.clone(),
 			PeerInfo {
@@ -87,6 +92,7 @@ where
 				known_txs: LruCache::new(PEER_KNOWN_TXS_SIZE as usize),
 				confirmed_number: handshake.confirmed_number,
 				confirmed_hash: handshake.confirmed_hash,
+				nonce,
 				state: PeerState::Vacant,
 			},
 		);
@@ -117,7 +123,7 @@ where
 /// Handle blocks syncing
 impl<S> ChainSync<S>
 where
-	S: CoordinatorSupport + Send + Sync + 'static,
+	S: CoordinatorSupport,
 {
 	pub fn on_block_announce(
 		&mut self,
@@ -648,7 +654,7 @@ where
 /// Handle tx propagation
 impl<S> ChainSync<S>
 where
-	S: CoordinatorSupport + Send + Sync + 'static,
+	S: CoordinatorSupport,
 {
 	pub fn on_tx_inserted(&mut self, tx_hash: Hash) -> CommonResult<()> {
 		if let Some(tx) = self
@@ -782,6 +788,7 @@ pub struct PeerInfo {
 	known_txs: LruCache<Hash, ()>,
 	confirmed_number: BlockNumber,
 	confirmed_hash: Hash,
+	nonce: u64,
 	state: PeerState,
 }
 

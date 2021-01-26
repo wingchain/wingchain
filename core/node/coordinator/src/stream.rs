@@ -33,7 +33,7 @@ use crate::{errors, CoordinatorInMessage, DefaultHandshakeBuilder};
 
 pub struct CoordinatorStream<S>
 where
-	S: CoordinatorSupport + Send + Sync + 'static,
+	S: CoordinatorSupport,
 {
 	chain_rx: UnboundedReceiver<ChainOutMessage>,
 	txpool_rx: UnboundedReceiver<TxPoolOutMessage>,
@@ -45,7 +45,7 @@ where
 
 impl<S> CoordinatorStream<S>
 where
-	S: CoordinatorSupport + Send + Sync + 'static,
+	S: CoordinatorSupport,
 {
 	#[allow(clippy::too_many_arguments)]
 	pub fn new(
@@ -98,8 +98,11 @@ where
 	fn on_network_message(&mut self, message: NetworkOutMessage) -> CommonResult<()> {
 		match message {
 			NetworkOutMessage::ProtocolOpen {
-				peer_id, handshake, ..
-			} => self.on_protocol_open(peer_id, handshake),
+				peer_id,
+				handshake,
+				nonce,
+				..
+			} => self.on_protocol_open(peer_id, nonce, handshake),
 			NetworkOutMessage::ProtocolClose { peer_id, .. } => self.on_protocol_close(peer_id),
 			NetworkOutMessage::Message { peer_id, message } => self.on_message(peer_id, message),
 		}
@@ -116,7 +119,7 @@ where
 /// methods for chain messages
 impl<S> CoordinatorStream<S>
 where
-	S: CoordinatorSupport + Send + Sync + 'static,
+	S: CoordinatorSupport,
 {
 	fn on_block_committed(&mut self, number: BlockNumber, hash: Hash) -> CommonResult<()> {
 		self.sync.on_block_committed(number, hash)?;
@@ -132,9 +135,14 @@ where
 /// methods for network messages
 impl<S> CoordinatorStream<S>
 where
-	S: CoordinatorSupport + Send + Sync + 'static,
+	S: CoordinatorSupport,
 {
-	fn on_protocol_open(&mut self, peer_id: PeerId, handshake: Vec<u8>) -> CommonResult<()> {
+	fn on_protocol_open(
+		&mut self,
+		peer_id: PeerId,
+		nonce: u64,
+		handshake: Vec<u8>,
+	) -> CommonResult<()> {
 		let handshake = match Decode::decode(&mut &handshake[..]) {
 			Ok(ProtocolMessage::Handshake(handshake)) => {
 				let local_genesis_hash = &self.support.get_handshake_builder().genesis_hash;
@@ -167,9 +175,12 @@ where
 			return Ok(());
 		}
 		let handshake = handshake.expect("qed");
-		info!("Complete handshake with {}: {:?}", peer_id, handshake);
+		info!(
+			"Complete handshake with {}: nonce: {}, handshake: {:?}",
+			peer_id, nonce, handshake
+		);
 
-		self.sync.on_protocol_open(peer_id, handshake)?;
+		self.sync.on_protocol_open(peer_id, nonce, handshake)?;
 
 		Ok(())
 	}
@@ -237,7 +248,7 @@ where
 /// methods for txpool messages
 impl<S> CoordinatorStream<S>
 where
-	S: CoordinatorSupport + Send + Sync + 'static,
+	S: CoordinatorSupport,
 {
 	fn on_tx_inserted(&mut self, tx_hash: Hash) -> CommonResult<()> {
 		self.sync.on_tx_inserted(tx_hash)
@@ -246,7 +257,7 @@ where
 
 pub struct StreamSupport<S>
 where
-	S: CoordinatorSupport + Send + Sync + 'static,
+	S: CoordinatorSupport,
 {
 	handshake_builder: Arc<DefaultHandshakeBuilder>,
 	peer_manager_tx: UnboundedSender<PMInMessage>,
@@ -256,7 +267,7 @@ where
 
 impl<S> StreamSupport<S>
 where
-	S: CoordinatorSupport + Send + Sync + 'static,
+	S: CoordinatorSupport,
 {
 	pub fn new(
 		handshake_builder: Arc<DefaultHandshakeBuilder>,
@@ -338,7 +349,7 @@ where
 
 pub async fn start<S>(mut stream: CoordinatorStream<S>)
 where
-	S: CoordinatorSupport + Send + Sync + 'static,
+	S: CoordinatorSupport,
 {
 	loop {
 		tokio::select! {

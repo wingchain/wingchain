@@ -23,7 +23,6 @@ use node_api::support::DefaultApiSupport;
 use node_api::{Api, ApiConfig};
 use node_api_rt::tokio::time::Duration;
 use node_chain::module;
-use node_consensus_base::Consensus;
 use node_coordinator::{Keypair, LinkedHashMap, Multiaddr, PeerId, Protocol};
 use primitives::codec::Encode;
 use primitives::Proof;

@@ -17,7 +17,6 @@ use std::sync::Arc;
 
 use crypto::address::AddressImpl;
 use crypto::dsa::DsaImpl;
-use node_consensus_base::Consensus;
 use node_executor::module;
 use primitives::{codec, Balance, Event, Proof, Receipt};
 use utils_test::test_accounts;

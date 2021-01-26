@@ -44,7 +44,7 @@ where
 
 impl<S> Api<S>
 where
-	S: ApiSupport + Send + Sync + 'static,
+	S: ApiSupport,
 {
 	pub fn new(config: ApiConfig, support: Arc<S>) -> Self {
 		let api = Api {

@@ -29,7 +29,7 @@ use primitives::{
 };
 
 #[async_trait]
-pub trait ApiSupport {
+pub trait ApiSupport: Send + Sync + 'static {
 	fn hash_transaction(&self, tx: &Transaction) -> CommonResult<Hash>;
 	fn get_confirmed_number(&self) -> CommonResult<Option<BlockNumber>>;
 	fn get_confirmed_executed_number(&self) -> CommonResult<Option<BlockNumber>>;

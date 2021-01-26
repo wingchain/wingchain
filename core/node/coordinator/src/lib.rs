@@ -50,7 +50,7 @@ pub enum CoordinatorInMessage {
 
 pub struct Coordinator<S>
 where
-	S: CoordinatorSupport + Send + Sync + 'static,
+	S: CoordinatorSupport,
 {
 	#[allow(dead_code)]
 	network: Arc<Network>,
@@ -61,7 +61,7 @@ where
 
 impl<S> Coordinator<S>
 where
-	S: CoordinatorSupport + Send + Sync + 'static,
+	S: CoordinatorSupport,
 {
 	pub fn new(config: CoordinatorConfig, support: Arc<S>) -> CommonResult<Self> {
 		let genesis_hash = support

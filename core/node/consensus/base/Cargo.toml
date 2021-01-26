@@ -11,4 +11,5 @@ futures = "0.3.8"
 
 node-chain = { path = "../../chain" }
 node-txpool = { path = "../../txpool" }
+node-network = { path = "../../network" }
 primitives = { path = "../../../primitives" }

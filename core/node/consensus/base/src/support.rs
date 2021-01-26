@@ -25,7 +25,7 @@ use primitives::{
 	Address, BlockNumber, BuildBlockParams, FullTransaction, Hash, Header, Transaction,
 };
 
-pub trait ConsensusSupport {
+pub trait ConsensusSupport: Send + Sync + 'static {
 	fn get_confirmed_number(&self) -> CommonResult<Option<BlockNumber>>;
 	fn get_execution_number(&self) -> CommonResult<Option<BlockNumber>>;
 	fn get_block_hash(&self, number: &BlockNumber) -> CommonResult<Option<Hash>>;
