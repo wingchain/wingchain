@@ -16,6 +16,7 @@ use std::sync::Arc;
 
 use crypto::address::AddressImpl;
 use crypto::dsa::DsaImpl;
+use node_consensus_base::ConsensusInMessage;
 use node_executor::module;
 use primitives::codec::Decode;
 use primitives::Address;
@@ -57,8 +58,11 @@ async fn test_poa_contract_token_read() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 1
-	consensus.generate().unwrap();
-	base::wait_block_execution(&chain).await;
+	consensus
+		.in_message_tx()
+		.unbounded_send(ConsensusInMessage::Generate)
+		.unwrap();
+	base::wait_block_execution(&chain, 1).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
 	let tx1_result = tx1_receipt.result.unwrap();
@@ -207,8 +211,11 @@ async fn test_poa_contract_token_transfer() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 1
-	consensus.generate().unwrap();
-	base::wait_block_execution(&chain).await;
+	consensus
+		.in_message_tx()
+		.unbounded_send(ConsensusInMessage::Generate)
+		.unwrap();
+	base::wait_block_execution(&chain, 1).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
 	let tx1_result = tx1_receipt.result.unwrap();
@@ -245,8 +252,11 @@ async fn test_poa_contract_token_transfer() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 2
-	consensus.generate().unwrap();
-	base::wait_block_execution(&chain).await;
+	consensus
+		.in_message_tx()
+		.unbounded_send(ConsensusInMessage::Generate)
+		.unwrap();
+	base::wait_block_execution(&chain, 2).await;
 
 	// sender balance
 	let result: Vec<u8> = chain
@@ -335,8 +345,11 @@ async fn test_poa_contract_token_transfer_from() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 1
-	consensus.generate().unwrap();
-	base::wait_block_execution(&chain).await;
+	consensus
+		.in_message_tx()
+		.unbounded_send(ConsensusInMessage::Generate)
+		.unwrap();
+	base::wait_block_execution(&chain, 1).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
 	let tx1_result = tx1_receipt.result.unwrap();
@@ -373,8 +386,11 @@ async fn test_poa_contract_token_transfer_from() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 2
-	consensus.generate().unwrap();
-	base::wait_block_execution(&chain).await;
+	consensus
+		.in_message_tx()
+		.unbounded_send(ConsensusInMessage::Generate)
+		.unwrap();
+	base::wait_block_execution(&chain, 2).await;
 
 	// check allowance after approving
 	let result: Vec<u8> = chain
@@ -433,8 +449,11 @@ async fn test_poa_contract_token_transfer_from() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 3
-	consensus.generate().unwrap();
-	base::wait_block_execution(&chain).await;
+	consensus
+		.in_message_tx()
+		.unbounded_send(ConsensusInMessage::Generate)
+		.unwrap();
+	base::wait_block_execution(&chain, 3).await;
 
 	// allowance after transferring from
 	let result: Vec<u8> = chain

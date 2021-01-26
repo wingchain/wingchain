@@ -22,16 +22,16 @@ use std::sync::Arc;
 use std::task::Context;
 use std::time::{Duration, SystemTime};
 
+use futures::channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
 use futures::prelude::*;
 use futures::task::Poll;
 use futures::{Future, Stream};
 use futures_timer::Delay;
-use log::{debug, info, trace, warn};
+use log::{debug, error, info, trace, warn};
+use parking_lot::RwLock;
 
-use crate::proof::Proof;
 use crypto::address::Address as AddressT;
 use crypto::dsa::{Dsa, KeyPair};
-use futures::channel::mpsc::UnboundedSender;
 use node_consensus_base::{
 	support::ConsensusSupport, Consensus as ConsensusT, ConsensusConfig, ConsensusInMessage,
 	ConsensusOutMessage,
@@ -46,25 +46,24 @@ use primitives::{
 	codec, Address, BlockNumber, BuildBlockParams, FullTransaction, Header, SecretKey,
 };
 
+use crate::proof::Proof;
+
 pub mod proof;
 
 pub struct Poa<S>
 where
 	S: ConsensusSupport,
 {
-	stream: Arc<PoaStream<S>>,
 	support: Arc<S>,
+	in_tx: UnboundedSender<ConsensusInMessage>,
+	out_rx: RwLock<Option<UnboundedReceiver<ConsensusOutMessage>>>,
 }
 
 impl<S> Poa<S>
 where
 	S: ConsensusSupport,
 {
-	pub fn new(
-		config: ConsensusConfig,
-		_out_tx: UnboundedSender<ConsensusOutMessage>,
-		support: Arc<S>,
-	) -> CommonResult<Self> {
+	pub fn new(config: ConsensusConfig, support: Arc<S>) -> CommonResult<Self> {
 		let poa_meta = get_poa_meta(&support, &0)?;
 
 		let current_secret_key = config.secret_key;
@@ -82,18 +81,29 @@ where
 			is_authority, authority_address, current_address
 		);
 
-		let stream = Arc::new(PoaStream {
+		let (in_tx, in_rx) = unbounded();
+		let (out_tx, out_rx) = unbounded();
+
+		let stream = PoaStream {
 			support: support.clone(),
 			poa_meta,
 			current_address,
 			current_secret_key,
-		});
+			out_tx,
+			in_rx,
+		};
 
-		tokio::spawn(start(stream.clone()));
+		if stream.current_address.is_some() {
+			tokio::spawn(start(stream));
+		}
 
 		info!("Initializing consensus poa");
 
-		let poa = Poa { stream, support };
+		let poa = Poa {
+			support,
+			in_tx,
+			out_rx: RwLock::new(Some(out_rx)),
+		};
 
 		Ok(poa)
 	}
@@ -103,17 +113,6 @@ impl<S> ConsensusT for Poa<S>
 where
 	S: ConsensusSupport,
 {
-	fn generate(&self) -> CommonResult<()> {
-		let timestamp = SystemTime::now();
-		let timestamp = timestamp
-			.duration_since(SystemTime::UNIX_EPOCH)
-			.map_err(|_| node_consensus_base::errors::ErrorKind::Time)?;
-		let timestamp = timestamp.as_millis() as u64;
-		let schedule_info = ScheduleInfo { timestamp };
-		self.stream.work(schedule_info)?;
-		Ok(())
-	}
-
 	fn verify_proof(&self, header: &Header, proof: &primitives::Proof) -> CommonResult<()> {
 		let name = &proof.name;
 		if name != CONSENSUS_POA {
@@ -149,8 +148,12 @@ where
 		Ok(())
 	}
 
-	fn on_in_message(&self, _in_message: ConsensusInMessage) -> CommonResult<()> {
-		Ok(())
+	fn in_message_tx(&self) -> UnboundedSender<ConsensusInMessage> {
+		self.in_tx.clone()
+	}
+
+	fn out_message_rx(&self) -> Option<UnboundedReceiver<ConsensusOutMessage>> {
+		self.out_rx.write().take()
 	}
 }
 
@@ -162,6 +165,9 @@ where
 	poa_meta: Meta,
 	current_secret_key: Option<SecretKey>,
 	current_address: Option<Address>,
+	#[allow(dead_code)]
+	out_tx: UnboundedSender<ConsensusOutMessage>,
+	in_rx: UnboundedReceiver<ConsensusInMessage>,
 }
 
 impl<S> PoaStream<S>
@@ -281,33 +287,58 @@ where
 			.validate_transaction(&tx.tx_hash, &tx.tx, true)?;
 		Ok(())
 	}
+
+	fn generate(&self) -> CommonResult<()> {
+		let timestamp = SystemTime::now();
+		let timestamp = timestamp
+			.duration_since(SystemTime::UNIX_EPOCH)
+			.map_err(|_| node_consensus_base::errors::ErrorKind::Time)?;
+		let timestamp = timestamp.as_millis() as u64;
+		let schedule_info = ScheduleInfo { timestamp };
+		self.work(schedule_info)?;
+		Ok(())
+	}
+
+	#[allow(clippy::single_match)]
+	fn on_in_message(&self, in_message: ConsensusInMessage) -> CommonResult<()> {
+		match in_message {
+			ConsensusInMessage::Generate => {
+				println!("generate");
+				self.generate()?;
+			}
+			_ => {}
+		}
+		Ok(())
+	}
 }
 
-async fn start<S>(stream: Arc<PoaStream<S>>) -> CommonResult<()>
+async fn start<S>(mut stream: PoaStream<S>) -> CommonResult<()>
 where
 	S: ConsensusSupport,
 {
-	let block_interval = match stream.poa_meta.block_interval {
-		Some(v) => v,
-		None => return Ok(()),
-	};
 	info!("Start poa work");
-	let mut scheduler = Scheduler::new(block_interval);
+	let mut scheduler = Scheduler::new(stream.poa_meta.block_interval);
 	loop {
-		let item = scheduler.next().await;
-		match item {
-			Some(Ok(v)) => match stream.work(v) {
-				Ok(_) => (),
-				Err(e) => warn!("Encountered consensus error: {:?}", e),
-			},
-			Some(Err(e)) => {
-				warn!("Terminated with an error: {:?}", e);
-				break;
+		tokio::select! {
+			Some(item) = scheduler.next() => {
+				match item {
+					Ok(v) => {
+						stream.work(v)
+							.unwrap_or_else(|e| error!("Consensus poa handle work error: {}", e));
+					},
+					Err(e) => {
+						error!("Terminated with an error: {:?}", e);
+						break;
+					}
+				}
 			}
-			None => break,
+			Some(in_message) = stream.in_rx.next() => {
+				println!("in message");
+				stream.on_in_message(in_message)
+					.unwrap_or_else(|e| error!("Consensus poa handle in message error: {}", e));
+			}
 		}
 	}
-
 	Ok(())
 }
 
@@ -361,12 +392,12 @@ fn get_address<S: ConsensusSupport>(
 }
 
 struct Scheduler {
-	duration: u64,
+	duration: Option<u64>,
 	delay: Option<Delay>,
 }
 
 impl Scheduler {
-	fn new(duration: u64) -> Self {
+	fn new(duration: Option<u64>) -> Self {
 		Self {
 			duration,
 			delay: None,
@@ -382,10 +413,15 @@ impl Stream for Scheduler {
 	type Item = Result<ScheduleInfo, ()>;
 
 	fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+		let duration = match self.duration {
+			Some(v) => v,
+			None => return Poll::Pending,
+		};
+
 		self.delay = match self.delay.take() {
 			None => {
 				// schedule wait.
-				let wait_duration = time_until_next(duration_now(), self.duration);
+				let wait_duration = time_until_next(duration_now(), duration);
 				Some(Delay::new(wait_duration))
 			}
 			Some(d) => Some(d),

@@ -14,7 +14,7 @@
 
 //! Build the genesis block according to the spec
 
-use std::convert::TryInto;
+use std::convert::{TryFrom, TryInto};
 use std::sync::Arc;
 
 use chrono::DateTime;
@@ -24,10 +24,11 @@ use main_base::spec::{Spec, Tx};
 use node_executor::{module, Context, Executor};
 use primitives::codec::Encode;
 use primitives::errors::{CommonError, CommonResult};
-use primitives::{Address, BlockNumber, BuildBlockParams, FullTransaction, Transaction};
+use primitives::{BlockNumber, BuildBlockParams, FullTransaction, Transaction};
 
 use crate::errors;
 use primitives::types::ExecutionGap;
+use serde::de::DeserializeOwned;
 
 pub fn build_genesis(
 	spec: &Spec,
@@ -77,20 +78,25 @@ fn build_tx(
 
 	match (module.as_str(), method.as_str()) {
 		("system", "init") => {
-			let module_params: module::system::InitParams = JsonParams(params).try_into()?;
+			let module_params: module::system::InitParams =
+				get_module_params::<SystemInitParams>(params)?.try_into()?;
 			*timestamp = Some(module_params.timestamp);
 			build_validate_tx(executor, context, module, method, module_params, params)
 		}
 		("balance", "init") => {
-			let module_params: module::balance::InitParams = JsonParams(params).try_into()?;
+			let module_params: module::balance::InitParams = get_module_params(params)?;
 			build_validate_tx(executor, context, module, method, module_params, params)
 		}
 		("poa", "init") => {
-			let module_params: module::poa::InitParams = JsonParams(params).try_into()?;
+			let module_params: module::poa::InitParams = get_module_params(params)?;
+			build_validate_tx(executor, context, module, method, module_params, params)
+		}
+		("raft", "init") => {
+			let module_params: module::raft::InitParams = get_module_params(params)?;
 			build_validate_tx(executor, context, module, method, module_params, params)
 		}
 		("contract", "init") => {
-			let module_params: module::contract::InitParams = JsonParams(params).try_into()?;
+			let module_params: module::contract::InitParams = get_module_params(params)?;
 			build_validate_tx(executor, context, module, method, module_params, params)
 		}
 		_ => Err(errors::ErrorKind::Spec(format!(
@@ -126,105 +132,49 @@ fn build_validate_tx<P: Encode>(
 	Ok(tx)
 }
 
-struct JsonParams<'a>(&'a str);
+#[derive(Deserialize)]
+pub struct SystemInitParams {
+	pub chain_id: String,
+	pub timestamp: String,
+	pub max_until_gap: BlockNumber,
+	pub max_execution_gap: ExecutionGap,
+	pub consensus: String,
+}
 
-impl<'a> TryInto<module::system::InitParams> for JsonParams<'a> {
+impl TryFrom<SystemInitParams> for module::system::InitParams {
 	type Error = CommonError;
-	fn try_into(self) -> Result<module::system::InitParams, Self::Error> {
-		#[derive(Deserialize)]
-		pub struct InitParams {
-			pub chain_id: String,
-			pub timestamp: String,
-			pub max_until_gap: BlockNumber,
-			pub max_execution_gap: ExecutionGap,
-			pub consensus: String,
-		}
-		let params = serde_json::from_str::<InitParams>(self.0)
-			.map_err(|e| errors::ErrorKind::Spec(format!("Invalid json: {:?}", e)))?;
-		let timestamp = DateTime::parse_from_rfc3339(&params.timestamp)
+
+	fn try_from(value: SystemInitParams) -> Result<Self, Self::Error> {
+		let timestamp = DateTime::parse_from_rfc3339(&value.timestamp)
 			.map_err(|e| errors::ErrorKind::Spec(format!("Invalid time format: {:?}", e)))?;
 		let timestamp = timestamp.timestamp_millis() as u64;
-		let chain_id = params.chain_id;
-		let max_until_gap = params.max_until_gap;
-		let max_execution_gap = params.max_execution_gap;
-		let consensus = params.consensus;
 		Ok(module::system::InitParams {
-			chain_id,
+			chain_id: value.chain_id,
 			timestamp,
-			max_until_gap,
-			max_execution_gap,
-			consensus,
+			max_until_gap: value.max_until_gap,
+			max_execution_gap: value.max_execution_gap,
+			consensus: value.consensus,
 		})
 	}
 }
 
-impl<'a> TryInto<module::balance::InitParams> for JsonParams<'a> {
-	type Error = CommonError;
-	fn try_into(self) -> Result<module::balance::InitParams, Self::Error> {
-		#[derive(Deserialize)]
-		pub struct InitParams {
-			pub endow: Vec<(Address, u64)>,
-		}
-		let params = serde_json::from_str::<InitParams>(self.0)
-			.map_err(|e| errors::ErrorKind::Spec(format!("Invalid json: {:?}", e)))?;
-		let endow = params.endow;
-
-		Ok(module::balance::InitParams { endow })
-	}
-}
-
-impl<'a> TryInto<module::poa::InitParams> for JsonParams<'a> {
-	type Error = CommonError;
-	fn try_into(self) -> Result<module::poa::InitParams, Self::Error> {
-		#[derive(Deserialize)]
-		pub struct InitParams {
-			pub block_interval: Option<u64>,
-			pub authority: Address,
-		}
-		let params = serde_json::from_str::<InitParams>(self.0)
-			.map_err(|e| errors::ErrorKind::Spec(format!("Invalid json: {:?}", e)))?;
-		let block_interval = params.block_interval;
-		let authority = params.authority;
-
-		Ok(module::poa::InitParams {
-			block_interval,
-			authority,
-		})
-	}
-}
-
-impl<'a> TryInto<module::contract::InitParams> for JsonParams<'a> {
-	type Error = CommonError;
-	fn try_into(self) -> Result<module::contract::InitParams, Self::Error> {
-		#[derive(Deserialize)]
-		pub struct InitParams {
-			pub max_stack_height: Option<u32>,
-			pub initial_memory_pages: Option<u32>,
-			pub max_memory_pages: Option<u32>,
-			pub max_share_value_len: Option<u64>,
-			pub max_share_size: Option<u64>,
-			pub max_nest_depth: Option<u32>,
-		}
-		let params = serde_json::from_str::<InitParams>(self.0)
-			.map_err(|e| errors::ErrorKind::Spec(format!("Invalid json: {:?}", e)))?;
-
-		Ok(module::contract::InitParams {
-			max_stack_height: params.max_stack_height,
-			initial_memory_pages: params.initial_memory_pages,
-			max_memory_pages: params.max_memory_pages,
-			max_share_value_len: params.max_share_value_len,
-			max_share_size: params.max_share_size,
-			max_nest_depth: params.max_nest_depth,
-		})
-	}
+fn get_module_params<P>(params: &str) -> CommonResult<P>
+where
+	P: DeserializeOwned,
+{
+	let params = serde_json::from_str::<P>(params)
+		.map_err(|e| errors::ErrorKind::Spec(format!("Invalid json: {:?}", e)))?;
+	Ok(params)
 }
 
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use node_executor::module::raft::Authorities;
+	use primitives::Address;
 
 	#[test]
-	fn test_into_system_init_params() {
+	fn test_system_init_params() {
 		let str = r#"
 		{
 			"chain_id": "chain-test",
@@ -234,9 +184,9 @@ mod tests {
 			"consensus": "poa"
 		}
 		"#;
-		let json_params = JsonParams(&str);
 
-		let param: module::system::InitParams = json_params.try_into().unwrap();
+		let param = get_module_params::<SystemInitParams>(str).unwrap();
+		let param: module::system::InitParams = param.try_into().unwrap();
 
 		assert_eq!(
 			param,
@@ -251,7 +201,7 @@ mod tests {
 	}
 
 	#[test]
-	fn test_into_balance_init_params() {
+	fn test_balance_init_params() {
 		let str = r#"
 		{
 			"endow":[
@@ -261,9 +211,7 @@ mod tests {
 		}
 		"#;
 
-		let json_params = JsonParams(&str);
-
-		let param: module::balance::InitParams = json_params.try_into().unwrap();
+		let param = get_module_params::<module::balance::InitParams>(str).unwrap();
 
 		assert_eq!(
 			param,
@@ -287,7 +235,7 @@ mod tests {
 	}
 
 	#[test]
-	fn test_into_poa_init_params() {
+	fn test_poa_init_params() {
 		let str = r#"
 		{
 			"block_interval": 1000,
@@ -295,9 +243,7 @@ mod tests {
 		}
 		"#;
 
-		let json_params = JsonParams(&str);
-
-		let param: module::poa::InitParams = json_params.try_into().unwrap();
+		let param = get_module_params::<module::poa::InitParams>(str).unwrap();
 
 		assert_eq!(
 			param,
@@ -309,7 +255,55 @@ mod tests {
 	}
 
 	#[test]
-	fn test_into_contract_init_params() {
+	fn test_raft_init_params() {
+		let str = r#"
+		{
+			"block_interval": 3000,
+			"heartbeat_interval": 100,
+			"election_timeout_min": 500,
+			"election_timeout_max": 1000,
+			"authorities": {
+				"threshold": 2,
+				"members": [
+					["0001020304050607080900010203040506070809", 1],
+					["000102030405060708090001020304050607080a", 2]
+				]
+			}
+		}
+		"#;
+
+		let param = get_module_params::<module::raft::InitParams>(str).unwrap();
+
+		assert_eq!(
+			param,
+			module::raft::InitParams {
+				block_interval: 3000,
+				heartbeat_interval: 100,
+				election_timeout_min: 500,
+				election_timeout_max: 1000,
+				authorities: Authorities {
+					threshold: 2,
+					members: vec![
+						(
+							Address(vec![
+								0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9
+							]),
+							1
+						),
+						(
+							Address(vec![
+								0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 10
+							]),
+							2
+						)
+					]
+				},
+			}
+		)
+	}
+
+	#[test]
+	fn test_contract_init_params() {
 		let str = r#"
 		{
 			"max_stack_height": 16384,
@@ -321,9 +315,7 @@ mod tests {
 		}
 		"#;
 
-		let json_params = JsonParams(&str);
-
-		let param: module::contract::InitParams = json_params.try_into().unwrap();
+		let param = get_module_params::<module::contract::InitParams>(str).unwrap();
 
 		assert_eq!(
 			param,

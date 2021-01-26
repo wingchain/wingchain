@@ -25,7 +25,7 @@ use node_consensus_base::support::DefaultConsensusSupport;
 use node_consensus_base::ConsensusConfig;
 use node_txpool::support::DefaultTxPoolSupport;
 use node_txpool::{TxPool, TxPoolConfig};
-use primitives::{Address, Hash, Transaction};
+use primitives::{Address, BlockNumber, Hash, Transaction};
 use utils_test::TestAccount;
 
 pub fn get_service(
@@ -75,13 +75,13 @@ pub async fn wait_txpool(txpool: &Arc<TxPool<DefaultTxPoolSupport>>, count: usiz
 	}
 }
 
-pub async fn wait_block_execution(chain: &Arc<Chain>) {
+pub async fn wait_block_execution(chain: &Arc<Chain>, expected_number: BlockNumber) {
 	loop {
 		{
 			let number = chain.get_confirmed_number().unwrap().unwrap();
 			let block_hash = chain.get_block_hash(&number).unwrap().unwrap();
 			let execution = chain.get_execution(&block_hash).unwrap();
-			if execution.is_some() {
+			if number == expected_number && execution.is_some() {
 				break;
 			}
 		}

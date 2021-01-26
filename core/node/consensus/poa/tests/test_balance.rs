@@ -17,6 +17,7 @@ use std::sync::Arc;
 
 use crypto::address::AddressImpl;
 use crypto::dsa::DsaImpl;
+use node_consensus_base::ConsensusInMessage;
 use node_executor::module;
 use primitives::{codec, Balance, Event, Proof, Receipt};
 use utils_test::test_accounts;
@@ -63,8 +64,11 @@ async fn test_poa_balance() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 1
-	consensus.generate().unwrap();
-	base::wait_block_execution(&chain).await;
+	consensus
+		.in_message_tx()
+		.unbounded_send(ConsensusInMessage::Generate)
+		.unwrap();
+	base::wait_block_execution(&chain, 1).await;
 
 	let block_hash = chain.get_block_hash(&1).unwrap().unwrap();
 	let proof = chain.get_proof(&block_hash).unwrap().unwrap();
@@ -99,8 +103,11 @@ async fn test_poa_balance() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 2
-	consensus.generate().unwrap();
-	base::wait_block_execution(&chain).await;
+	consensus
+		.in_message_tx()
+		.unbounded_send(ConsensusInMessage::Generate)
+		.unwrap();
+	base::wait_block_execution(&chain, 2).await;
 
 	let tx3_hash = base::insert_tx(
 		&chain,
@@ -125,8 +132,11 @@ async fn test_poa_balance() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 3
-	consensus.generate().unwrap();
-	base::wait_block_execution(&chain).await;
+	consensus
+		.in_message_tx()
+		.unbounded_send(ConsensusInMessage::Generate)
+		.unwrap();
+	base::wait_block_execution(&chain, 3).await;
 
 	// check block 1
 	let balance: Balance = chain

@@ -15,6 +15,7 @@
 use crypto::address::AddressImpl;
 use crypto::dsa::DsaImpl;
 use log::info;
+use node_consensus_base::ConsensusInMessage;
 use node_executor::module;
 use node_network::{Keypair, LinkedHashMap, Multiaddr, PeerId, Protocol};
 use std::sync::Arc;
@@ -77,8 +78,11 @@ async fn test_coordinator_block_sync() {
 	let consensus0 = &services[0].2;
 
 	// generate block 1
-	consensus0.generate().unwrap();
-	base::wait_block_execution(&chain0).await;
+	consensus0
+		.in_message_tx()
+		.unbounded_send(ConsensusInMessage::Generate)
+		.unwrap();
+	base::wait_block_execution(&chain0, 1).await;
 
 	// generate block 2
 	let _tx1_hash = base::insert_tx(
@@ -103,12 +107,18 @@ async fn test_coordinator_block_sync() {
 	.await;
 	base::wait_txpool(&txpool0, 1).await;
 
-	consensus0.generate().unwrap();
-	base::wait_block_execution(&chain0).await;
+	consensus0
+		.in_message_tx()
+		.unbounded_send(ConsensusInMessage::Generate)
+		.unwrap();
+	base::wait_block_execution(&chain0, 2).await;
 
 	// generate block 3
-	consensus0.generate().unwrap();
-	base::wait_block_execution(&chain0).await;
+	consensus0
+		.in_message_tx()
+		.unbounded_send(ConsensusInMessage::Generate)
+		.unwrap();
+	base::wait_block_execution(&chain0, 3).await;
 
 	// wait chain1 to sync
 	let chain1 = &services[1].0;

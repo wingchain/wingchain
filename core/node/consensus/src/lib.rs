@@ -16,10 +16,7 @@
 
 use std::sync::Arc;
 
-use futures::channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
-use futures::StreamExt;
-use log::error;
-use parking_lot::RwLock;
+use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use node_consensus_base::support::ConsensusSupport;
 use node_consensus_base::{
@@ -34,9 +31,7 @@ pub struct Consensus<S>
 where
 	S: ConsensusSupport,
 {
-	in_tx: UnboundedSender<ConsensusInMessage>,
-	out_rx: RwLock<Option<UnboundedReceiver<ConsensusOutMessage>>>,
-	dispatcher: Arc<Dispatcher<S>>,
+	dispatcher: Dispatcher<S>,
 }
 
 enum Dispatcher<S>
@@ -44,14 +39,6 @@ where
 	S: ConsensusSupport,
 {
 	Poa(Poa<S>),
-}
-
-struct ConsensusStream<S>
-where
-	S: ConsensusSupport,
-{
-	in_rx: UnboundedReceiver<ConsensusInMessage>,
-	dispatcher: Arc<Dispatcher<S>>,
 }
 
 impl<S> Consensus<S>
@@ -62,37 +49,19 @@ where
 		let system_meta = &support.get_current_state().system_meta;
 		let consensus = system_meta.consensus.as_str();
 
-		let (in_tx, in_rx) = unbounded();
-		let (out_tx, out_rx) = unbounded();
-
 		let dispatcher = match consensus {
 			CONSENSUS_POA => {
-				let poa = Poa::new(config, out_tx, support)?;
+				let poa = Poa::new(config, support)?;
 				Dispatcher::Poa(poa)
 			}
 			other => {
 				panic!("Unknown consensus: {}", other);
 			}
 		};
-		let dispatcher = Arc::new(dispatcher);
 
-		let stream = ConsensusStream {
-			in_rx,
-			dispatcher: dispatcher.clone(),
-		};
-		tokio::spawn(start(stream));
-
-		let consensus = Consensus {
-			in_tx,
-			out_rx: RwLock::new(Some(out_rx)),
-			dispatcher,
-		};
+		let consensus = Consensus { dispatcher };
 
 		Ok(consensus)
-	}
-
-	pub fn generate(&self) -> CommonResult<()> {
-		self.dispatcher.generate()
 	}
 
 	pub fn verify_proof(&self, header: &Header, proof: &Proof) -> CommonResult<()> {
@@ -100,11 +69,11 @@ where
 	}
 
 	pub fn in_message_tx(&self) -> UnboundedSender<ConsensusInMessage> {
-		self.in_tx.clone()
+		self.dispatcher.in_message_tx()
 	}
 
 	pub fn out_message_rx(&self) -> Option<UnboundedReceiver<ConsensusOutMessage>> {
-		self.out_rx.write().take()
+		self.dispatcher.out_message_rx()
 	}
 }
 
@@ -112,39 +81,21 @@ impl<S> ConsensusT for Dispatcher<S>
 where
 	S: ConsensusSupport,
 {
-	fn generate(&self) -> CommonResult<()> {
-		match self {
-			Dispatcher::Poa(poa) => poa.generate(),
-		}
-	}
-
 	fn verify_proof(&self, header: &Header, proof: &Proof) -> CommonResult<()> {
 		match self {
 			Dispatcher::Poa(poa) => poa.verify_proof(header, proof),
 		}
 	}
 
-	fn on_in_message(&self, in_message: ConsensusInMessage) -> CommonResult<()> {
+	fn in_message_tx(&self) -> UnboundedSender<ConsensusInMessage> {
 		match self {
-			Dispatcher::Poa(poa) => poa.on_in_message(in_message),
+			Dispatcher::Poa(poa) => poa.in_message_tx(),
 		}
 	}
-}
 
-#[allow(clippy::while_let_loop)]
-async fn start<S>(mut stream: ConsensusStream<S>)
-where
-	S: ConsensusSupport,
-{
-	loop {
-		match stream.in_rx.next().await {
-			Some(in_message) => {
-				stream
-					.dispatcher
-					.on_in_message(in_message)
-					.unwrap_or_else(|e| error!("Consensus handle in message error: {}", e));
-			}
-			None => break,
+	fn out_message_rx(&self) -> Option<UnboundedReceiver<ConsensusOutMessage>> {
+		match self {
+			Dispatcher::Poa(poa) => poa.out_message_rx(),
 		}
 	}
 }

@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
 pub use node_network::PeerId;
 use primitives::errors::CommonResult;
 use primitives::{Header, Proof, SecretKey};
@@ -24,9 +25,9 @@ pub struct ConsensusConfig {
 }
 
 pub trait Consensus {
-	fn generate(&self) -> CommonResult<()>;
 	fn verify_proof(&self, header: &Header, proof: &Proof) -> CommonResult<()>;
-	fn on_in_message(&self, in_message: ConsensusInMessage) -> CommonResult<()>;
+	fn in_message_tx(&self) -> UnboundedSender<ConsensusInMessage>;
+	fn out_message_rx(&self) -> Option<UnboundedReceiver<ConsensusOutMessage>>;
 }
 
 pub enum ConsensusInMessage {
@@ -42,6 +43,7 @@ pub enum ConsensusInMessage {
 		peer_id: PeerId,
 		message: Vec<u8>,
 	},
+	Generate,
 }
 
 pub enum ConsensusOutMessage {

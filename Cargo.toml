@@ -22,6 +22,7 @@ members = [
 	"core/node/consensus",
     "core/node/consensus/base",
 	"core/node/consensus/poa",
+	"core/node/consensus/raft",
 	"core/node/vm",
 	"core/node/vm/contract-sdk",
 	"core/node/vm/contract-sdk-primitives",
@@ -35,6 +36,7 @@ members = [
 	"core/module/system",
 	"core/module/balance",
 	"core/module/poa",
+	"core/module/raft",
 	"core/module/contract",
 ]
 

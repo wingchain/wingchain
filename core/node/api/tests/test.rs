@@ -23,6 +23,7 @@ use node_api::support::DefaultApiSupport;
 use node_api::{Api, ApiConfig};
 use node_api_rt::tokio::time::Duration;
 use node_chain::module;
+use node_consensus_base::ConsensusInMessage;
 use node_coordinator::{Keypair, LinkedHashMap, Multiaddr, PeerId, Protocol};
 use primitives::codec::Encode;
 use primitives::Proof;
@@ -148,8 +149,11 @@ async fn test_api() {
 	assert_eq!(response, expected);
 
 	// generate block 1
-	consensus0.generate().unwrap();
-	base::wait_block_execution(&chain0).await;
+	consensus0
+		.in_message_tx()
+		.unbounded_send(ConsensusInMessage::Generate)
+		.unwrap();
+	base::wait_block_execution(&chain0, 1).await;
 
 	// chain_getTransactionByHash
 	let request = format!(

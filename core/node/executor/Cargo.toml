@@ -15,6 +15,7 @@ module-system = { path = "../../module/system" }
 module-balance = { path = "../../module/balance" }
 module-contract = { path = "../../module/contract" }
 module-poa = { path = "../../module/poa" }
+module-raft = { path = "../../module/raft" }
 node-executor-primitives = { path = "primitives" }
 node-executor-macro = { path = "executor-macro" }
 crypto = { path = "../../crypto" }
