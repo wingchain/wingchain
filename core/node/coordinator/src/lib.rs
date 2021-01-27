@@ -25,7 +25,7 @@ use primitives::codec::Encode;
 use primitives::errors::CommonResult;
 
 use crate::protocol::{Handshake, ProtocolMessage};
-use crate::stream::{start, CoordinatorStream};
+use crate::stream::CoordinatorStream;
 use crate::support::CoordinatorSupport;
 use futures::channel::mpsc::{unbounded, UnboundedSender};
 use node_network::HandshakeBuilder;
@@ -95,7 +95,7 @@ where
 
 		let (in_tx, in_rx) = unbounded();
 
-		let stream = CoordinatorStream::new(
+		CoordinatorStream::spawn(
 			handshake_builder,
 			chain_rx,
 			txpool_rx,
@@ -105,8 +105,6 @@ where
 			in_rx,
 			support.clone(),
 		)?;
-
-		tokio::spawn(start(stream));
 
 		let coordinator = Coordinator {
 			network: Arc::new(network),

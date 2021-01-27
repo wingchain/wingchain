@@ -77,7 +77,7 @@ where
 			message_rx: RwLock::new(Some(message_rx)),
 		};
 
-		tokio::spawn(process_buffer(buffer_rx, queue));
+		BufferStream::spawn(buffer_rx, queue);
 
 		info!("Initializing txpool");
 
@@ -197,17 +197,26 @@ where
 	}
 }
 
-/// A loop to process the transaction in the buffer
-async fn process_buffer(
+struct BufferStream {
 	buffer_rx: UnboundedReceiver<Arc<FullTransaction>>,
 	queue: Arc<RwLock<Vec<Arc<FullTransaction>>>>,
-) {
-	let mut buffer_rx = buffer_rx;
-	loop {
-		let tx = buffer_rx.next().await;
-		match tx {
-			Some(tx) => queue.write().push(tx),
-			None => break,
+}
+
+impl BufferStream {
+	fn spawn(
+		buffer_rx: UnboundedReceiver<Arc<FullTransaction>>,
+		queue: Arc<RwLock<Vec<Arc<FullTransaction>>>>,
+	) {
+		let this = Self { buffer_rx, queue };
+		tokio::spawn(this.start());
+	}
+	async fn start(mut self) {
+		loop {
+			let tx = self.buffer_rx.next().await;
+			match tx {
+				Some(tx) => self.queue.write().push(tx),
+				None => break,
+			}
 		}
 	}
 }

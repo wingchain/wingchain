@@ -48,7 +48,7 @@ where
 	S: CoordinatorSupport,
 {
 	#[allow(clippy::too_many_arguments)]
-	pub fn new(
+	pub fn spawn(
 		handshake_builder: Arc<DefaultHandshakeBuilder>,
 		chain_rx: UnboundedReceiver<ChainOutMessage>,
 		txpool_rx: UnboundedReceiver<TxPoolOutMessage>,
@@ -57,7 +57,7 @@ where
 		network_rx: UnboundedReceiver<NetworkOutMessage>,
 		in_rx: UnboundedReceiver<CoordinatorInMessage>,
 		support: Arc<S>,
-	) -> CommonResult<Self> {
+	) -> CommonResult<()> {
 		let support = Arc::new(StreamSupport::new(
 			handshake_builder,
 			peer_manager_tx,
@@ -67,7 +67,7 @@ where
 
 		let sync = ChainSync::new(support.clone())?;
 
-		let stream = Self {
+		let this = Self {
 			chain_rx,
 			txpool_rx,
 			network_rx,
@@ -75,7 +75,36 @@ where
 			support,
 			sync,
 		};
-		Ok(stream)
+		tokio::spawn(this.start());
+		Ok(())
+	}
+
+	async fn start(mut self) {
+		loop {
+			tokio::select! {
+				Some(chain_message) = self.chain_rx.next() => {
+					self.on_chain_message(chain_message)
+						.unwrap_or_else(|e| error!("Coordinator handle chain message error: {}", e));
+				}
+				Some(network_message) = self.network_rx.next() => {
+					self.on_network_message(network_message)
+						.unwrap_or_else(|e| error!("Coordinator handle network message error: {}", e));
+				}
+				Some(in_message) = self.in_rx.next() => {
+					self.on_in_message(in_message)
+						.unwrap_or_else(|e| error!("Coordinator handle in message error: {}", e));
+				}
+				Some(txpool_message) = self.txpool_rx.next() => {
+					self.on_txpool_message(txpool_message)
+						.unwrap_or_else(|e| error!("Coordinator handle txpool message error: {}", e));
+				}
+				Some(block_request_timer_result) = self.sync.block_request_timer.next() => {
+					let (peer_id, request_id) = block_request_timer_result;
+					self.sync.on_block_request_timer_trigger(peer_id, request_id)
+						.unwrap_or_else(|e| error!("Coordinator handle block request timer result error: {}", e));
+				}
+			}
+		}
 	}
 
 	fn on_chain_message(&mut self, message: ChainOutMessage) -> CommonResult<()> {
@@ -344,36 +373,5 @@ where
 			errors::ErrorKind::Data(format!("Missing transaction: tx_hash: {:?}", tx_hash))
 		})?;
 		Ok(body)
-	}
-}
-
-pub async fn start<S>(mut stream: CoordinatorStream<S>)
-where
-	S: CoordinatorSupport,
-{
-	loop {
-		tokio::select! {
-			Some(chain_message) = stream.chain_rx.next() => {
-				stream.on_chain_message(chain_message)
-					.unwrap_or_else(|e| error!("Coordinator handle chain message error: {}", e));
-			}
-			Some(network_message) = stream.network_rx.next() => {
-				stream.on_network_message(network_message)
-					.unwrap_or_else(|e| error!("Coordinator handle network message error: {}", e));
-			}
-			Some(in_message) = stream.in_rx.next() => {
-				stream.on_in_message(in_message)
-					.unwrap_or_else(|e| error!("Coordinator handle in message error: {}", e));
-			}
-			Some(txpool_message) = stream.txpool_rx.next() => {
-				stream.on_txpool_message(txpool_message)
-					.unwrap_or_else(|e| error!("Coordinator handle txpool message error: {}", e));
-			}
-			Some(block_request_timer_result) = stream.sync.block_request_timer.next() => {
-				let (peer_id, request_id) = block_request_timer_result;
-				stream.sync.on_block_request_timer_trigger(peer_id, request_id)
-					.unwrap_or_else(|e| error!("Coordinator handle block request timer result error: {}", e));
-			}
-		}
 	}
 }

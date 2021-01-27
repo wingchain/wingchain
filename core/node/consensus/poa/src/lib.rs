@@ -84,18 +84,14 @@ where
 		let (in_tx, in_rx) = unbounded();
 		let (out_tx, out_rx) = unbounded();
 
-		let stream = PoaStream {
-			support: support.clone(),
+		PoaStream::spawn(
+			support.clone(),
 			poa_meta,
-			current_address,
 			current_secret_key,
+			current_address,
 			out_tx,
 			in_rx,
-		};
-
-		if stream.current_address.is_some() {
-			tokio::spawn(start(stream));
-		}
+		);
 
 		info!("Initializing consensus poa");
 
@@ -174,6 +170,52 @@ impl<S> PoaStream<S>
 where
 	S: ConsensusSupport,
 {
+	fn spawn(
+		support: Arc<S>,
+		poa_meta: Meta,
+		current_secret_key: Option<SecretKey>,
+		current_address: Option<Address>,
+		out_tx: UnboundedSender<ConsensusOutMessage>,
+		in_rx: UnboundedReceiver<ConsensusInMessage>,
+	) {
+		let this = Self {
+			support,
+			poa_meta,
+			current_secret_key,
+			current_address,
+			out_tx,
+			in_rx,
+		};
+		if this.current_address.is_some() {
+			tokio::spawn(this.start());
+		}
+	}
+
+	async fn start(mut self) {
+		info!("Start poa work");
+		let mut scheduler = Scheduler::new(self.poa_meta.block_interval);
+		loop {
+			tokio::select! {
+				Some(item) = scheduler.next() => {
+					match item {
+						Ok(v) => {
+							self.work(v)
+								.unwrap_or_else(|e| error!("Consensus poa handle work error: {}", e));
+						},
+						Err(e) => {
+							error!("Terminated with an error: {:?}", e);
+							break;
+						}
+					}
+				}
+				Some(in_message) = self.in_rx.next() => {
+					self.on_in_message(in_message)
+						.unwrap_or_else(|e| error!("Consensus poa handle in message error: {}", e));
+				}
+			}
+		}
+	}
+
 	fn work(&self, schedule_info: ScheduleInfo) -> CommonResult<()> {
 		let current_state = &self.support.get_current_state();
 
@@ -310,36 +352,6 @@ where
 		}
 		Ok(())
 	}
-}
-
-async fn start<S>(mut stream: PoaStream<S>) -> CommonResult<()>
-where
-	S: ConsensusSupport,
-{
-	info!("Start poa work");
-	let mut scheduler = Scheduler::new(stream.poa_meta.block_interval);
-	loop {
-		tokio::select! {
-			Some(item) = scheduler.next() => {
-				match item {
-					Ok(v) => {
-						stream.work(v)
-							.unwrap_or_else(|e| error!("Consensus poa handle work error: {}", e));
-					},
-					Err(e) => {
-						error!("Terminated with an error: {:?}", e);
-						break;
-					}
-				}
-			}
-			Some(in_message) = stream.in_rx.next() => {
-				println!("in message");
-				stream.on_in_message(in_message)
-					.unwrap_or_else(|e| error!("Consensus poa handle in message error: {}", e));
-			}
-		}
-	}
-	Ok(())
 }
 
 fn get_poa_meta<S: ConsensusSupport>(

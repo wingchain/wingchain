@@ -31,16 +31,6 @@ use log::{debug, error};
 use crate::behaviour::{Behaviour, BehaviourOut};
 use crate::{NetworkInMessage, NetworkOutMessage};
 
-#[allow(clippy::while_let_loop)]
-pub async fn start(mut stream: NetworkStream) {
-	loop {
-		match stream.next().await {
-			Some(_) => (),
-			None => break,
-		}
-	}
-}
-
 pub struct NetworkStream {
 	pub swarm: Swarm<Behaviour>,
 	#[allow(dead_code)]
@@ -76,6 +66,31 @@ pub struct UnopenedPeer {
 #[allow(clippy::needless_collect)]
 #[allow(clippy::mutable_key_type)]
 impl NetworkStream {
+	pub fn spawn(
+		swarm: Swarm<Behaviour>,
+		bandwidth: Arc<BandwidthSinks>,
+		in_rx: UnboundedReceiver<NetworkInMessage>,
+		out_tx: UnboundedSender<NetworkOutMessage>,
+	) {
+		let this = Self {
+			swarm,
+			bandwidth,
+			in_rx,
+			out_tx,
+		};
+		tokio::spawn(this.start());
+	}
+
+	#[allow(clippy::while_let_loop)]
+	async fn start(mut self) {
+		loop {
+			match self.next().await {
+				Some(_) => (),
+				None => break,
+			}
+		}
+	}
+
 	fn network_state(&mut self) -> NetworkState {
 		let peer_id = Swarm::local_peer_id(&self.swarm).clone();
 		let listened_addresses = Swarm::listeners(&self.swarm).cloned().collect();

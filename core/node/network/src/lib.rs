@@ -37,7 +37,7 @@ pub use {
 };
 
 use crate::behaviour::{Behaviour, BehaviourConfig};
-use crate::stream::{start, NetworkStream};
+use crate::stream::NetworkStream;
 use std::sync::Arc;
 
 mod behaviour;
@@ -175,13 +175,7 @@ impl Network {
 		let peer_id = Swarm::local_peer_id(&swarm);
 		info!("Local peer id: {}", peer_id);
 
-		let stream = NetworkStream {
-			swarm,
-			bandwidth,
-			in_rx,
-			out_tx,
-		};
-		tokio::spawn(start(stream));
+		NetworkStream::spawn(swarm, bandwidth, in_rx, out_tx);
 
 		let network = Network {
 			peer_manager_tx,
