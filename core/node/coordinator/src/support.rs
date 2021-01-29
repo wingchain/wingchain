@@ -16,11 +16,12 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use futures::channel::mpsc::UnboundedReceiver;
+use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use node_chain::{Chain, ChainCommitBlockParams, ChainOutMessage, CurrentState};
 use node_consensus::Consensus;
 use node_consensus_base::support::DefaultConsensusSupport;
+use node_consensus_base::{ConsensusInMessage, ConsensusOutMessage};
 use node_txpool::support::DefaultTxPoolSupport;
 use node_txpool::{TxPool, TxPoolOutMessage};
 use primitives::codec::{Decode, Encode};
@@ -67,6 +68,8 @@ pub trait CoordinatorSupport: Send + Sync + 'static {
 	fn txpool_insert_transaction(&self, tx: Transaction) -> CommonResult<()>;
 	fn txpool_remove_transactions(&self, tx_hash_set: &HashSet<Hash>) -> CommonResult<()>;
 	fn consensus_verify_proof(&self, header: &Header, proof: &Proof) -> CommonResult<()>;
+	fn consensus_tx(&self) -> UnboundedSender<ConsensusInMessage>;
+	fn consensus_rx(&self) -> Option<UnboundedReceiver<ConsensusOutMessage>>;
 }
 
 pub struct DefaultCoordinatorSupport {
@@ -169,5 +172,11 @@ impl CoordinatorSupport for DefaultCoordinatorSupport {
 	}
 	fn consensus_verify_proof(&self, header: &Header, proof: &Proof) -> CommonResult<()> {
 		self.consensus.verify_proof(header, proof)
+	}
+	fn consensus_tx(&self) -> UnboundedSender<ConsensusInMessage> {
+		self.consensus.in_message_tx()
+	}
+	fn consensus_rx(&self) -> Option<UnboundedReceiver<ConsensusOutMessage>> {
+		self.consensus.out_message_rx()
 	}
 }

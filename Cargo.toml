@@ -4,6 +4,7 @@ members = [
 	"bin/main/init",
 	"bin/main/node",
 	"utils/test",
+	"utils/enum-codec",
 	"core/crypto",
 	"core/crypto/dylib-samples/hash",
 	"core/crypto/dylib-samples/dsa",

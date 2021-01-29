@@ -258,7 +258,7 @@ impl Backend {
 		self.db.get_with(
 			node_db::columns::GLOBAL,
 			node_db::global_key::CONFIRMED_NUMBER,
-			|x| codec::decode(&x[..]),
+			|x| codec::decode(&mut &x[..]),
 		)
 	}
 
@@ -268,7 +268,7 @@ impl Backend {
 		self.db.get_with(
 			node_db::columns::GLOBAL,
 			node_db::global_key::EXECUTION_NUMBER,
-			|x| codec::decode(&x[..]),
+			|x| codec::decode(&mut &x[..]),
 		)
 	}
 
@@ -301,7 +301,7 @@ impl Backend {
 		self.db.get_with(
 			node_db::columns::BLOCK_HASH,
 			&DBKey::from_slice(&codec::encode(&number)?),
-			|x| codec::decode(&x[..]),
+			|x| codec::decode(&mut &x[..]),
 		)
 	}
 
@@ -310,7 +310,7 @@ impl Backend {
 		self.db.get_with(
 			node_db::columns::HEADER,
 			&DBKey::from_slice(&block_hash.0),
-			|x| codec::decode(&x[..]),
+			|x| codec::decode(&mut &x[..]),
 		)
 	}
 
@@ -319,7 +319,7 @@ impl Backend {
 		let meta_txs: Vec<Hash> = match self.db.get_with(
 			node_db::columns::META_TXS,
 			&DBKey::from_slice(&block_hash.0),
-			|x| codec::decode(&x[..]),
+			|x| codec::decode(&mut &x[..]),
 		)? {
 			Some(v) => v,
 			None => return Ok(None),
@@ -328,7 +328,7 @@ impl Backend {
 		let payload_txs: Vec<Hash> = match self.db.get_with(
 			node_db::columns::PAYLOAD_TXS,
 			&DBKey::from_slice(&block_hash.0),
-			|x| codec::decode(&x[..]),
+			|x| codec::decode(&mut &x[..]),
 		)? {
 			Some(v) => v,
 			None => return Ok(None),
@@ -358,7 +358,7 @@ impl Backend {
 		self.db.get_with(
 			node_db::columns::EXECUTION,
 			&DBKey::from_slice(&block_hash.0),
-			|x| codec::decode(&x[..]),
+			|x| codec::decode(&mut &x[..]),
 		)
 	}
 
@@ -367,7 +367,7 @@ impl Backend {
 		self.db.get_with(
 			node_db::columns::PROOF,
 			&DBKey::from_slice(&block_hash.0),
-			|x| codec::decode(&x[..]),
+			|x| codec::decode(&mut &x[..]),
 		)
 	}
 
@@ -375,7 +375,7 @@ impl Backend {
 	pub fn get_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Transaction>> {
 		self.db
 			.get_with(node_db::columns::TX, &DBKey::from_slice(&tx_hash.0), |x| {
-				codec::decode(&x[..])
+				codec::decode(&mut &x[..])
 			})
 	}
 
@@ -390,7 +390,7 @@ impl Backend {
 		self.db.get_with(
 			node_db::columns::RECEIPT,
 			&DBKey::from_slice(&tx_hash.0),
-			|x| codec::decode(&x[..]),
+			|x| codec::decode(&mut &x[..]),
 		)
 	}
 
@@ -461,7 +461,7 @@ impl Backend {
 		let call = self.build_call(module, method, params)?;
 		let result = self.execute_call(&block_hash, sender, &call)?;
 		let result: CallResult<R> = match result {
-			Ok(result) => Ok(codec::decode(&result)?),
+			Ok(result) => Ok(codec::decode(&mut &result[..])?),
 			Err(e) => Err(e),
 		};
 		Ok(result)
@@ -797,7 +797,7 @@ impl Backend {
 				let spec = db.get(node_db::columns::GLOBAL, node_db::global_key::SPEC)?;
 				let spec =
 					spec.ok_or_else(|| errors::ErrorKind::Spec("Missing spec in db".to_string()))?;
-				let spec: String = codec::decode(&spec)
+				let spec: String = codec::decode(&mut &spec[..])
 					.map_err(|_| errors::ErrorKind::Spec("Serde error".to_string()))?;
 				spec
 			}

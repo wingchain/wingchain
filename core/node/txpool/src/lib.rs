@@ -116,7 +116,7 @@ where
 			);
 		}
 
-		let result = self.buffer_tx.clone().unbounded_send(pool_tx);
+		let result = self.buffer_tx.unbounded_send(pool_tx);
 
 		if let Err(e) = result {
 			self.map.remove(&tx_hash);

@@ -25,6 +25,7 @@ node-network = { path = "../network" }
 primitives = { path = "../../primitives" }
 node-consensus = { path = "../consensus" }
 node-consensus-base = { path = "../consensus/base" }
+utils-enum-codec = { path = "../../../utils/enum-codec"}
 
 [dev-dependencies]
 tempfile = "3.1.0"

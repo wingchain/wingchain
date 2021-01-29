@@ -20,7 +20,6 @@ pub fn encode<E: Encode>(value: &E) -> CommonResult<Vec<u8>> {
 	Ok(Encode::encode(value))
 }
 
-pub fn decode<D: Decode>(bytes: &[u8]) -> CommonResult<D> {
-	Decode::decode(&mut &bytes[..])
-		.map_err(|e| CommonError::new(CommonErrorKind::Codec, Box::new(e)))
+pub fn decode<D: Decode>(value: &mut &[u8]) -> CommonResult<D> {
+	Decode::decode(value).map_err(|e| CommonError::new(CommonErrorKind::Codec, Box::new(e)))
 }

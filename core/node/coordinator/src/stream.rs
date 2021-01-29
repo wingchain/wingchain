@@ -21,15 +21,18 @@ use log::{error, info, warn};
 use node_chain::ChainOutMessage;
 use node_network::{BytesMut, NetworkInMessage, NetworkOutMessage, PMInMessage, PeerId};
 use node_txpool::TxPoolOutMessage;
-use primitives::codec::Decode;
+use primitives::codec::{Decode, Encode};
 use primitives::errors::CommonResult;
 use primitives::{BlockNumber, Body, Hash, Header, Proof, Transaction};
 
 use crate::peer_report::PEER_REPORT_HANDSHAKE_FAILED;
-use crate::protocol::{BlockAnnounce, BlockRequest, BlockResponse, ProtocolMessage, TxPropagate};
+use crate::protocol::{
+	BlockAnnounce, BlockRequest, BlockResponse, ConsensusMessage, ProtocolMessage, TxPropagate,
+};
 use crate::support::CoordinatorSupport;
 use crate::sync::ChainSync;
 use crate::{errors, CoordinatorInMessage, DefaultHandshakeBuilder};
+use node_consensus_base::{ConsensusInMessage, ConsensusOutMessage};
 
 pub struct CoordinatorStream<S>
 where
@@ -38,6 +41,7 @@ where
 	chain_rx: UnboundedReceiver<ChainOutMessage>,
 	txpool_rx: UnboundedReceiver<TxPoolOutMessage>,
 	network_rx: UnboundedReceiver<NetworkOutMessage>,
+	consensus_rx: UnboundedReceiver<ConsensusOutMessage>,
 	in_rx: UnboundedReceiver<CoordinatorInMessage>,
 	sync: ChainSync<S>,
 	support: Arc<StreamSupport<S>>,
@@ -55,6 +59,8 @@ where
 		peer_manager_tx: UnboundedSender<PMInMessage>,
 		network_tx: UnboundedSender<NetworkInMessage>,
 		network_rx: UnboundedReceiver<NetworkOutMessage>,
+		consensus_tx: UnboundedSender<ConsensusInMessage>,
+		consensus_rx: UnboundedReceiver<ConsensusOutMessage>,
 		in_rx: UnboundedReceiver<CoordinatorInMessage>,
 		support: Arc<S>,
 	) -> CommonResult<()> {
@@ -62,6 +68,7 @@ where
 			handshake_builder,
 			peer_manager_tx,
 			network_tx,
+			consensus_tx,
 			support,
 		)?);
 
@@ -71,6 +78,7 @@ where
 			chain_rx,
 			txpool_rx,
 			network_rx,
+			consensus_rx,
 			in_rx,
 			support,
 			sync,
@@ -97,6 +105,10 @@ where
 				Some(txpool_message) = self.txpool_rx.next() => {
 					self.on_txpool_message(txpool_message)
 						.unwrap_or_else(|e| error!("Coordinator handle txpool message error: {}", e));
+				}
+				Some(consensus_out_message) = self.consensus_rx.next() => {
+					self.on_consensus_out_message(consensus_out_message)
+						.unwrap_or_else(|e| error!("Coordinator handle consensus message error: {}", e));
 				}
 				Some(block_request_timer_result) = self.sync.block_request_timer.next() => {
 					let (peer_id, request_id) = block_request_timer_result;
@@ -209,13 +221,17 @@ where
 			peer_id, nonce, handshake
 		);
 
-		self.sync.on_protocol_open(peer_id, nonce, handshake)?;
+		let remote_nonce = handshake.nonce;
+		self.sync
+			.on_protocol_open(peer_id.clone(), nonce, handshake)?;
+		self.on_consensus_network_protocol_open(peer_id, nonce, remote_nonce)?;
 
 		Ok(())
 	}
 
 	fn on_protocol_close(&mut self, peer_id: PeerId) -> CommonResult<()> {
-		self.sync.on_protocol_close(peer_id)?;
+		self.sync.on_protocol_close(peer_id.clone())?;
+		self.on_consensus_network_protocol_close(peer_id)?;
 		Ok(())
 	}
 
@@ -240,6 +256,9 @@ where
 			}
 			ProtocolMessage::TxPropagate(tx_propagate) => {
 				self.on_tx_propagate(peer_id, tx_propagate)
+			}
+			ProtocolMessage::ConsensusMessage(consensus_message) => {
+				self.on_consensus_network_message(peer_id, consensus_message)
 			}
 			ProtocolMessage::Handshake(_) => Ok(()),
 		}
@@ -284,6 +303,69 @@ where
 	}
 }
 
+/// methods for consensus messages
+impl<S> CoordinatorStream<S>
+where
+	S: CoordinatorSupport,
+{
+	fn on_consensus_network_protocol_open(
+		&mut self,
+		peer_id: PeerId,
+		local_nonce: u64,
+		remote_nonce: u64,
+	) -> CommonResult<()> {
+		let in_message = ConsensusInMessage::NetworkProtocolOpen {
+			peer_id,
+			local_nonce,
+			remote_nonce,
+		};
+		self.support.consensus_send_message(in_message);
+		Ok(())
+	}
+
+	fn on_consensus_network_protocol_close(&mut self, peer_id: PeerId) -> CommonResult<()> {
+		let in_message = ConsensusInMessage::NetworkProtocolClose { peer_id };
+		self.support.consensus_send_message(in_message);
+		Ok(())
+	}
+
+	fn on_consensus_network_message(
+		&mut self,
+		peer_id: PeerId,
+		consensus_message: ConsensusMessage,
+	) -> CommonResult<()> {
+		let in_message = ConsensusInMessage::NetworkMessage {
+			peer_id,
+			message: consensus_message.message,
+		};
+		self.support.consensus_send_message(in_message);
+		Ok(())
+	}
+
+	fn on_consensus_out_message(&self, out_message: ConsensusOutMessage) -> CommonResult<()> {
+		match out_message {
+			ConsensusOutMessage::NetworkMessage { peer_id, message } => {
+				self.on_consensus_out_network_message(peer_id, message)?;
+			}
+		}
+		Ok(())
+	}
+
+	fn on_consensus_out_network_message(
+		&self,
+		peer_id: PeerId,
+		message: Vec<u8>,
+	) -> CommonResult<()> {
+		let message = ProtocolMessage::ConsensusMessage(ConsensusMessage { message });
+		self.support
+			.network_send_message(NetworkInMessage::SendMessage {
+				peer_id,
+				message: message.encode(),
+			});
+		Ok(())
+	}
+}
+
 pub struct StreamSupport<S>
 where
 	S: CoordinatorSupport,
@@ -291,6 +373,7 @@ where
 	handshake_builder: Arc<DefaultHandshakeBuilder>,
 	peer_manager_tx: UnboundedSender<PMInMessage>,
 	network_tx: UnboundedSender<NetworkInMessage>,
+	consensus_tx: UnboundedSender<ConsensusInMessage>,
 	support: Arc<S>,
 }
 
@@ -302,12 +385,14 @@ where
 		handshake_builder: Arc<DefaultHandshakeBuilder>,
 		peer_manager_tx: UnboundedSender<PMInMessage>,
 		network_tx: UnboundedSender<NetworkInMessage>,
+		consensus_tx: UnboundedSender<ConsensusInMessage>,
 		support: Arc<S>,
 	) -> CommonResult<Self> {
 		Ok(Self {
 			handshake_builder,
 			peer_manager_tx,
 			network_tx,
+			consensus_tx,
 			support,
 		})
 	}
@@ -326,6 +411,12 @@ where
 		self.network_tx
 			.unbounded_send(message)
 			.unwrap_or_else(|e| error!("Coordinator send message to network error: {}", e));
+	}
+
+	pub fn consensus_send_message(&self, message: ConsensusInMessage) {
+		self.consensus_tx
+			.unbounded_send(message)
+			.unwrap_or_else(|e| error!("Coordinator send message to consensus error: {}", e));
 	}
 
 	pub fn get_handshake_builder(&self) -> &Arc<DefaultHandshakeBuilder> {

@@ -3116,6 +3116,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "crypto",
+ "derive_more",
  "futures",
  "futures-timer",
  "log",
@@ -3125,8 +3126,10 @@ dependencies = [
  "node-executor",
  "node-executor-primitives",
  "parity-scale-codec",
+ "parking_lot 0.10.2",
  "primitives",
  "tokio 1.0.0",
+ "utils-enum-codec",
 ]
 
 [[package]]
@@ -3153,6 +3156,7 @@ dependencies = [
  "primitives",
  "tempfile",
  "tokio 1.0.0",
+ "utils-enum-codec",
  "utils-test",
 ]
 
@@ -5226,6 +5230,14 @@ dependencies = [
  "matches",
  "percent-encoding",
  "serde",
+]
+
+[[package]]
+name = "utils-enum-codec"
+version = "0.1.0"
+dependencies = [
+ "quote",
+ "syn",
 ]
 
 [[package]]

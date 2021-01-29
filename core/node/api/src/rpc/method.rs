@@ -223,8 +223,8 @@ pub async fn chain_send_raw_transaction<S: ApiSupport>(
 	Params((raw_transaction,)): Params<(Hex,)>,
 ) -> CustomResult<Hash> {
 	let raw_transaction: Vec<u8> = raw_transaction.try_into()?;
-	let transaction: CommonResult<primitives::Transaction> = codec::decode(&raw_transaction)
-		.map_err(|_| {
+	let transaction: CommonResult<primitives::Transaction> =
+		codec::decode(&mut &raw_transaction[..]).map_err(|_| {
 			errors::ErrorKind::InvalidParams("Invalid raw transaction".to_string()).into()
 		});
 	let transaction = transaction?;

@@ -187,7 +187,7 @@ async fn test_chain_execute_call() {
 		.execute_call(&block_hash, Some(&sender), &call)
 		.unwrap()
 		.unwrap();
-	let result: Balance = codec::decode(&result).unwrap();
+	let result: Balance = codec::decode(&mut &result[..]).unwrap();
 	assert_eq!(10, result);
 
 	safe_close(chain).await
@@ -384,7 +384,7 @@ fn expected_block_0_receipts_root(
 
 fn expected_block_0_meta_state_root(txs: &Vec<Arc<FullTransaction>>) -> Hash {
 	let tx = &txs[0].tx; // use the last tx
-	let params: module::system::InitParams = codec::decode(&tx.call.params.0[..]).unwrap();
+	let params: module::system::InitParams = codec::decode(&mut &tx.call.params.0[..]).unwrap();
 
 	let data = vec![
 		(
@@ -436,7 +436,7 @@ fn expected_block_0_meta_state_root(txs: &Vec<Arc<FullTransaction>>) -> Hash {
 
 fn expected_block_0_payload_state_root(txs: &Vec<Arc<FullTransaction>>) -> Hash {
 	let tx = &txs[0].tx; // use the last tx
-	let params: module::balance::InitParams = codec::decode(&tx.call.params.0[..]).unwrap();
+	let params: module::balance::InitParams = codec::decode(&mut &tx.call.params.0[..]).unwrap();
 
 	let (account, balance) = &params.endow[0];
 

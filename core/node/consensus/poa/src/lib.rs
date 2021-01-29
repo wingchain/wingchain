@@ -66,32 +66,12 @@ where
 	pub fn new(config: ConsensusConfig, support: Arc<S>) -> CommonResult<Self> {
 		let poa_meta = get_poa_meta(&support, &0)?;
 
-		let current_secret_key = config.secret_key;
-		let current_address = if let Some(secret_key) = &current_secret_key {
-			Some(get_address(secret_key, &support)?)
-		} else {
-			None
-		};
-		let number = support.get_current_state().confirmed_number;
-		let authority_address = get_poa_authority(&support, &number)?;
-		let is_authority = current_address.as_ref() == Some(&authority_address);
-
-		info!(
-			"Current node is authority: {}, authority address: {}, current address: {:?}",
-			is_authority, authority_address, current_address
-		);
+		let secret_key = config.secret_key;
 
 		let (in_tx, in_rx) = unbounded();
 		let (out_tx, out_rx) = unbounded();
 
-		PoaStream::spawn(
-			support.clone(),
-			poa_meta,
-			current_secret_key,
-			current_address,
-			out_tx,
-			in_rx,
-		);
+		PoaStream::spawn(support.clone(), poa_meta, secret_key, out_tx, in_rx)?;
 
 		info!("Initializing consensus poa");
 
@@ -121,7 +101,7 @@ where
 			);
 		}
 		let data = &proof.data;
-		let proof: Proof = codec::decode(data).map_err(|_| {
+		let proof: Proof = codec::decode(&mut &data[..]).map_err(|_| {
 			node_consensus_base::errors::ErrorKind::VerifyProofError("Decode error".to_string())
 		})?;
 
@@ -159,8 +139,8 @@ where
 {
 	support: Arc<S>,
 	poa_meta: Meta,
-	current_secret_key: Option<SecretKey>,
-	current_address: Option<Address>,
+	secret_key: SecretKey,
+	address: Address,
 	#[allow(dead_code)]
 	out_tx: UnboundedSender<ConsensusOutMessage>,
 	in_rx: UnboundedReceiver<ConsensusInMessage>,
@@ -173,22 +153,26 @@ where
 	fn spawn(
 		support: Arc<S>,
 		poa_meta: Meta,
-		current_secret_key: Option<SecretKey>,
-		current_address: Option<Address>,
+		secret_key: Option<SecretKey>,
 		out_tx: UnboundedSender<ConsensusOutMessage>,
 		in_rx: UnboundedReceiver<ConsensusInMessage>,
-	) {
+	) -> CommonResult<()> {
+		let secret_key = match secret_key {
+			Some(v) => v,
+			None => return Ok(()),
+		};
+		let address = get_address(&secret_key, &support)?;
+
 		let this = Self {
 			support,
 			poa_meta,
-			current_secret_key,
-			current_address,
+			secret_key,
+			address,
 			out_tx,
 			in_rx,
 		};
-		if this.current_address.is_some() {
-			tokio::spawn(this.start());
-		}
+		tokio::spawn(this.start());
+		Ok(())
 	}
 
 	async fn start(mut self) {
@@ -220,13 +204,13 @@ where
 		let current_state = &self.support.get_current_state();
 
 		let authority_address = get_poa_authority(&self.support, &current_state.confirmed_number)?;
-		let is_authority = self.current_address.as_ref() == Some(&authority_address);
+		let is_authority = self.address == authority_address;
 
 		trace!(
 			"Current node is authority: {}, authority address: {}, current address: {:?}",
 			is_authority,
 			authority_address,
-			self.current_address
+			self.address
 		);
 
 		if !is_authority {
@@ -296,7 +280,7 @@ where
 
 		let mut commit_block_params = self.support.build_block(build_block_params)?;
 
-		let current_secret_key = self.current_secret_key.as_ref().expect("qed");
+		let current_secret_key = &self.secret_key;
 		let proof = Proof::new(
 			&commit_block_params.block_hash,
 			current_secret_key,
@@ -345,7 +329,6 @@ where
 	fn on_in_message(&self, in_message: ConsensusInMessage) -> CommonResult<()> {
 		match in_message {
 			ConsensusInMessage::Generate => {
-				println!("generate");
 				self.generate()?;
 			}
 			_ => {}

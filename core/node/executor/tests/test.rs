@@ -416,7 +416,7 @@ fn expected_block_0_receipts_root(
 
 fn expected_block_0_meta_state_root(txs: &Vec<Arc<FullTransaction>>) -> Hash {
 	let tx = &txs[0].tx; // use the last tx
-	let params: module::system::InitParams = codec::decode(&tx.call.params.0[..]).unwrap();
+	let params: module::system::InitParams = codec::decode(&mut &tx.call.params.0[..]).unwrap();
 
 	let data = vec![
 		(
@@ -468,7 +468,7 @@ fn expected_block_0_meta_state_root(txs: &Vec<Arc<FullTransaction>>) -> Hash {
 
 fn expected_block_0_payload_state_root(txs: &Vec<Arc<FullTransaction>>) -> Hash {
 	let tx = &txs[0].tx; // use the last tx
-	let params: module::balance::InitParams = codec::decode(&tx.call.params.0[..]).unwrap();
+	let params: module::balance::InitParams = codec::decode(&mut &tx.call.params.0[..]).unwrap();
 
 	let (account, balance) = &params.endow[0];
 
@@ -514,7 +514,7 @@ fn expected_block_1_payload_state_root(
 	block_1_txs: &Vec<Arc<FullTransaction>>,
 ) -> Hash {
 	let tx = &block_0_txs[0].tx; // use the last tx
-	let params: module::balance::InitParams = codec::decode(&tx.call.params.0[..]).unwrap();
+	let params: module::balance::InitParams = codec::decode(&mut &tx.call.params.0[..]).unwrap();
 	let (account1, balance) = &params.endow[0];
 
 	let data = vec![(
@@ -549,7 +549,8 @@ fn expected_block_1_payload_state_root(
 	db.write(transaction).unwrap();
 
 	let tx = &block_1_txs[0].tx; // use the last tx
-	let params: module::balance::TransferParams = codec::decode(&tx.call.params.0[..]).unwrap();
+	let params: module::balance::TransferParams =
+		codec::decode(&mut &tx.call.params.0[..]).unwrap();
 
 	let (account2, value) = (&params.recipient, params.value);
 

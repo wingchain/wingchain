@@ -13,11 +13,12 @@
 // limitations under the License.
 
 use derive_more::Display;
-use std::convert::{TryFrom, TryInto};
 
 use primitives::codec::{Decode, Encode};
 use primitives::{BlockNumber, Hash, Header, Proof, Transaction};
+use utils_enum_codec::enum_codec;
 
+#[enum_codec]
 #[derive(Debug, PartialEq)]
 pub enum ProtocolMessage {
 	Handshake(Handshake),
@@ -25,6 +26,7 @@ pub enum ProtocolMessage {
 	BlockRequest(BlockRequest),
 	BlockResponse(BlockResponse),
 	TxPropagate(TxPropagate),
+	ConsensusMessage(ConsensusMessage),
 }
 
 #[derive(Encode, Decode, Debug, PartialEq)]
@@ -59,6 +61,11 @@ pub struct BlockResponse {
 #[derive(Encode, Decode, Debug, PartialEq)]
 pub struct TxPropagate {
 	pub txs: Vec<Transaction>,
+}
+
+#[derive(Encode, Decode, Debug, PartialEq)]
+pub struct ConsensusMessage {
+	pub message: Vec<u8>,
 }
 
 #[derive(Encode, Decode, Debug, PartialEq, Clone, Display)]
@@ -96,79 +103,6 @@ pub struct BodyData {
 	pub payload_txs: Vec<Transaction>,
 }
 
-impl Encode for ProtocolMessage {
-	fn encode(&self) -> Vec<u8> {
-		let payload: ProtocolMessagePayload = self.into();
-		payload.encode()
-	}
-}
-
-impl Decode for ProtocolMessage {
-	fn decode<I: scale_codec::Input>(value: &mut I) -> Result<Self, scale_codec::Error> {
-		let payload: ProtocolMessagePayload = Decode::decode(value)?;
-		payload.try_into()
-	}
-}
-
-/// The equivalent of ProtocolMessage, which has a
-/// more compatible codec result than enum type
-#[derive(Encode, Decode)]
-struct ProtocolMessagePayload {
-	name: String,
-	payload: Vec<u8>,
-}
-
-impl<'a> From<&'a ProtocolMessage> for ProtocolMessagePayload {
-	fn from(v: &'a ProtocolMessage) -> Self {
-		match v {
-			ProtocolMessage::Handshake(v) => ProtocolMessagePayload {
-				name: "Handshake".to_string(),
-				payload: v.encode(),
-			},
-			ProtocolMessage::BlockAnnounce(v) => ProtocolMessagePayload {
-				name: "BlockAnnounce".to_string(),
-				payload: v.encode(),
-			},
-			ProtocolMessage::BlockRequest(v) => ProtocolMessagePayload {
-				name: "BlockRequest".to_string(),
-				payload: v.encode(),
-			},
-			ProtocolMessage::BlockResponse(v) => ProtocolMessagePayload {
-				name: "BlockResponse".to_string(),
-				payload: v.encode(),
-			},
-			ProtocolMessage::TxPropagate(v) => ProtocolMessagePayload {
-				name: "TxPropagate".to_string(),
-				payload: v.encode(),
-			},
-		}
-	}
-}
-
-impl TryFrom<ProtocolMessagePayload> for ProtocolMessage {
-	type Error = scale_codec::Error;
-	fn try_from(v: ProtocolMessagePayload) -> Result<Self, Self::Error> {
-		match v.name.as_str() {
-			"Handshake" => Ok(ProtocolMessage::Handshake(Decode::decode(
-				&mut &v.payload[..],
-			)?)),
-			"BlockAnnounce" => Ok(ProtocolMessage::BlockAnnounce(Decode::decode(
-				&mut &v.payload[..],
-			)?)),
-			"BlockRequest" => Ok(ProtocolMessage::BlockRequest(Decode::decode(
-				&mut &v.payload[..],
-			)?)),
-			"BlockResponse" => Ok(ProtocolMessage::BlockResponse(Decode::decode(
-				&mut &v.payload[..],
-			)?)),
-			"TxPropagate" => Ok(ProtocolMessage::TxPropagate(Decode::decode(
-				&mut &v.payload[..],
-			)?)),
-			_ => Err("Unknown protocol message name".into()),
-		}
-	}
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -185,8 +119,8 @@ mod tests {
 		assert_eq!(
 			encoded,
 			vec![
-				36, 72, 97, 110, 100, 115, 104, 97, 107, 101, 96, 12, 1, 2, 3, 1, 0, 0, 0, 0, 0, 0,
-				0, 12, 4, 5, 6, 2, 0, 0, 0, 0, 0, 0, 0
+				36, 72, 97, 110, 100, 115, 104, 97, 107, 101, 12, 1, 2, 3, 1, 0, 0, 0, 0, 0, 0, 0,
+				12, 4, 5, 6, 2, 0, 0, 0, 0, 0, 0, 0
 			]
 		);
 	}
@@ -194,8 +128,8 @@ mod tests {
 	#[test]
 	fn test_decode() {
 		let encoded = vec![
-			36, 72, 97, 110, 100, 115, 104, 97, 107, 101, 96, 12, 1, 2, 3, 1, 0, 0, 0, 0, 0, 0, 0,
-			12, 4, 5, 6, 2, 0, 0, 0, 0, 0, 0, 0,
+			36, 72, 97, 110, 100, 115, 104, 97, 107, 101, 12, 1, 2, 3, 1, 0, 0, 0, 0, 0, 0, 0, 12,
+			4, 5, 6, 2, 0, 0, 0, 0, 0, 0, 0,
 		];
 		let message: ProtocolMessage = Decode::decode(&mut &encoded[..]).unwrap();
 		assert_eq!(

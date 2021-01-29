@@ -93,6 +93,11 @@ where
 		let chain_rx = support.chain_rx().expect("Coordinator is the only taker");
 		let txpool_rx = support.txpool_rx().expect("Coordinator is the only taker");
 
+		let consensus_tx = support.consensus_tx();
+		let consensus_rx = support
+			.consensus_rx()
+			.expect("Coordinator is the only taker");
+
 		let (in_tx, in_rx) = unbounded();
 
 		CoordinatorStream::spawn(
@@ -102,6 +107,8 @@ where
 			peer_manager_tx,
 			network_tx,
 			network_rx,
+			consensus_tx,
+			consensus_rx,
 			in_rx,
 			support.clone(),
 		)?;

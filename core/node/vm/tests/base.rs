@@ -767,7 +767,7 @@ fn storage_map_raw_get<V: Decode, EC: ExecutorContext>(
 	let value = executor_context.payload_get(key)?;
 	let value = match value {
 		Some(value) => {
-			let value = codec::decode(&value[..])?;
+			let value = codec::decode(&mut &value[..])?;
 			Ok(Some(value))
 		}
 		None => Ok(None),

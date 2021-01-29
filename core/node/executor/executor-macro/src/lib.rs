@@ -161,7 +161,7 @@ pub fn module(_attr: TokenStream, item: TokenStream) -> TokenStream {
 			let params_ident = x.params_ident.clone();
 			quote! {
 				stringify!(#method_ident) => {
-					let _params = match codec::decode::<#params_ident>(&params) {
+					let _params = match codec::decode::<#params_ident>(&mut &params[..]) {
 						Ok(params) => params,
 						Err(_) => return Err(errors::ErrorKind::InvalidTxParams("Codec error".to_string()).into()),
 					};
@@ -184,7 +184,7 @@ pub fn module(_attr: TokenStream, item: TokenStream) -> TokenStream {
 			};
 			quote! {
 				stringify!(#method_ident) => {
-					let params = match codec::decode::<#params_ident>(&params) {
+					let params = match codec::decode::<#params_ident>(&mut &params[..]) {
 						Ok(params) => params,
 						Err(_) => return Err(errors::ErrorKind::InvalidTxParams("Codec error".to_string()).into()),
 					};
@@ -201,7 +201,7 @@ pub fn module(_attr: TokenStream, item: TokenStream) -> TokenStream {
 			quote! {
 				stringify!(#method_ident) => {
 
-					let params = match codec::decode(&params) {
+					let params = match codec::decode(&mut &params[..]) {
 						Ok(params) => params,
 						Err(_) => return Err(errors::ErrorKind::InvalidTxParams("Codec error".to_string()).into()),
 					};
