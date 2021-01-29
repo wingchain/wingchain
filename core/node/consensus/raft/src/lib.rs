@@ -182,6 +182,10 @@ where
 					self.on_in_message(in_message)
 						.unwrap_or_else(|e| error!("Consensus raft handle in message error: {}", e));
 				}
+				Some(request_id) = self.requests_timer.next() => {
+					self.on_requests_timer_trigger(request_id)
+						.unwrap_or_else(|e| error!("Consensus raft requests timer result error: {}", e));
+				}
 			}
 		}
 	}

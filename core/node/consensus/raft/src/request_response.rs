@@ -137,6 +137,13 @@ where
 		Ok(())
 	}
 
+	pub fn on_requests_timer_trigger(&mut self, request_id: RequestId) -> CommonResult<()> {
+		if let Some((_, on_failure)) = self.requests.remove(&request_id) {
+			on_failure();
+		}
+		Ok(())
+	}
+
 	fn on_register_validator(
 		&mut self,
 		peer_id: PeerId,
