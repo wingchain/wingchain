@@ -3121,15 +3121,20 @@ dependencies = [
  "futures-timer",
  "log",
  "node-chain",
+ "node-consensus",
  "node-consensus-base",
  "node-consensus-primitives",
+ "node-coordinator",
  "node-executor",
  "node-executor-primitives",
+ "node-txpool",
  "parity-scale-codec",
  "parking_lot 0.10.2",
  "primitives",
+ "tempfile",
  "tokio 1.0.0",
  "utils-enum-codec",
+ "utils-test",
 ]
 
 [[package]]

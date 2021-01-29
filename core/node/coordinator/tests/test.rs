@@ -31,23 +31,23 @@ async fn test_coordinator_block_sync() {
 	let dsa = Arc::new(DsaImpl::Ed25519);
 	let address = Arc::new(AddressImpl::Blake2b160);
 
-	let (account1, account2) = test_accounts(dsa, address);
+	let test_accounts = test_accounts(dsa, address);
+	let (account1, account2) = (&test_accounts[0], &test_accounts[1]);
 
-	let account1 = (account1.secret_key, account1.public_key, account1.address);
-	let account2 = (account2.secret_key, account2.public_key, account2.address);
+	let authority_accounts = [account1];
 
 	let specs = vec![
 		(
-			account1.clone(),
+			authority_accounts,
 			account1.clone(),
 			Keypair::generate_ed25519(),
-			3409,
+			3309,
 		),
 		(
-			account1.clone(),
+			authority_accounts,
 			account2.clone(),
 			Keypair::generate_ed25519(),
-			3410,
+			3310,
 		),
 	];
 
@@ -90,13 +90,13 @@ async fn test_coordinator_block_sync() {
 		&txpool0,
 		chain0
 			.build_transaction(
-				Some((account1.0.clone(), 0, 10)),
+				Some((account1.secret_key.clone(), 0, 10)),
 				chain0
 					.build_call(
 						"balance".to_string(),
 						"transfer".to_string(),
 						module::balance::TransferParams {
-							recipient: account2.2.clone(),
+							recipient: account2.address.clone(),
 							value: 1,
 						},
 					)
@@ -149,23 +149,23 @@ async fn test_coordinator_txpool_sync() {
 	let dsa = Arc::new(DsaImpl::Ed25519);
 	let address = Arc::new(AddressImpl::Blake2b160);
 
-	let (account1, account2) = test_accounts(dsa, address);
+	let test_accounts = test_accounts(dsa, address);
+	let (account1, account2) = (&test_accounts[0], &test_accounts[1]);
 
-	let account1 = (account1.secret_key, account1.public_key, account1.address);
-	let account2 = (account2.secret_key, account2.public_key, account2.address);
+	let authority_accounts = [account1];
 
 	let specs = vec![
 		(
-			account1.clone(),
+			authority_accounts,
 			account1.clone(),
 			Keypair::generate_ed25519(),
-			3509,
+			3409,
 		),
 		(
-			account1.clone(),
+			authority_accounts,
 			account2.clone(),
 			Keypair::generate_ed25519(),
-			3510,
+			3410,
 		),
 	];
 
@@ -203,13 +203,13 @@ async fn test_coordinator_txpool_sync() {
 		&txpool1,
 		chain1
 			.build_transaction(
-				Some((account1.0.clone(), 0, 10)),
+				Some((account1.secret_key.clone(), 0, 10)),
 				chain0
 					.build_call(
 						"balance".to_string(),
 						"transfer".to_string(),
 						module::balance::TransferParams {
-							recipient: account2.2.clone(),
+							recipient: account2.address.clone(),
 							value: 1,
 						},
 					)

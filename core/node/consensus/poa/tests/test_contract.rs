@@ -32,9 +32,11 @@ async fn test_poa_contract_create() {
 	let dsa = Arc::new(DsaImpl::Ed25519);
 	let address = Arc::new(AddressImpl::Blake2b160);
 
-	let (account1, _account2) = test_accounts(dsa, address);
+	let test_accounts = test_accounts(dsa, address);
+	let (account1, _account2) = (&test_accounts[0], &test_accounts[1]);
 
-	let (chain, txpool, consensus) = base::get_service(&account1);
+	let authority_accounts = [account1];
+	let (chain, txpool, consensus) = base::get_service(&authority_accounts, &account1);
 
 	let ori_code = get_code().to_vec();
 
@@ -136,9 +138,11 @@ async fn test_poa_contract_create_fail() {
 	let dsa = Arc::new(DsaImpl::Ed25519);
 	let address = Arc::new(AddressImpl::Blake2b160);
 
-	let (account1, _account2) = test_accounts(dsa, address);
+	let test_accounts = test_accounts(dsa, address);
+	let (account1, _account2) = (&test_accounts[0], &test_accounts[1]);
 
-	let (chain, txpool, consensus) = base::get_service(&account1);
+	let authority_accounts = [account1];
+	let (chain, txpool, consensus) = base::get_service(&authority_accounts, account1);
 
 	let ori_code = get_code().to_vec();
 
@@ -205,9 +209,11 @@ async fn test_poa_contract_update_admin() {
 	let dsa = Arc::new(DsaImpl::Ed25519);
 	let address = Arc::new(AddressImpl::Blake2b160);
 
-	let (account1, account2) = test_accounts(dsa, address);
+	let test_accounts = test_accounts(dsa, address);
+	let (account1, account2) = (&test_accounts[0], &test_accounts[1]);
 
-	let (chain, txpool, consensus) = base::get_service(&account1);
+	let authority_accounts = [account1];
+	let (chain, txpool, consensus) = base::get_service(&authority_accounts, account1);
 
 	let ori_code = get_code().to_vec();
 
@@ -450,9 +456,11 @@ async fn test_poa_contract_update_code() {
 	let address = Arc::new(AddressImpl::Blake2b160);
 	let hasher = Arc::new(HashImpl::Blake2b256);
 
-	let (account1, account2) = test_accounts(dsa, address);
+	let test_accounts = test_accounts(dsa, address);
+	let (account1, account2) = (&test_accounts[0], &test_accounts[1]);
 
-	let (chain, txpool, consensus) = base::get_service(&account1);
+	let authority_accounts = [account1];
+	let (chain, txpool, consensus) = base::get_service(&authority_accounts, account1);
 
 	let ori_code = get_code().to_vec();
 

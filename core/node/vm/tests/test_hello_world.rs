@@ -25,7 +25,9 @@ mod base;
 
 #[test]
 fn test_vm_hw_validate_contract() {
-	let (account1, _account2) = base::test_accounts();
+	let test_accounts = base::test_accounts();
+	let (account1, _account2) = (&test_accounts[0], &test_accounts[1]);
+
 	let contract_address = Address(vec![1]);
 
 	let executor_context = TestExecutorContext::new();
@@ -80,7 +82,9 @@ fn test_vm_hw_validate_contract() {
 
 #[test]
 fn test_vm_hw_init() {
-	let (account1, _account2) = base::test_accounts();
+	let test_accounts = base::test_accounts();
+	let (account1, _account2) = (&test_accounts[0], &test_accounts[1]);
+
 	let contract_address = Address(vec![1]);
 
 	let executor_context = TestExecutorContext::new();
@@ -105,7 +109,8 @@ fn test_vm_hw_init() {
 
 #[test]
 fn test_vm_hw_hello() {
-	let (account1, _account2) = base::test_accounts();
+	let test_accounts = base::test_accounts();
+	let (account1, _account2) = (&test_accounts[0], &test_accounts[1]);
 
 	let contract_address = Address(vec![1]);
 
@@ -115,7 +120,7 @@ fn test_vm_hw_hello() {
 		VMConfig::default(),
 		tx_hash,
 		Some(contract_address),
-		Some(account1.address),
+		Some(account1.address.clone()),
 		executor_context,
 	);
 
@@ -127,7 +132,8 @@ fn test_vm_hw_hello() {
 
 #[test]
 fn test_vm_hw_pay_value() {
-	let (account1, _account2) = base::test_accounts();
+	let test_accounts = base::test_accounts();
+	let (account1, _account2) = (&test_accounts[0], &test_accounts[1]);
 
 	let contract_address = Address(vec![1]);
 
@@ -143,7 +149,7 @@ fn test_vm_hw_pay_value() {
 		VMConfig::default(),
 		tx_hash,
 		Some(contract_address),
-		Some(account1.address),
+		Some(account1.address.clone()),
 		executor_context,
 	);
 
@@ -155,7 +161,8 @@ fn test_vm_hw_pay_value() {
 
 #[test]
 fn test_vm_hw_error() {
-	let (account1, _account2) = base::test_accounts();
+	let test_accounts = base::test_accounts();
+	let (account1, _account2) = (&test_accounts[0], &test_accounts[1]);
 
 	let contract_address = Address(vec![1]);
 
@@ -165,7 +172,7 @@ fn test_vm_hw_error() {
 		VMConfig::default(),
 		tx_hash,
 		Some(contract_address),
-		Some(account1.address),
+		Some(account1.address.clone()),
 		executor_context,
 	);
 
@@ -182,7 +189,8 @@ fn test_vm_hw_error() {
 
 #[test]
 fn test_vm_hw_get_env() {
-	let (account1, _account2) = base::test_accounts();
+	let test_accounts = base::test_accounts();
+	let (account1, _account2) = (&test_accounts[0], &test_accounts[1]);
 
 	let contract_address = Address(vec![1]);
 
@@ -192,7 +200,7 @@ fn test_vm_hw_get_env() {
 		VMConfig::default(),
 		tx_hash,
 		Some(contract_address),
-		Some(account1.address),
+		Some(account1.address.clone()),
 		executor_context,
 	);
 
@@ -204,7 +212,8 @@ fn test_vm_hw_get_env() {
 
 #[test]
 fn test_vm_hw_get_call_env() {
-	let (account1, _account2) = base::test_accounts();
+	let test_accounts = base::test_accounts();
+	let (account1, _account2) = (&test_accounts[0], &test_accounts[1]);
 
 	let contract_address = Address(vec![1]);
 
@@ -214,7 +223,7 @@ fn test_vm_hw_get_call_env() {
 		VMConfig::default(),
 		tx_hash,
 		Some(contract_address),
-		Some(account1.address),
+		Some(account1.address.clone()),
 		executor_context,
 	);
 
@@ -226,7 +235,8 @@ fn test_vm_hw_get_call_env() {
 
 #[test]
 fn test_vm_hw_get_contract_env() {
-	let (account1, _account2) = base::test_accounts();
+	let test_accounts = base::test_accounts();
+	let (account1, _account2) = (&test_accounts[0], &test_accounts[1]);
 
 	let contract_address = Address(vec![1]);
 
@@ -242,7 +252,7 @@ fn test_vm_hw_get_contract_env() {
 		VMConfig::default(),
 		tx_hash,
 		Some(contract_address),
-		Some(account1.address),
+		Some(account1.address.clone()),
 		executor_context,
 	);
 
@@ -258,7 +268,8 @@ fn test_vm_hw_get_contract_env() {
 
 #[test]
 fn test_vm_hw_value() {
-	let (account1, _account2) = base::test_accounts();
+	let test_accounts = base::test_accounts();
+	let (account1, _account2) = (&test_accounts[0], &test_accounts[1]);
 
 	let contract_address = Address(vec![1]);
 
@@ -268,7 +279,7 @@ fn test_vm_hw_value() {
 		VMConfig::default(),
 		tx_hash,
 		Some(contract_address),
-		Some(account1.address),
+		Some(account1.address.clone()),
 		executor_context,
 	);
 
@@ -287,7 +298,8 @@ fn test_vm_hw_value() {
 
 #[test]
 fn test_vm_hw_map() {
-	let (account1, _account2) = base::test_accounts();
+	let test_accounts = base::test_accounts();
+	let (account1, _account2) = (&test_accounts[0], &test_accounts[1]);
 
 	let contract_address = Address(vec![1]);
 
@@ -297,7 +309,7 @@ fn test_vm_hw_map() {
 		VMConfig::default(),
 		tx_hash,
 		Some(contract_address),
-		Some(account1.address),
+		Some(account1.address.clone()),
 		executor_context,
 	);
 
@@ -316,7 +328,8 @@ fn test_vm_hw_map() {
 
 #[test]
 fn test_vm_hw_event() {
-	let (account1, _account2) = base::test_accounts();
+	let test_accounts = base::test_accounts();
+	let (account1, _account2) = (&test_accounts[0], &test_accounts[1]);
 
 	let contract_address = Address(vec![1]);
 
@@ -326,7 +339,7 @@ fn test_vm_hw_event() {
 		VMConfig::default(),
 		tx_hash,
 		Some(contract_address),
-		Some(account1.address),
+		Some(account1.address.clone()),
 		executor_context.clone(),
 	);
 
@@ -342,7 +355,8 @@ fn test_vm_hw_event() {
 
 #[test]
 fn test_vm_hw_hash() {
-	let (account1, _account2) = base::test_accounts();
+	let test_accounts = base::test_accounts();
+	let (account1, _account2) = (&test_accounts[0], &test_accounts[1]);
 
 	let contract_address = Address(vec![1]);
 
@@ -352,7 +366,7 @@ fn test_vm_hw_hash() {
 		VMConfig::default(),
 		tx_hash,
 		Some(contract_address),
-		Some(account1.address),
+		Some(account1.address.clone()),
 		executor_context,
 	);
 
@@ -367,7 +381,8 @@ fn test_vm_hw_hash() {
 
 #[test]
 fn test_vm_hw_address() {
-	let (account1, _account2) = base::test_accounts();
+	let test_accounts = base::test_accounts();
+	let (account1, _account2) = (&test_accounts[0], &test_accounts[1]);
 
 	let contract_address = Address(vec![1]);
 
@@ -377,7 +392,7 @@ fn test_vm_hw_address() {
 		VMConfig::default(),
 		tx_hash,
 		Some(contract_address),
-		Some(account1.address),
+		Some(account1.address.clone()),
 		executor_context,
 	);
 
@@ -392,7 +407,8 @@ fn test_vm_hw_address() {
 
 #[test]
 fn test_vm_hw_verify_address() {
-	let (account1, _account2) = base::test_accounts();
+	let test_accounts = base::test_accounts();
+	let (account1, _account2) = (&test_accounts[0], &test_accounts[1]);
 
 	let contract_address = Address(vec![1]);
 
@@ -402,7 +418,7 @@ fn test_vm_hw_verify_address() {
 		VMConfig::default(),
 		tx_hash,
 		Some(contract_address),
-		Some(account1.address),
+		Some(account1.address.clone()),
 		executor_context,
 	);
 
@@ -424,7 +440,8 @@ fn test_vm_hw_verify_address() {
 
 #[test]
 fn test_vm_hw_balance() {
-	let (account1, _account2) = base::test_accounts();
+	let test_accounts = base::test_accounts();
+	let (account1, _account2) = (&test_accounts[0], &test_accounts[1]);
 
 	let contract_address = Address(vec![1]);
 
@@ -440,7 +457,7 @@ fn test_vm_hw_balance() {
 		VMConfig::default(),
 		tx_hash,
 		Some(contract_address),
-		Some(account1.address),
+		Some(account1.address.clone()),
 		executor_context,
 	);
 
@@ -454,7 +471,8 @@ fn test_vm_hw_balance() {
 fn test_vm_hw_balance_transfer_success() {
 	let _ = env_logger::try_init();
 
-	let (account1, account2) = base::test_accounts();
+	let test_accounts = base::test_accounts();
+	let (account1, account2) = (&test_accounts[0], &test_accounts[1]);
 
 	let contract_address = Address(vec![1]);
 
@@ -513,7 +531,8 @@ fn test_vm_hw_balance_transfer_success() {
 fn test_vm_hw_balance_transfer_failed() {
 	let _ = env_logger::try_init();
 
-	let (account1, account2) = base::test_accounts();
+	let test_accounts = base::test_accounts();
+	let (account1, account2) = (&test_accounts[0], &test_accounts[1]);
 
 	let contract_address = Address(vec![1]);
 
@@ -573,7 +592,8 @@ fn test_vm_hw_balance_transfer_failed() {
 fn test_vm_hw_balance_transfer_partial_failed() {
 	let _ = env_logger::try_init();
 
-	let (account1, account2) = base::test_accounts();
+	let test_accounts = base::test_accounts();
+	let (account1, account2) = (&test_accounts[0], &test_accounts[1]);
 
 	let contract_address = Address(vec![1]);
 
@@ -634,7 +654,8 @@ fn test_vm_hw_balance_transfer_partial_failed() {
 fn test_vm_hw_nested_contract_execute() {
 	let _ = env_logger::try_init();
 
-	let (account1, _account2) = base::test_accounts();
+	let test_accounts = base::test_accounts();
+	let (account1, _account2) = (&test_accounts[0], &test_accounts[1]);
 
 	let contract_address = Address(vec![1]);
 

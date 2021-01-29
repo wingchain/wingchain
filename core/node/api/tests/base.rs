@@ -30,11 +30,12 @@ use node_coordinator::{
 };
 use node_txpool::support::DefaultTxPoolSupport;
 use node_txpool::{TxPool, TxPoolConfig};
-use primitives::{Address, BlockNumber, PublicKey, SecretKey};
+use primitives::BlockNumber;
+use utils_test::TestAccount;
 
 pub fn get_service(
-	authority_account: &(SecretKey, PublicKey, Address),
-	account: &(SecretKey, PublicKey, Address),
+	authority_accounts: &[&TestAccount],
+	account: &TestAccount,
 	local_key_pair: Keypair,
 	port: u16,
 	bootnodes: LinkedHashMap<(PeerId, Multiaddr), ()>,
@@ -44,7 +45,7 @@ pub fn get_service(
 	Arc<Consensus<DefaultConsensusSupport>>,
 	Arc<Coordinator<DefaultCoordinatorSupport>>,
 ) {
-	let chain = get_chain(&authority_account.2);
+	let chain = get_chain(authority_accounts);
 
 	let txpool_config = TxPoolConfig { pool_capacity: 32 };
 
@@ -54,7 +55,7 @@ pub fn get_service(
 	let support = Arc::new(DefaultConsensusSupport::new(chain.clone(), txpool.clone()));
 
 	let consensus_config = ConsensusConfig {
-		secret_key: Some(account.0.clone()),
+		secret_key: Some(account.secret_key.clone()),
 	};
 
 	let consensus = Arc::new(Consensus::new(consensus_config, support).unwrap());
@@ -139,11 +140,11 @@ fn get_coordinator(
 	Arc::new(coordinator)
 }
 
-fn get_chain(address: &Address) -> Arc<Chain> {
+fn get_chain(authority_accounts: &[&TestAccount]) -> Arc<Chain> {
 	let path = tempdir().expect("Could not create a temp dir");
 	let home = path.into_path();
 
-	init(&home, address);
+	init(&home, authority_accounts);
 
 	let db = DBConfig {
 		memory_budget: 1 * 1024 * 1024,
@@ -158,7 +159,7 @@ fn get_chain(address: &Address) -> Arc<Chain> {
 	chain
 }
 
-fn init(home: &PathBuf, address: &Address) {
+fn init(home: &PathBuf, authority_accounts: &[&TestAccount]) {
 	let config_path = home.join("config");
 
 	fs::create_dir_all(&config_path).unwrap();
@@ -214,7 +215,7 @@ params = '''
 }}
 '''
 	"#,
-		address, address
+		authority_accounts[0].address, authority_accounts[0].address
 	);
 
 	fs::write(config_path.join("spec.toml"), &spec).unwrap();

@@ -38,20 +38,20 @@ async fn test_api() {
 	let dsa = Arc::new(DsaImpl::Ed25519);
 	let address = Arc::new(AddressImpl::Blake2b160);
 
-	let (account1, account2) = test_accounts(dsa.clone(), address);
+	let test_accounts = test_accounts(dsa.clone(), address);
+	let (account1, account2) = (&test_accounts[0], &test_accounts[1]);
 
-	let account1 = (account1.secret_key, account1.public_key, account1.address);
-	let account2 = (account2.secret_key, account2.public_key, account2.address);
+	let authority_accounts = [account1];
 
 	let specs = vec![
 		(
-			account1.clone(),
+			authority_accounts,
 			account1.clone(),
 			Keypair::generate_ed25519(),
 			3509,
 		),
 		(
-			account1.clone(),
+			authority_accounts,
 			account2.clone(),
 			Keypair::generate_ed25519(),
 			3510,
@@ -108,13 +108,13 @@ async fn test_api() {
 	// chain_sendRawTransaction
 	let tx0 = chain0
 		.build_transaction(
-			Some((account1.0.clone(), 0, 10)),
+			Some((account1.secret_key.clone(), 0, 10)),
 			chain0
 				.build_call(
 					"balance".to_string(),
 					"transfer".to_string(),
 					module::balance::TransferParams {
-						recipient: account2.2.clone(),
+						recipient: account2.address.clone(),
 						value: 1,
 					},
 				)
@@ -190,7 +190,7 @@ async fn test_api() {
 	let request = format!(
 		r#"{{"jsonrpc": "2.0", "method": "chain_executeCall", "params": {{ "block_hash": "0x{}", "sender": "0x{}", "call": {{ "module":"balance", "method":"get_balance", "params": "" }} }}, "id": 1}}"#,
 		hex::encode(&block1_hash.0),
-		hex::encode(&account1.2 .0),
+		hex::encode(&account1.address.0),
 	);
 	let response = call_rpc(&request).await;
 	let expected = r#"{"jsonrpc":"2.0","result":"0x0900000000000000","id":1}"#;
@@ -205,7 +205,8 @@ async fn test_api() {
 	let response = call_rpc(&request).await;
 	let expected = {
 		let proof =
-			node_consensus_poa::proof::Proof::new(&block1_hash, &account1.0, dsa.clone()).unwrap();
+			node_consensus_poa::proof::Proof::new(&block1_hash, &account1.secret_key, dsa.clone())
+				.unwrap();
 		let proof: Proof = proof.try_into().unwrap();
 		format!(
 			r#"{{"jsonrpc":"2.0","result":{{"hash":"0x{}","name":"{}","data":"0x{}"}},"id":1}}"#,

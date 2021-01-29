@@ -46,7 +46,8 @@ async fn test_chain_normal() {
 	let dsa = Arc::new(DsaImpl::Ed25519);
 	let address = Arc::new(AddressImpl::Blake2b160);
 
-	let (account1, _account2) = test_accounts(dsa, address);
+	let test_accounts = test_accounts(dsa, address);
+	let (account1, _account2) = (&test_accounts[0], &test_accounts[1]);
 
 	init(&home, &account1.address);
 
@@ -157,7 +158,8 @@ async fn test_chain_execute_call() {
 	let dsa = Arc::new(DsaImpl::Ed25519);
 	let address = Arc::new(AddressImpl::Blake2b160);
 
-	let (account1, _account2) = test_accounts(dsa, address);
+	let test_accounts = test_accounts(dsa, address);
+	let (account1, _account2) = (&test_accounts[0], &test_accounts[1]);
 
 	init(&home, &account1.address);
 
@@ -172,7 +174,7 @@ async fn test_chain_execute_call() {
 
 	let block_hash = chain.get_block_hash(&0).unwrap().unwrap();
 
-	let sender = account1.address;
+	let sender = account1.address.clone();
 	let params = node_executor_primitives::EmptyParams;
 	let call = chain
 		.build_transaction(

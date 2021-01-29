@@ -24,3 +24,11 @@ node-executor = { path = "../../executor" }
 node-executor-primitives = { path = "../../executor/primitives" }
 crypto = { path = "../../../crypto" }
 utils-enum-codec = { path = "../../../../utils/enum-codec"}
+
+[dev-dependencies]
+tempfile = "3.1.0"
+
+node-coordinator = { path = "../../coordinator" }
+node-txpool = { path = "../../txpool" }
+node-consensus = { path = "../" }
+utils-test = { path = "../../../../utils/test" }

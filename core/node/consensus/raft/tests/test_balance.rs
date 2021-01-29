@@ -11,11 +11,18 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+//! TODO rm
+#![allow(dead_code)]
 
 use derive_more::{From, TryInto};
 use primitives::codec::{Decode, Encode};
 use std::convert::TryInto;
 use utils_enum_codec::enum_codec;
+
+mod base;
+
+#[test]
+fn test_raft_balance() {}
 
 #[test]
 fn test_enum_codec() {

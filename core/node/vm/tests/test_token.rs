@@ -21,7 +21,8 @@ mod base;
 
 #[test]
 fn test_vm_token_transfer() {
-	let (account1, account2) = base::test_accounts();
+	let test_accounts = base::test_accounts();
+	let (account1, account2) = (&test_accounts[0], &test_accounts[1]);
 
 	let contract_address = Address(vec![1]);
 
@@ -109,7 +110,9 @@ fn test_vm_token_transfer() {
 
 #[test]
 fn test_vm_token_transfer_from() {
-	let (account1, account2) = base::test_accounts();
+	let test_accounts = base::test_accounts();
+	let (account1, account2) = (&test_accounts[0], &test_accounts[1]);
+
 	let contract_address = Address(vec![1]);
 
 	let executor_context = TestExecutorContext::new();

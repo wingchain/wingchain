@@ -31,7 +31,7 @@ use primitives::codec::{Decode, Encode};
 use primitives::{codec, Address, Balance, DBKey, DBValue, Event, Hash};
 use utils_test::TestAccount;
 
-pub fn test_accounts() -> (TestAccount, TestAccount) {
+pub fn test_accounts() -> Vec<TestAccount> {
 	let address = Arc::new(AddressImpl::Blake2b160);
 	let dsa = Arc::new(DsaImpl::Ed25519);
 	utils_test::test_accounts(dsa, address)

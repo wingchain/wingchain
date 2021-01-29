@@ -25,17 +25,18 @@ use node_consensus_base::support::DefaultConsensusSupport;
 use node_consensus_base::ConsensusConfig;
 use node_txpool::support::DefaultTxPoolSupport;
 use node_txpool::{TxPool, TxPoolConfig};
-use primitives::{Address, BlockNumber, Hash, Transaction};
+use primitives::{BlockNumber, Hash, Transaction};
 use utils_test::TestAccount;
 
 pub fn get_service(
+	authority_accounts: &[&TestAccount],
 	account: &TestAccount,
 ) -> (
 	Arc<Chain>,
 	Arc<TxPool<DefaultTxPoolSupport>>,
 	Consensus<DefaultConsensusSupport>,
 ) {
-	let chain = get_chain(&account.address);
+	let chain = get_chain(authority_accounts);
 
 	let txpool_config = TxPoolConfig { pool_capacity: 32 };
 
@@ -102,11 +103,11 @@ pub async fn safe_close(
 	tokio::time::sleep(Duration::from_millis(50)).await;
 }
 
-fn get_chain(address: &Address) -> Arc<Chain> {
+fn get_chain(authority_accounts: &[&TestAccount]) -> Arc<Chain> {
 	let path = tempdir().expect("Could not create a temp dir");
 	let home = path.into_path();
 
-	init(&home, address);
+	init(&home, authority_accounts);
 
 	let db = DBConfig {
 		memory_budget: 1 * 1024 * 1024,
@@ -121,7 +122,7 @@ fn get_chain(address: &Address) -> Arc<Chain> {
 	chain
 }
 
-fn init(home: &PathBuf, address: &Address) {
+fn init(home: &PathBuf, authority_accounts: &[&TestAccount]) {
 	let config_path = home.join("config");
 
 	fs::create_dir_all(&config_path).unwrap();
@@ -177,7 +178,7 @@ params = '''
 }}
 '''
 	"#,
-		address, address
+		authority_accounts[0].address, authority_accounts[0].address
 	);
 
 	fs::write(config_path.join("spec.toml"), &spec).unwrap();
