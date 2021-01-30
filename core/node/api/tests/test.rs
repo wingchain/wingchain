@@ -101,7 +101,7 @@ async fn test_api() {
 	// chain_getBlockByNumber
 	let request = r#"{"jsonrpc": "2.0", "method": "chain_getBlockByNumber", "params": ["confirmed"], "id": 1}"#;
 	let response = call_rpc(request).await;
-	let expected = r#"{"jsonrpc":"2.0","result":{"hash":"0x5d9c463e3666a5d9f51f2e674f1f2f7eebbc0693d30ba0cd4c34e46b2be75a11","header":{"number":"0x0000000000000000","timestamp":"0x00000171c4eb7136","parent_hash":"0x0000000000000000000000000000000000000000000000000000000000000000","meta_txs_root":"0x3eb8cb0c85f0ecc98300e23d753bc48a1ab5e42f86c9bba75a5c914f269d81ad","meta_state_root":"0xaebe53e5c921912056f086387df448d734ded82eac8479dea73c2ddf8f39274a","meta_receipts_root":"0xe6c79028e5a20c619a5faa0dde88df82f378ca796a717570ef329de275ca1282","payload_txs_root":"0xcbe666e1dff8590ccfad41047bb4a6b8a682b52d1899e3f6a1c40c9eae65e363","payload_execution_gap":"0x00","payload_execution_state_root":"0x0000000000000000000000000000000000000000000000000000000000000000","payload_execution_receipts_root":"0x0000000000000000000000000000000000000000000000000000000000000000"},"body":{"meta_txs":["0x709ab477fc45b28aab319323399bee607bac3af49518e33a78f099c6916ef75e","0x51fbd78a099eaad87565e79c617c112a7615ef7e8d41d24facdd90ebee720dda"],"payload_txs":["0x6745417d545c3e0f7d610cadfd1ee8d450a92e89fa74bb75777950a779f2aa94","0xa0faf0ea2a0c3bf69ae5c1124199c76336b36a159826e823a9fc1cd2d7b5ff55"]}},"id":1}"#;
+	let expected = r#"{"jsonrpc":"2.0","result":{"hash":"0xf4c086c905313e502beeaaa8fb5049372ed43dfd3f38f36a51fe7aff24751b1c","header":{"number":"0x0000000000000000","timestamp":"0x00000171c4eb7136","parent_hash":"0x0000000000000000000000000000000000000000000000000000000000000000","meta_txs_root":"0xf0ffb42b8a0c9fa4e9718be498b01abb0c218f199bbb9a774b7ead48e893c11a","meta_state_root":"0xb559a1f10dce8e2791e43143df1e86d3a792e73c6d97ace18735526a2dee430e","meta_receipts_root":"0xe6c79028e5a20c619a5faa0dde88df82f378ca796a717570ef329de275ca1282","payload_txs_root":"0xcbe666e1dff8590ccfad41047bb4a6b8a682b52d1899e3f6a1c40c9eae65e363","payload_execution_gap":"0x00","payload_execution_state_root":"0x0000000000000000000000000000000000000000000000000000000000000000","payload_execution_receipts_root":"0x0000000000000000000000000000000000000000000000000000000000000000"},"body":{"meta_txs":["0x709ab477fc45b28aab319323399bee607bac3af49518e33a78f099c6916ef75e","0xb79f3e47af70ef2900ca680736fccb89841fcc64390bbbb2455a4d8dbff72ad1"],"payload_txs":["0x6745417d545c3e0f7d610cadfd1ee8d450a92e89fa74bb75777950a779f2aa94","0xa0faf0ea2a0c3bf69ae5c1124199c76336b36a159826e823a9fc1cd2d7b5ff55"]}},"id":1}"#;
 	info!("chain_getBlockByNumber response: {}", response);
 	assert_eq!(response, expected);
 
@@ -144,7 +144,7 @@ async fn test_api() {
 		hex::encode(&tx0_hash.0)
 	);
 	let response = call_rpc(&request).await;
-	let expected = r#"{"jsonrpc":"2.0","result":{"hash":"0x8ece9a3e63a339d854f762ff45e2b19ce110a43efe57d2499fc2c13749c1018f","witness":{"public_key":"0x8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","signature":"0x4b84ec33e868a6875bb1297b2c06e7598546f80addd9f83ba36e9d96af30e2d9e652bb37be486e59f0c60e346cca7d7ca4385295c0ecb9a78a4d7d217dd1cb0b","nonce":"0x00000000","until":"0x000000000000000a"},"call":{"module":"balance","method":"transfer","params":"0x5043346e326b6721be4a070bfb2eb49127322fa5e40100000000000000"}},"id":1}"#;
+	let expected = r#"{"jsonrpc":"2.0","result":{"hash":"0x8ece9a3e63a339d854f762ff45e2b19ce110a43efe57d2499fc2c13749c1018f","witness":{"public_key":"0x8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","signature":"0x9dc5dbf27c5d0de79534a9fc091d088881df1d6c7fa4ec2ab2e4da878fc4ce77c3081dc838e13ff2ea16b23e6931a45c4d8cd75905d858b2c0fa89241d049200","nonce":"0x00000000","until":"0x000000000000000a"},"call":{"module":"balance","method":"transfer","params":"0x5043346e326b6721be4a070bfb2eb49127322fa5e40100000000000000"}},"id":1}"#;
 	info!("chain_getTransactionInTxPool response: {}", response);
 	assert_eq!(response, expected);
 
@@ -161,7 +161,7 @@ async fn test_api() {
 		hex::encode(&tx0_hash.0)
 	);
 	let response = call_rpc(&request).await;
-	let expected = r#"{"jsonrpc":"2.0","result":{"hash":"0x8ece9a3e63a339d854f762ff45e2b19ce110a43efe57d2499fc2c13749c1018f","witness":{"public_key":"0x8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","signature":"0x4b84ec33e868a6875bb1297b2c06e7598546f80addd9f83ba36e9d96af30e2d9e652bb37be486e59f0c60e346cca7d7ca4385295c0ecb9a78a4d7d217dd1cb0b","nonce":"0x00000000","until":"0x000000000000000a"},"call":{"module":"balance","method":"transfer","params":"0x5043346e326b6721be4a070bfb2eb49127322fa5e40100000000000000"}},"id":1}"#;
+	let expected = r#"{"jsonrpc":"2.0","result":{"hash":"0x8ece9a3e63a339d854f762ff45e2b19ce110a43efe57d2499fc2c13749c1018f","witness":{"public_key":"0x8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","signature":"0x9dc5dbf27c5d0de79534a9fc091d088881df1d6c7fa4ec2ab2e4da878fc4ce77c3081dc838e13ff2ea16b23e6931a45c4d8cd75905d858b2c0fa89241d049200","nonce":"0x00000000","until":"0x000000000000000a"},"call":{"module":"balance","method":"transfer","params":"0x5043346e326b6721be4a070bfb2eb49127322fa5e40100000000000000"}},"id":1}"#;
 	info!("chain_getTransactionByHash response: {}", response);
 	assert_eq!(response, expected);
 

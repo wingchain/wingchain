@@ -206,12 +206,15 @@ params = '''
 	"heartbeat_interval": 100,
 	"election_timeout_min": 500,
 	"election_timeout_max": 1000,
+	"admin": {{
+    	"threshold": 1,
+    	"members": [["{}", 1]]
+    }},
 	"authorities": {{
-		"threshold": 2,
 		"members": [
-			["{}", 1],
-			["{}", 1],
-			["{}", 1]
+			"{}",
+			"{}",
+			"{}"
 		]
 	}}
 }}
@@ -225,6 +228,7 @@ params = '''
 }}
 '''
 	"#,
+		authority_accounts[0].address,
 		authority_accounts[0].address,
 		authority_accounts[0].address,
 		authority_accounts[1].address,

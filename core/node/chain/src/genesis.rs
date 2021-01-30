@@ -18,17 +18,17 @@ use std::convert::{TryFrom, TryInto};
 use std::sync::Arc;
 
 use chrono::DateTime;
+use serde::de::DeserializeOwned;
 use serde::Deserialize;
 
 use main_base::spec::{Spec, Tx};
 use node_executor::{module, Context, Executor};
 use primitives::codec::Encode;
 use primitives::errors::{CommonError, CommonResult};
+use primitives::types::ExecutionGap;
 use primitives::{BlockNumber, BuildBlockParams, FullTransaction, Transaction};
 
 use crate::errors;
-use primitives::types::ExecutionGap;
-use serde::de::DeserializeOwned;
 
 pub fn build_genesis(
 	spec: &Spec,
@@ -169,9 +169,9 @@ where
 
 #[cfg(test)]
 mod tests {
-	use super::*;
-	use node_executor::module::raft::Authorities;
 	use primitives::Address;
+
+	use super::*;
 
 	#[test]
 	fn test_system_init_params() {
@@ -239,6 +239,10 @@ mod tests {
 		let str = r#"
 		{
 			"block_interval": 1000,
+			"admin": {
+				"threshold": 1,
+				"members": [["01020304", 1]]
+			},
 			"authority": "01020304"
 		}
 		"#;
@@ -249,6 +253,10 @@ mod tests {
 			param,
 			module::poa::InitParams {
 				block_interval: Some(1000),
+				admin: module::poa::Admin {
+					threshold: 1,
+					members: vec![(Address::from_hex("01020304").unwrap(), 1)],
+				},
 				authority: Address::from_hex("01020304").unwrap(),
 			}
 		)
@@ -262,11 +270,16 @@ mod tests {
 			"heartbeat_interval": 100,
 			"election_timeout_min": 500,
 			"election_timeout_max": 1000,
-			"authorities": {
-				"threshold": 2,
+			"admin" : {
+			    "threshold": 1,
 				"members": [
-					["0001020304050607080900010203040506070809", 1],
-					["000102030405060708090001020304050607080a", 2]
+				    ["0001020304050607080900010203040506070809", 1]
+				]
+			},
+			"authorities": {
+				"members": [
+				    "0001020304050607080900010203040506070809",
+					"000102030405060708090001020304050607080a"
 				]
 			}
 		}
@@ -281,21 +294,23 @@ mod tests {
 				heartbeat_interval: 100,
 				election_timeout_min: 500,
 				election_timeout_max: 1000,
-				authorities: Authorities {
-					threshold: 2,
+				admin: module::raft::Admin {
+					threshold: 1,
+					members: vec![(
+						Address(vec![
+							0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9
+						]),
+						1
+					)],
+				},
+				authorities: module::raft::Authorities {
 					members: vec![
-						(
-							Address(vec![
-								0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9
-							]),
-							1
-						),
-						(
-							Address(vec![
-								0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 10
-							]),
-							2
-						)
+						Address(vec![
+							0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9
+						]),
+						Address(vec![
+							0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 10
+						]),
 					]
 				},
 			}

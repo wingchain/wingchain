@@ -36,6 +36,7 @@ where
 	heartbeat_interval: StorageValue<u64, Self>,
 	election_timeout_min: StorageValue<u64, Self>,
 	election_timeout_max: StorageValue<u64, Self>,
+	admin: StorageValue<Admin, Self>,
 	authorities: StorageValue<Authorities, Self>,
 }
 
@@ -53,6 +54,7 @@ impl<C: Context, U: Util> Module<C, U> {
 			heartbeat_interval: StorageValue::new(context.clone(), b"heartbeat_interval"),
 			election_timeout_min: StorageValue::new(context.clone(), b"election_timeout_min"),
 			election_timeout_max: StorageValue::new(context.clone(), b"election_timeout_max"),
+			admin: StorageValue::new(context.clone(), b"admin"),
 			authorities: StorageValue::new(context, b"authorities"),
 		}
 	}
@@ -66,12 +68,16 @@ impl<C: Context, U: Util> Module<C, U> {
 		self.heartbeat_interval.set(&params.block_interval)?;
 		self.election_timeout_min.set(&params.block_interval)?;
 		self.election_timeout_max.set(&params.block_interval)?;
+		self.admin.set(&params.admin)?;
 		self.authorities.set(&params.authorities)?;
 		Ok(())
 	}
 
 	fn validate_init(&self, _sender: Option<&Address>, params: InitParams) -> ModuleResult<()> {
-		for (address, _) in &params.authorities.members {
+		for (address, _) in &params.admin.members {
+			self.util.validate_address(address)?;
+		}
+		for address in &params.authorities.members {
 			self.util.validate_address(address)?;
 		}
 		Ok(())
@@ -105,9 +111,14 @@ impl<C: Context, U: Util> Module<C, U> {
 }
 
 #[derive(Encode, Decode, Debug, PartialEq, Deserialize)]
-pub struct Authorities {
+pub struct Admin {
 	pub threshold: u32,
 	pub members: Vec<(Address, u32)>,
+}
+
+#[derive(Encode, Decode, Debug, PartialEq, Deserialize)]
+pub struct Authorities {
+	pub members: Vec<Address>,
 }
 
 #[derive(Encode, Decode, Debug, PartialEq, Deserialize)]
@@ -116,6 +127,7 @@ pub struct InitParams {
 	pub heartbeat_interval: u64,
 	pub election_timeout_min: u64,
 	pub election_timeout_max: u64,
+	pub admin: Admin,
 	pub authorities: Authorities,
 }
 

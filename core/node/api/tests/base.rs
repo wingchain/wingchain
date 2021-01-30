@@ -203,6 +203,10 @@ method = "init"
 params = '''
 {{
     "block_interval": null,
+    "admin": {{
+    	"threshold": 1,
+    	"members": [["{}", 1]]
+    }},
     "authority": "{}"
 }}
 '''
@@ -215,7 +219,7 @@ params = '''
 }}
 '''
 	"#,
-		authority_accounts[0].address, authority_accounts[0].address
+		authority_accounts[0].address, authority_accounts[0].address, authority_accounts[0].address
 	);
 
 	fs::write(config_path.join("spec.toml"), &spec).unwrap();

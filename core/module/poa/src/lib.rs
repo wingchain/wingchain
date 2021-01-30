@@ -16,12 +16,12 @@ use std::sync::Arc;
 
 use executor_macro::{call, module};
 use executor_primitives::{
-	errors, errors::ApplicationError, Context, ContextEnv, EmptyParams, Module as ModuleT,
-	ModuleResult, OpaqueModuleResult, StorageValue, Util,
+	errors, Context, ContextEnv, EmptyParams, Module as ModuleT, ModuleResult, OpaqueModuleResult,
+	StorageValue, Util,
 };
 use primitives::codec::{Decode, Encode};
-use primitives::{codec, Address, Call, Event};
-use serde::{Deserialize, Serialize};
+use primitives::{codec, Address, Call};
+use serde::Deserialize;
 
 pub struct Module<C, U>
 where
@@ -29,9 +29,11 @@ where
 	U: Util,
 {
 	env: Arc<ContextEnv>,
+	#[allow(dead_code)]
 	context: C,
 	util: U,
 	block_interval: StorageValue<Option<u64>, Self>,
+	admin: StorageValue<Admin, Self>,
 	authority: StorageValue<Address, Self>,
 }
 
@@ -46,6 +48,7 @@ impl<C: Context, U: Util> Module<C, U> {
 			context: context.clone(),
 			util,
 			block_interval: StorageValue::new(context.clone(), b"block_interval"),
+			admin: StorageValue::new(context.clone(), b"admin"),
 			authority: StorageValue::new(context, b"authority"),
 		}
 	}
@@ -56,11 +59,15 @@ impl<C: Context, U: Util> Module<C, U> {
 			return Err("Not genesis".into());
 		}
 		self.block_interval.set(&params.block_interval)?;
+		self.admin.set(&params.admin)?;
 		self.authority.set(&params.authority)?;
 		Ok(())
 	}
 
 	fn validate_init(&self, _sender: Option<&Address>, params: InitParams) -> ModuleResult<()> {
+		for (address, _) in &params.admin.members {
+			self.util.validate_address(address)?;
+		}
 		self.util.validate_address(&params.authority)?;
 		Ok(())
 	}
@@ -85,57 +92,22 @@ impl<C: Context, U: Util> Module<C, U> {
 
 		Ok(authority)
 	}
+}
 
-	#[call(write = true)]
-	fn update_authority(
-		&self,
-		sender: Option<&Address>,
-		params: UpdateAuthorityParams,
-	) -> ModuleResult<()> {
-		let sender = sender.ok_or(ApplicationError::Unsigned)?;
-		let current_authority = self.authority.get()?;
-		let current_authority = current_authority.ok_or("Unexpected none")?;
-		if sender != &current_authority {
-			return Err("Not authority".into());
-		}
-		self.authority.set(&params.authority)?;
-		self.context.emit_event(Event::from_data(
-			"AuthorityUpdated".to_string(),
-			AuthorityUpdated {
-				authority: params.authority,
-			},
-		)?)?;
-
-		Ok(())
-	}
-
-	fn validate_update_authority(
-		&self,
-		_sender: Option<&Address>,
-		params: UpdateAuthorityParams,
-	) -> ModuleResult<()> {
-		self.util.validate_address(&params.authority)?;
-		Ok(())
-	}
+#[derive(Encode, Decode, Debug, PartialEq, Deserialize)]
+pub struct Admin {
+	pub threshold: u32,
+	pub members: Vec<(Address, u32)>,
 }
 
 #[derive(Encode, Decode, Debug, PartialEq, Deserialize)]
 pub struct InitParams {
 	pub block_interval: Option<u64>,
-	pub authority: Address,
-}
-
-#[derive(Encode, Decode, Debug, PartialEq)]
-pub struct UpdateAuthorityParams {
+	pub admin: Admin,
 	pub authority: Address,
 }
 
 #[derive(Encode, Decode, Debug, PartialEq)]
 pub struct Meta {
 	pub block_interval: Option<u64>,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct AuthorityUpdated {
-	pub authority: Address,
 }
