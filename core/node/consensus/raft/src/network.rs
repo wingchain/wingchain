@@ -16,7 +16,7 @@ use log::info;
 
 use crypto::dsa::{Dsa, KeyPair, Verifier};
 use node_consensus_base::support::ConsensusSupport;
-use node_consensus_base::{ConsensusOutMessage, PeerId};
+use node_consensus_base::{ConsensusInMessage, ConsensusOutMessage, PeerId};
 use primitives::codec::{self, Encode};
 use primitives::errors::CommonResult;
 use primitives::Signature;
@@ -24,7 +24,7 @@ use primitives::Signature;
 use crate::protocol::{
 	RaftMessage, RegisterValidatorReq, RegisterValidatorRes, RequestId, RequestIdAware,
 };
-use crate::{get_address, RaftStream};
+use crate::{get_address, PeerInfo, RaftStream};
 
 /// methods for request/response
 impl<S> RaftStream<S>
@@ -52,21 +52,6 @@ where
 			self.request(peer_id.clone(), req)?;
 		}
 
-		Ok(())
-	}
-
-	pub fn on_network_message(&mut self, peer_id: PeerId, message: Vec<u8>) -> CommonResult<()> {
-		let message: RaftMessage = codec::decode(&mut &message[..])?;
-
-		match message {
-			RaftMessage::RegisterValidatorReq(req) => {
-				let res = self.on_req_register_validator(peer_id.clone(), req)?;
-				self.response(peer_id, res)?;
-			}
-			RaftMessage::RegisterValidatorRes(res) => {
-				self.on_res_register_validator(peer_id, res)?;
-			}
-		};
 		Ok(())
 	}
 
@@ -110,7 +95,81 @@ where
 		);
 		Ok(())
 	}
+}
 
+/// methods for in messages
+impl<S> RaftStream<S>
+where
+	S: ConsensusSupport,
+{
+	pub fn on_in_message(&mut self, in_message: ConsensusInMessage) -> CommonResult<()> {
+		match in_message {
+			ConsensusInMessage::NetworkProtocolOpen {
+				peer_id,
+				local_nonce,
+				remote_nonce,
+			} => {
+				self.on_network_protocol_open(peer_id, local_nonce, remote_nonce)?;
+			}
+			ConsensusInMessage::NetworkProtocolClose { peer_id } => {
+				self.on_network_protocol_close(peer_id);
+			}
+			ConsensusInMessage::NetworkMessage { peer_id, message } => {
+				self.on_network_message(peer_id, message)?;
+			}
+			_ => {}
+		}
+		Ok(())
+	}
+
+	fn on_network_protocol_open(
+		&mut self,
+		peer_id: PeerId,
+		local_nonce: u64,
+		remote_nonce: u64,
+	) -> CommonResult<()> {
+		self.peers.insert(
+			peer_id.clone(),
+			PeerInfo {
+				local_nonce,
+				remote_nonce,
+				address: None,
+			},
+		);
+		self.register_validator(peer_id)?;
+		Ok(())
+	}
+
+	fn on_network_protocol_close(&mut self, peer_id: PeerId) {
+		if let Some(peer_info) = self.peers.get(&peer_id) {
+			if let Some(address) = &peer_info.address {
+				self.known_validators.remove(address);
+			}
+		}
+		self.peers.remove(&peer_id);
+	}
+
+	fn on_network_message(&mut self, peer_id: PeerId, message: Vec<u8>) -> CommonResult<()> {
+		let message: RaftMessage = codec::decode(&mut &message[..])?;
+
+		match message {
+			RaftMessage::RegisterValidatorReq(req) => {
+				let res = self.on_req_register_validator(peer_id.clone(), req)?;
+				self.response(peer_id, res)?;
+			}
+			RaftMessage::RegisterValidatorRes(res) => {
+				self.on_res_register_validator(peer_id, res)?;
+			}
+		};
+		Ok(())
+	}
+}
+
+/// methods for out messages
+impl<S> RaftStream<S>
+where
+	S: ConsensusSupport,
+{
 	fn request<Req>(&mut self, peer_id: PeerId, mut request: Req) -> CommonResult<()>
 	where
 		Req: RequestIdAware + Into<RaftMessage>,
@@ -144,5 +203,12 @@ where
 	fn next_request_id(request_id: &mut RequestId) -> RequestId {
 		let new = RequestId(request_id.0.checked_add(1).unwrap_or(0));
 		std::mem::replace(request_id, new)
+	}
+
+	fn send_out_message(&self, out_message: ConsensusOutMessage) -> CommonResult<()> {
+		self.out_tx
+			.unbounded_send(out_message)
+			.map_err(|e| node_consensus_base::errors::ErrorKind::Channel(Box::new(e)))?;
+		Ok(())
 	}
 }

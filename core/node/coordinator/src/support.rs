@@ -34,8 +34,6 @@ use primitives::{
 #[async_trait]
 pub trait CoordinatorSupport: Send + Sync + 'static {
 	fn chain_rx(&self) -> Option<UnboundedReceiver<ChainOutMessage>>;
-	fn get_confirmed_number(&self) -> CommonResult<Option<BlockNumber>>;
-	fn get_execution_number(&self) -> CommonResult<Option<BlockNumber>>;
 	fn get_block_hash(&self, number: &BlockNumber) -> CommonResult<Option<Hash>>;
 	fn get_header(&self, block_hash: &Hash) -> CommonResult<Option<Header>>;
 	fn get_body(&self, block_hash: &Hash) -> CommonResult<Option<Body>>;
@@ -96,12 +94,6 @@ impl DefaultCoordinatorSupport {
 impl CoordinatorSupport for DefaultCoordinatorSupport {
 	fn chain_rx(&self) -> Option<UnboundedReceiver<ChainOutMessage>> {
 		self.chain.message_rx()
-	}
-	fn get_confirmed_number(&self) -> CommonResult<Option<BlockNumber>> {
-		self.chain.get_confirmed_number()
-	}
-	fn get_execution_number(&self) -> CommonResult<Option<BlockNumber>> {
-		self.chain.get_execution_number()
 	}
 	fn get_block_hash(&self, number: &BlockNumber) -> CommonResult<Option<Hash>> {
 		self.chain.get_block_hash(number)

@@ -249,7 +249,7 @@ where
 				invalid_txs.push(tx.clone());
 				continue;
 			}
-			let is_meta = self.support.is_meta_tx(&tx.tx).expect("qed");
+			let is_meta = self.support.is_meta_call(&tx.tx.call)?;
 			match is_meta {
 				true => {
 					meta_txs.push(tx.clone());

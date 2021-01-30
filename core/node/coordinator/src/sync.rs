@@ -148,7 +148,11 @@ where
 		let mut blocks = vec![];
 		let mut block_id = block_request.block_id;
 		let fields = block_request.fields;
-		let confirmed_number = self.support.get_confirmed_number()?;
+		let confirmed_number = self
+			.support
+			.ori_support()
+			.get_current_state()
+			.confirmed_number;
 		loop {
 			let block_hash = match &block_id {
 				BlockId::Number(number) => {
@@ -318,6 +322,9 @@ where
 		// update handshake builder
 		(*self.support.get_handshake_builder().confirmed.write()) = (number, hash.clone());
 
+		// update pending_blocks
+		// TODO
+
 		// announce to all connected peers
 		let (block_hash, header) = {
 			let header = self.support.get_header_by_block_hash(&hash)?;
@@ -351,7 +358,12 @@ where
 		};
 		let max_pending_number = match self.pending_blocks.iter().last() {
 			Some((k, _v)) => *k,
-			None => self.support.get_confirmed_number()?,
+			None => {
+				self.support
+					.ori_support()
+					.get_current_state()
+					.confirmed_number
+			}
 		};
 		let max_to_append = u64::min(
 			max_peer_number,

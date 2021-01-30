@@ -23,7 +23,7 @@ use crypto::address::AddressImpl;
 use crypto::dsa::DsaImpl;
 use crypto::hash::HashImpl;
 pub use node_db::DBConfig;
-use node_db::DBTransaction;
+pub use node_db::DBTransaction;
 pub use node_executor::module;
 use primitives::codec::{Decode, Encode};
 use primitives::errors::CommonResult;
@@ -123,9 +123,29 @@ impl Chain {
 		self.backend.get_receipt(tx_hash)
 	}
 
-	/// Determine if the given transaction is meta transaction
-	pub fn is_meta_tx(&self, tx: &Transaction) -> CommonResult<bool> {
-		self.backend.is_meta_tx(tx)
+	/// Get consensus data
+	pub fn get_consensus_data<T: Decode>(&self, key: &[u8]) -> CommonResult<Option<T>> {
+		self.backend.get_consensus_data(key)
+	}
+
+	/// Update consensus data
+	pub fn update_consensus_data<T: Encode>(
+		&self,
+		transaction: &mut DBTransaction,
+		key: &[u8],
+		value: T,
+	) -> CommonResult<()> {
+		self.backend.update_consensus_data(transaction, key, value)
+	}
+
+	/// Commit consensus data
+	pub fn commit_consensus_data(&self, transaction: DBTransaction) -> CommonResult<()> {
+		self.backend.commit_consensus_data(transaction)
+	}
+
+	/// Determine if the given call is meta call
+	pub fn is_meta_call(&self, call: &Call) -> CommonResult<bool> {
+		self.backend.is_meta_call(call)
 	}
 
 	/// Get the hash of the given transaction

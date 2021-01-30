@@ -15,14 +15,14 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use node_chain::{Basic, Chain, ChainCommitBlockParams, CurrentState};
+use node_chain::{Basic, Chain, ChainCommitBlockParams, CurrentState, DBTransaction};
 use node_txpool::support::DefaultTxPoolSupport;
 use node_txpool::TxPool;
 use primitives::codec::{Decode, Encode};
 use primitives::errors::CommonResult;
 use primitives::types::CallResult;
 use primitives::{
-	Address, BlockNumber, BuildBlockParams, FullTransaction, Hash, Header, Transaction,
+	Address, BlockNumber, BuildBlockParams, Call, FullTransaction, Hash, Header, Transaction,
 };
 
 pub trait ConsensusSupport: Send + Sync + 'static {
@@ -45,7 +45,7 @@ pub trait ConsensusSupport: Send + Sync + 'static {
 		method: String,
 		params: P,
 	) -> CommonResult<CallResult<R>>;
-	fn is_meta_tx(&self, tx: &Transaction) -> CommonResult<bool>;
+	fn is_meta_call(&self, call: &Call) -> CommonResult<bool>;
 	fn build_block(
 		&self,
 		build_block_params: BuildBlockParams,
@@ -53,6 +53,14 @@ pub trait ConsensusSupport: Send + Sync + 'static {
 	fn commit_block(&self, commit_block_params: ChainCommitBlockParams) -> CommonResult<()>;
 	fn get_basic(&self) -> CommonResult<Arc<Basic>>;
 	fn get_current_state(&self) -> Arc<CurrentState>;
+	fn get_consensus_data<T: Decode>(&self, key: &[u8]) -> CommonResult<Option<T>>;
+	fn update_consensus_data<T: Encode>(
+		&self,
+		transaction: &mut DBTransaction,
+		key: &[u8],
+		value: T,
+	) -> CommonResult<()>;
+	fn commit_consensus_data(&self, transaction: DBTransaction) -> CommonResult<()>;
 	fn txpool_get_transactions(&self) -> CommonResult<Vec<Arc<FullTransaction>>>;
 	fn txpool_remove_transactions(&self, tx_hash_set: &HashSet<Hash>) -> CommonResult<()>;
 }
@@ -104,8 +112,8 @@ impl ConsensusSupport for DefaultConsensusSupport {
 		self.chain
 			.execute_call_with_block_number(block_number, sender, module, method, params)
 	}
-	fn is_meta_tx(&self, tx: &Transaction) -> CommonResult<bool> {
-		self.chain.is_meta_tx(tx)
+	fn is_meta_call(&self, call: &Call) -> CommonResult<bool> {
+		self.chain.is_meta_call(call)
 	}
 	fn build_block(
 		&self,
@@ -121,6 +129,20 @@ impl ConsensusSupport for DefaultConsensusSupport {
 	}
 	fn get_current_state(&self) -> Arc<CurrentState> {
 		self.chain.get_current_state()
+	}
+	fn get_consensus_data<T: Decode>(&self, key: &[u8]) -> CommonResult<Option<T>> {
+		self.chain.get_consensus_data(key)
+	}
+	fn update_consensus_data<T: Encode>(
+		&self,
+		transaction: &mut DBTransaction,
+		key: &[u8],
+		value: T,
+	) -> CommonResult<()> {
+		self.chain.update_consensus_data(transaction, key, value)
+	}
+	fn commit_consensus_data(&self, transaction: DBTransaction) -> CommonResult<()> {
+		self.chain.commit_consensus_data(transaction)
 	}
 	fn txpool_get_transactions(&self) -> CommonResult<Vec<Arc<FullTransaction>>> {
 		let txs = (*self.txpool.get_queue().read()).clone();

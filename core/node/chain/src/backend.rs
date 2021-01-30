@@ -61,12 +61,12 @@ pub struct Backend {
 }
 
 pub struct CurrentState {
+	pub genesis_hash: Hash,
 	pub context_essence: ContextEssence,
 	pub system_meta: Meta,
 	pub confirmed_number: BlockNumber,
 	#[allow(dead_code)]
 	pub confirmed_block_hash: Hash,
-	#[allow(dead_code)]
 	pub executed_number: BlockNumber,
 	#[allow(dead_code)]
 	pub executed_block_hash: Hash,
@@ -394,6 +394,35 @@ impl Backend {
 		)
 	}
 
+	/// Get consensus data
+	pub fn get_consensus_data<T: Decode>(&self, key: &[u8]) -> CommonResult<Option<T>> {
+		self.db
+			.get_with(node_db::columns::CONSENSUS, &DBKey::from_slice(key), |x| {
+				codec::decode(&mut &x[..])
+			})
+	}
+
+	/// Update consensus data
+	pub fn update_consensus_data<T: Encode>(
+		&self,
+		transaction: &mut DBTransaction,
+		key: &[u8],
+		value: T,
+	) -> CommonResult<()> {
+		transaction.put_owned(
+			node_db::columns::CONSENSUS,
+			DBKey::from_slice(&key),
+			codec::encode(&value)?,
+		);
+		Ok(())
+	}
+
+	/// Commit consensus data
+	pub fn commit_consensus_data(&self, transaction: DBTransaction) -> CommonResult<()> {
+		self.db.write(transaction)?;
+		Ok(())
+	}
+
 	/// Execute a call on a certain block specified by block hash
 	/// this will not commit to the chain
 	pub fn execute_call(
@@ -406,7 +435,21 @@ impl Backend {
 			errors::ErrorKind::Data(format!("Unknown block hash: {}", block_hash))
 		})?;
 
-		let execution = self.get_execution(block_hash)?.ok_or_else(|| {
+		let execution = match self.get_execution(block_hash)? {
+			Some(execution) => Some(execution),
+			None => {
+				// execution is not necessary for meta call
+				if self.executor.is_meta_call(call)? {
+					Some(Execution {
+						payload_execution_state_root: self.executor.default_hash(),
+						payload_execution_receipts_root: self.executor.default_hash(),
+					})
+				} else {
+					None
+				}
+			}
+		};
+		let execution = execution.ok_or_else(|| {
 			errors::ErrorKind::Data(format!("Not execution block hash: {}", block_hash))
 		})?;
 
@@ -467,9 +510,9 @@ impl Backend {
 		Ok(result)
 	}
 
-	/// Determine if the given transaction is meta transaction
-	pub fn is_meta_tx(&self, tx: &Transaction) -> CommonResult<bool> {
-		self.executor.is_meta_tx(tx)
+	/// Determine if the given call is meta call
+	pub fn is_meta_call(&self, call: &Call) -> CommonResult<bool> {
+		self.executor.is_meta_call(call)
 	}
 
 	/// Build a block
@@ -759,7 +802,7 @@ impl Backend {
 
 		let system_meta = self
 			.execute_call_with_block_hash(
-				&executed_block_hash,
+				&confirmed_block_hash,
 				None,
 				"system".to_string(),
 				"get_meta".to_string(),
@@ -767,7 +810,12 @@ impl Backend {
 			)?
 			.map_err(ErrorKind::Call)?;
 
+		let genesis_hash = self
+			.get_block_hash(&0)?
+			.ok_or_else(|| errors::ErrorKind::Data("Missing genesis block".to_string()))?;
+
 		let current_state = CurrentState {
+			genesis_hash,
 			context_essence,
 			system_meta,
 			confirmed_number,

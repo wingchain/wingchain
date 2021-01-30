@@ -37,11 +37,13 @@ use primitives::errors::CommonResult;
 use primitives::{Address, BlockNumber, Header, PublicKey, SecretKey};
 
 use crate::protocol::RequestId;
-use node_consensus_base::errors::ErrorKind;
+use crate::state::{LogIndex, Term};
 
+mod chain;
 pub mod errors;
+mod network;
 mod protocol;
-mod request;
+mod state;
 
 pub struct Raft<S>
 where
@@ -126,6 +128,9 @@ where
 	peers: HashMap<PeerId, PeerInfo>,
 	known_validators: HashMap<Address, PeerId>,
 	next_request_id: RequestId,
+	last_log_index: LogIndex,
+	last_log_term: Term,
+	current_term: Term,
 }
 
 impl<S> RaftStream<S>
@@ -158,87 +163,29 @@ where
 			peers: HashMap::new(),
 			known_validators: HashMap::new(),
 			next_request_id: RequestId(0),
+			last_log_index: Default::default(),
+			last_log_term: Default::default(),
+			current_term: Default::default(),
 		};
 		tokio::spawn(this.start());
 		Ok(())
 	}
 
-	async fn start(mut self) {
+	async fn start(mut self) -> CommonResult<()> {
 		info!("Start raft work");
+
+		self.last_log_index = self.chain_get_last_log_index()?;
+		self.last_log_term = self.chain_get_last_log_term()?;
+		self.current_term = self.chain_get_current_term()?;
+
 		loop {
 			tokio::select! {
 				Some(in_message) = self.in_rx.next() => {
-					self.on_in_message(in_message).await
+					self.on_in_message(in_message)
 						.unwrap_or_else(|e| error!("Consensus raft handle in message error: {}", e));
 				}
 			}
 		}
-	}
-}
-
-/// methods for in messages
-impl<S> RaftStream<S>
-where
-	S: ConsensusSupport,
-{
-	async fn on_in_message(&mut self, in_message: ConsensusInMessage) -> CommonResult<()> {
-		match in_message {
-			ConsensusInMessage::NetworkProtocolOpen {
-				peer_id,
-				local_nonce,
-				remote_nonce,
-			} => {
-				self.on_network_protocol_open(peer_id, local_nonce, remote_nonce)?;
-			}
-			ConsensusInMessage::NetworkProtocolClose { peer_id } => {
-				self.on_network_protocol_close(peer_id);
-			}
-			ConsensusInMessage::NetworkMessage { peer_id, message } => {
-				self.on_network_message(peer_id, message)?;
-			}
-			_ => {}
-		}
-		Ok(())
-	}
-
-	fn on_network_protocol_open(
-		&mut self,
-		peer_id: PeerId,
-		local_nonce: u64,
-		remote_nonce: u64,
-	) -> CommonResult<()> {
-		self.peers.insert(
-			peer_id.clone(),
-			PeerInfo {
-				local_nonce,
-				remote_nonce,
-				address: None,
-			},
-		);
-		self.register_validator(peer_id)?;
-		Ok(())
-	}
-
-	fn on_network_protocol_close(&mut self, peer_id: PeerId) {
-		if let Some(peer_info) = self.peers.get(&peer_id) {
-			if let Some(address) = &peer_info.address {
-				self.known_validators.remove(address);
-			}
-		}
-		self.peers.remove(&peer_id);
-	}
-}
-
-/// methods for out messages
-impl<S> RaftStream<S>
-where
-	S: ConsensusSupport,
-{
-	fn send_out_message(&self, out_message: ConsensusOutMessage) -> CommonResult<()> {
-		self.out_tx
-			.unbounded_send(out_message)
-			.map_err(|e| ErrorKind::Channel(Box::new(e)))?;
-		Ok(())
 	}
 }
 

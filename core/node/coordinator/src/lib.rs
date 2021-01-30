@@ -64,21 +64,14 @@ where
 	S: CoordinatorSupport,
 {
 	pub fn new(config: CoordinatorConfig, support: Arc<S>) -> CommonResult<Self> {
-		let genesis_hash = support
-			.get_block_hash(&0)?
-			.ok_or_else(|| errors::ErrorKind::Data("Missing genesis block".to_string()))?;
-
-		let confirmed_number = support
-			.get_confirmed_number()?
-			.ok_or_else(|| errors::ErrorKind::Data("Missing confirmed number".to_string()))?;
-
-		let confirmed_hash = support.get_block_hash(&confirmed_number)?.ok_or_else(|| {
-			errors::ErrorKind::Data(format!("Missing block hash: number: {}", confirmed_number))
-		})?;
+		let current_state = support.get_current_state();
 
 		let handshake_builder = Arc::new(DefaultHandshakeBuilder {
-			genesis_hash,
-			confirmed: RwLock::new((confirmed_number, confirmed_hash)),
+			genesis_hash: current_state.genesis_hash.clone(),
+			confirmed: RwLock::new((
+				current_state.confirmed_number,
+				current_state.confirmed_block_hash.clone(),
+			)),
 		});
 
 		let mut network_config = config.network_config;

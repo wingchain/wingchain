@@ -42,7 +42,7 @@ pub fn build_genesis(
 
 	for tx in &spec.genesis.txs {
 		let tx = build_tx(tx, &executor, context, &mut timestamp)?;
-		let is_meta = executor.is_meta_tx(&tx)?;
+		let is_meta = executor.is_meta_call(&tx.call)?;
 		let tx_hash = executor.hash_transaction(&tx)?;
 		let tx = FullTransaction { tx, tx_hash };
 		match is_meta {

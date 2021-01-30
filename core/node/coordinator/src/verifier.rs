@@ -141,21 +141,9 @@ where
 	/// Return confirmed block (number, block hash, header)
 	fn verify_best(&self, header: &Header) -> CommonResult<(BlockNumber, Hash, Header)> {
 		let confirmed = {
-			let confirmed_number = self
-				.support
-				.ori_support()
-				.get_confirmed_number()?
-				.ok_or_else(|| errors::ErrorKind::Data("Missing confirmed number".to_string()))?;
-			let block_hash = self
-				.support
-				.ori_support()
-				.get_block_hash(&confirmed_number)?
-				.ok_or_else(|| {
-					errors::ErrorKind::Data(format!(
-						"Missing block hash: number: {}",
-						confirmed_number
-					))
-				})?;
+			let current_state = &self.support.ori_support().get_current_state();
+			let confirmed_number = current_state.confirmed_number;
+			let block_hash = current_state.confirmed_block_hash.clone();
 			let header = self
 				.support
 				.ori_support()
@@ -174,7 +162,8 @@ where
 	}
 
 	fn verify_execution(&self, header: &Header, confirmed_header: &Header) -> CommonResult<()> {
-		let system_meta = &self.support.ori_support().get_current_state().system_meta;
+		let current_state = self.support.ori_support().get_current_state();
+		let system_meta = &current_state.system_meta;
 
 		if header.payload_execution_gap < 1 {
 			return Err(ErrorKind::VerifyError(VerifyError::InvalidExecutionGap).into());
@@ -195,11 +184,7 @@ where
 		}
 
 		// execution number of current state
-		let current_execution_number = self
-			.support
-			.ori_support()
-			.get_execution_number()?
-			.ok_or_else(|| errors::ErrorKind::Data("Execution number not found".to_string()))?;
+		let current_execution_number = current_state.executed_number;
 		if execution_number > current_execution_number {
 			return Err(ErrorKind::VerifyError(VerifyError::ShouldWait).into());
 		}

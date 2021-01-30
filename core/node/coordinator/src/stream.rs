@@ -423,14 +423,6 @@ where
 		&self.handshake_builder
 	}
 
-	pub fn get_confirmed_number(&self) -> CommonResult<BlockNumber> {
-		let number = self
-			.support
-			.get_confirmed_number()?
-			.ok_or_else(|| errors::ErrorKind::Data("Missing confirmed number".to_string()))?;
-		Ok(number)
-	}
-
 	pub fn get_block_hash_by_number(&self, number: &BlockNumber) -> CommonResult<Hash> {
 		let block_hash = self.support.get_block_hash(number)?.ok_or_else(|| {
 			errors::ErrorKind::Data(format!("Missing block hash: number: {}", number))
