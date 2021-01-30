@@ -14,15 +14,77 @@
 //! TODO rm
 #![allow(dead_code)]
 
+use crypto::address::AddressImpl;
+use crypto::dsa::DsaImpl;
 use derive_more::{From, TryInto};
+use log::info;
+use node_coordinator::{Keypair, LinkedHashMap, Multiaddr, PeerId, Protocol};
 use primitives::codec::{Decode, Encode};
 use std::convert::TryInto;
+use std::sync::Arc;
+use tokio::time::Duration;
 use utils_enum_codec::enum_codec;
+use utils_test::test_accounts;
 
 mod base;
 
-#[test]
-fn test_raft_balance() {}
+#[tokio::test]
+async fn test_raft_balance() {
+	let _ = env_logger::try_init();
+
+	let dsa = Arc::new(DsaImpl::Ed25519);
+	let address = Arc::new(AddressImpl::Blake2b160);
+
+	let test_accounts = test_accounts(dsa.clone(), address);
+	let (account1, account2, account3) = (&test_accounts[0], &test_accounts[1], &test_accounts[2]);
+
+	let authority_accounts = [account1, account2, account3];
+
+	let specs = vec![
+		(
+			authority_accounts,
+			account1.clone(),
+			Keypair::generate_ed25519(),
+			3609,
+		),
+		(
+			authority_accounts,
+			account2.clone(),
+			Keypair::generate_ed25519(),
+			3610,
+		),
+		(
+			authority_accounts,
+			account3.clone(),
+			Keypair::generate_ed25519(),
+			3611,
+		),
+	];
+
+	let bootnodes = {
+		let bootnodes_spec = &specs[0];
+		let bootnodes = (
+			bootnodes_spec.2.public().into_peer_id(),
+			Multiaddr::empty()
+				.with(Protocol::Ip4([127, 0, 0, 1].into()))
+				.with(Protocol::Tcp(bootnodes_spec.3)),
+		);
+		let bootnodes =
+			std::iter::once((bootnodes, ())).collect::<LinkedHashMap<(PeerId, Multiaddr), ()>>();
+		bootnodes
+	};
+
+	for spec in &specs {
+		info!("peer id: {}", spec.2.public().into_peer_id());
+	}
+
+	let _services = specs
+		.iter()
+		.map(|x| base::get_service(&x.0, &x.1, x.2.clone(), x.3, bootnodes.clone()))
+		.collect::<Vec<_>>();
+
+	tokio::time::sleep(Duration::from_secs(10)).await;
+}
 
 #[test]
 fn test_enum_codec() {

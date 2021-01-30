@@ -31,11 +31,8 @@ use libp2p::swarm::{
 	ProtocolsHandlerUpgrErr, SubstreamProtocol,
 };
 use libp2p::PeerId;
-use rand::{thread_rng, Rng};
-use std::sync::Arc;
 
 use crate::protocol::upgrade::{InProtocol, InSubstream, OutProtocol, OutSubstream};
-use crate::HandshakeBuilder;
 use std::fmt::Formatter;
 
 const OPEN_TIMEOUT: Duration = Duration::from_secs(20);
@@ -43,19 +40,13 @@ const OPEN_TIMEOUT: Duration = Duration::from_secs(20);
 pub struct HandlerProto {
 	local_peer_id: PeerId,
 	protocol_name: Cow<'static, [u8]>,
-	handshake_builder: Arc<dyn HandshakeBuilder>,
 }
 
 impl HandlerProto {
-	pub fn new(
-		local_peer_id: PeerId,
-		protocol_name: Cow<'static, [u8]>,
-		handshake_builder: Arc<dyn HandshakeBuilder>,
-	) -> Self {
+	pub fn new(local_peer_id: PeerId, protocol_name: Cow<'static, [u8]>) -> Self {
 		Self {
 			local_peer_id,
 			protocol_name,
-			handshake_builder,
 		}
 	}
 }
@@ -68,17 +59,13 @@ impl IntoProtocolsHandler for HandlerProto {
 		remote_peer_id: &PeerId,
 		connected_point: &ConnectedPoint,
 	) -> Self::Handler {
-		let mut rng = thread_rng();
-		let nonce = rng.gen();
 		Handler {
 			local_peer_id: self.local_peer_id.clone(),
 			remote_peer_id: remote_peer_id.clone(),
 			connected_point: connected_point.clone(),
 			protocol_name: self.protocol_name,
-			handshake_builder: self.handshake_builder,
 			state: State::Init,
 			events_queue: VecDeque::with_capacity(16),
-			nonce,
 		}
 	}
 
@@ -89,7 +76,7 @@ impl IntoProtocolsHandler for HandlerProto {
 
 #[derive(Clone)]
 pub enum HandlerIn {
-	Open,
+	Open { handshake: Vec<u8> },
 	Close,
 	SendMessage { message: Vec<u8> },
 }
@@ -112,7 +99,6 @@ pub enum State {
 
 pub enum HandlerOut {
 	ProtocolOpen {
-		nonce: u64,
 		handshake: Vec<u8>,
 	},
 	ProtocolClose {
@@ -135,17 +121,14 @@ pub struct Handler {
 	remote_peer_id: PeerId,
 	connected_point: ConnectedPoint,
 	protocol_name: Cow<'static, [u8]>,
-	handshake_builder: Arc<dyn HandshakeBuilder>,
 	state: State,
 	events_queue: VecDeque<ProtocolsHandlerEvent<OutProtocol, (), HandlerOut, HandlerError>>,
-	nonce: u64,
 }
 
 impl Handler {
-	fn open(&mut self) {
+	fn open(&mut self, handshake: Vec<u8>) {
 		self.state = match std::mem::replace(&mut self.state, State::Locked) {
 			State::Init => {
-				let handshake = self.handshake_builder.build(self.nonce);
 				let upgrade = OutProtocol::new(self.protocol_name.clone(), handshake);
 				self.events_queue
 					.push_back(ProtocolsHandlerEvent::OutboundSubstreamRequest {
@@ -162,7 +145,6 @@ impl Handler {
 				out_substream,
 				..
 			} => {
-				let handshake = self.handshake_builder.build(self.nonce);
 				let upgrade = OutProtocol::new(self.protocol_name.clone(), handshake);
 				self.events_queue
 					.push_back(ProtocolsHandlerEvent::OutboundSubstreamRequest {
@@ -264,10 +246,7 @@ impl ProtocolsHandler for Handler {
 				Some(out_substream) => {
 					let handshake = protocol.take_received_handshake().expect("qed");
 					self.events_queue.push_back(ProtocolsHandlerEvent::Custom(
-						HandlerOut::ProtocolOpen {
-							nonce: self.nonce,
-							handshake,
-						},
+						HandlerOut::ProtocolOpen { handshake },
 					));
 					State::Opened {
 						in_substream: protocol,
@@ -322,10 +301,7 @@ impl ProtocolsHandler for Handler {
 				Some(mut in_substream) => {
 					let handshake = in_substream.take_received_handshake().expect("qed");
 					self.events_queue.push_back(ProtocolsHandlerEvent::Custom(
-						HandlerOut::ProtocolOpen {
-							nonce: self.nonce,
-							handshake,
-						},
+						HandlerOut::ProtocolOpen { handshake },
 					));
 					State::Opened {
 						in_substream,
@@ -352,7 +328,7 @@ impl ProtocolsHandler for Handler {
 
 	fn inject_event(&mut self, event: HandlerIn) {
 		match event {
-			HandlerIn::Open => self.open(),
+			HandlerIn::Open { handshake } => self.open(handshake),
 			HandlerIn::Close => self.close(),
 			HandlerIn::SendMessage { message } => self.send_message(message),
 		}

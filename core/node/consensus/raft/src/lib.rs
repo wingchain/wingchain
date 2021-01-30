@@ -20,9 +20,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use futures::channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
-use futures::future::BoxFuture;
 use futures::prelude::*;
-use futures::stream::FuturesUnordered;
 use log::{error, info};
 use parking_lot::RwLock;
 
@@ -38,11 +36,12 @@ use node_executor_primitives::EmptyParams;
 use primitives::errors::CommonResult;
 use primitives::{Address, BlockNumber, Header, PublicKey, SecretKey};
 
-use crate::protocol::{RaftMessage, RequestId};
+use crate::protocol::RequestId;
 use node_consensus_base::errors::ErrorKind;
 
+pub mod errors;
 mod protocol;
-mod request_response;
+mod request;
 
 pub struct Raft<S>
 where
@@ -126,14 +125,6 @@ where
 	in_rx: UnboundedReceiver<ConsensusInMessage>,
 	peers: HashMap<PeerId, PeerInfo>,
 	known_validators: HashMap<Address, PeerId>,
-	requests: HashMap<
-		RequestId,
-		(
-			Arc<dyn Fn(RaftMessage) + Send + Sync>,
-			Arc<dyn Fn() + Send + Sync>,
-		),
-	>,
-	requests_timer: FuturesUnordered<BoxFuture<'static, RequestId>>,
 	next_request_id: RequestId,
 }
 
@@ -166,8 +157,6 @@ where
 			in_rx,
 			peers: HashMap::new(),
 			known_validators: HashMap::new(),
-			requests: HashMap::new(),
-			requests_timer: FuturesUnordered::new(),
 			next_request_id: RequestId(0),
 		};
 		tokio::spawn(this.start());
@@ -179,12 +168,8 @@ where
 		loop {
 			tokio::select! {
 				Some(in_message) = self.in_rx.next() => {
-					self.on_in_message(in_message)
+					self.on_in_message(in_message).await
 						.unwrap_or_else(|e| error!("Consensus raft handle in message error: {}", e));
-				}
-				Some(request_id) = self.requests_timer.next() => {
-					self.on_requests_timer_trigger(request_id)
-						.unwrap_or_else(|e| error!("Consensus raft requests timer result error: {}", e));
 				}
 			}
 		}
@@ -196,7 +181,7 @@ impl<S> RaftStream<S>
 where
 	S: ConsensusSupport,
 {
-	fn on_in_message(&mut self, in_message: ConsensusInMessage) -> CommonResult<()> {
+	async fn on_in_message(&mut self, in_message: ConsensusInMessage) -> CommonResult<()> {
 		match in_message {
 			ConsensusInMessage::NetworkProtocolOpen {
 				peer_id,

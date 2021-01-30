@@ -27,6 +27,7 @@ utils-enum-codec = { path = "../../../../utils/enum-codec"}
 
 [dev-dependencies]
 tempfile = "3.1.0"
+env_logger = "0.7.1"
 
 node-coordinator = { path = "../../coordinator" }
 node-txpool = { path = "../../txpool" }

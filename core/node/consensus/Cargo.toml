@@ -16,4 +16,5 @@ primitives = { path = "../../primitives" }
 node-consensus-primitives = { path = "primitives" }
 node-consensus-base = { path = "base" }
 node-consensus-poa = { path = "./poa" }
+node-consensus-raft = { path = "./raft" }
 

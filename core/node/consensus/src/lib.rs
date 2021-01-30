@@ -23,7 +23,8 @@ use node_consensus_base::{
 	Consensus as ConsensusT, ConsensusConfig, ConsensusInMessage, ConsensusOutMessage,
 };
 use node_consensus_poa::Poa;
-use node_consensus_primitives::CONSENSUS_POA;
+use node_consensus_primitives::{CONSENSUS_POA, CONSENSUS_RAFT};
+use node_consensus_raft::Raft;
 use primitives::errors::CommonResult;
 use primitives::{Header, Proof};
 
@@ -39,6 +40,7 @@ where
 	S: ConsensusSupport,
 {
 	Poa(Poa<S>),
+	Raft(Raft<S>),
 }
 
 impl<S> Consensus<S>
@@ -50,10 +52,8 @@ where
 		let consensus = system_meta.consensus.as_str();
 
 		let dispatcher = match consensus {
-			CONSENSUS_POA => {
-				let poa = Poa::new(config, support)?;
-				Dispatcher::Poa(poa)
-			}
+			CONSENSUS_POA => Dispatcher::Poa(Poa::new(config, support)?),
+			CONSENSUS_RAFT => Dispatcher::Raft(Raft::new(config, support)?),
 			other => {
 				panic!("Unknown consensus: {}", other);
 			}
@@ -83,19 +83,22 @@ where
 {
 	fn verify_proof(&self, header: &Header, proof: &Proof) -> CommonResult<()> {
 		match self {
-			Dispatcher::Poa(poa) => poa.verify_proof(header, proof),
+			Dispatcher::Poa(c) => c.verify_proof(header, proof),
+			Dispatcher::Raft(c) => c.verify_proof(header, proof),
 		}
 	}
 
 	fn in_message_tx(&self) -> UnboundedSender<ConsensusInMessage> {
 		match self {
-			Dispatcher::Poa(poa) => poa.in_message_tx(),
+			Dispatcher::Poa(c) => c.in_message_tx(),
+			Dispatcher::Raft(c) => c.in_message_tx(),
 		}
 	}
 
 	fn out_message_rx(&self) -> Option<UnboundedReceiver<ConsensusOutMessage>> {
 		match self {
-			Dispatcher::Poa(poa) => poa.out_message_rx(),
+			Dispatcher::Poa(c) => c.out_message_rx(),
+			Dispatcher::Raft(c) => c.out_message_rx(),
 		}
 	}
 }
