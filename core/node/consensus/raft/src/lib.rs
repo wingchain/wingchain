@@ -13,8 +13,6 @@
 // limitations under the License.
 
 //! Raft consensus
-//! TODO rm
-#![allow(dead_code)]
 
 use std::sync::Arc;
 
@@ -46,6 +44,7 @@ pub struct Raft<S>
 where
 	S: ConsensusSupport,
 {
+	#[allow(dead_code)]
 	support: Arc<S>,
 	in_tx: UnboundedSender<ConsensusInMessage>,
 	out_rx: RwLock<Option<UnboundedReceiver<ConsensusOutMessage>>>,

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::network::PeerInfo;
-use crate::protocol::{RequestId, RequestVoteRes};
+use crate::protocol::{AppendEntriesRes, RequestId, RequestVoteRes};
 use crate::state::{CandidateState, FollowerState, LeaderState, ObserverState, State};
 use crate::storage::Storage;
 use crypto::address::Address as AddressT;
@@ -54,6 +54,7 @@ where
 	pub last_heartbeat_instant: Option<Instant>,
 	pub state: State,
 	pub request_vote_res_tx: Option<UnboundedSender<(Address, RequestVoteRes)>>,
+	pub append_entries_res_tx: Option<UnboundedSender<(Address, AppendEntriesRes)>>,
 }
 
 impl<S> RaftStream<S>
@@ -94,6 +95,7 @@ where
 			last_heartbeat_instant: None,
 			state: State::Observer,
 			request_vote_res_tx: None,
+			append_entries_res_tx: None,
 		};
 		tokio::spawn(this.start());
 		Ok(())

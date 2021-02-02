@@ -41,16 +41,18 @@ pub struct RegisterValidatorRes {
 	pub success: bool,
 }
 
-#[derive(Encode, Decode)]
+#[derive(Encode, Decode, Debug)]
 pub struct AppendEntriesReq {
 	pub request_id: RequestId,
 	pub term: u64,
+	pub prev_log_index: u64,
+	pub prev_log_term: u64,
 	pub commit_log_index: u64,
 	pub entries: Vec<Entry>,
 	pub entry_data_slice: Option<EntryDataSlice>,
 }
 
-#[derive(Encode, Decode)]
+#[derive(Encode, Decode, Debug)]
 pub struct AppendEntriesRes {
 	pub request_id: RequestId,
 	pub success: bool,
@@ -72,20 +74,20 @@ pub struct RequestVoteRes {
 	pub vote_granted: bool,
 }
 
-#[derive(Encode, Decode)]
+#[derive(Encode, Decode, Debug)]
 pub struct Entry {
 	pub term: u64,
 	pub index: u64,
 	pub data: EntryData,
 }
 
-#[derive(Encode, Decode)]
+#[derive(Encode, Decode, Debug)]
 pub enum EntryData {
 	Blank,
 	Data { id: Hash },
 }
 
-#[derive(Encode, Decode)]
+#[derive(Encode, Decode, Debug)]
 pub enum EntryDataSlice {
 	Header {
 		id: Hash,

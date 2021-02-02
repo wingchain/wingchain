@@ -29,66 +29,65 @@ use crate::protocol::{
 use crate::state::State;
 use crate::stream::{get_address, RaftStream};
 
-pub struct Network {}
-
 /// methods for request/response
 impl<S> RaftStream<S>
 where
 	S: ConsensusSupport,
 {
-	pub fn register_validator(&mut self, peer_id: PeerId) -> CommonResult<()> {
-		if let Some(peer_info) = self.peers.get(&peer_id) {
-			let message = codec::encode(&peer_info.remote_nonce)?;
-			let dsa = self.support.get_basic()?.dsa.clone();
-			let signature = {
-				let keypair = dsa.key_pair_from_secret_key(&self.secret_key.0)?;
-				let (_, _, signature_len) = dsa.length().into();
-				let mut out = vec![0u8; signature_len];
-				keypair.sign(&message, &mut out);
-				Signature(out)
-			};
+	pub fn register_validator(&mut self, peer_id: PeerId) -> CommonResult<Option<RequestId>> {
+		let peer_info = match self.peers.get(&peer_id) {
+			Some(v) => v,
+			None => return Ok(None),
+		};
 
-			let req = RegisterValidatorReq {
-				request_id: RequestId(0),
-				public_key: self.public_key.clone(),
-				signature,
-			};
+		let message = codec::encode(&peer_info.remote_nonce)?;
+		let dsa = self.support.get_basic()?.dsa.clone();
+		let signature = {
+			let keypair = dsa.key_pair_from_secret_key(&self.secret_key.0)?;
+			let (_, _, signature_len) = dsa.length().into();
+			let mut out = vec![0u8; signature_len];
+			keypair.sign(&message, &mut out);
+			Signature(out)
+		};
 
-			self.request(peer_id.clone(), req)?;
-		}
+		let req = RegisterValidatorReq {
+			request_id: RequestId(0),
+			public_key: self.public_key.clone(),
+			signature,
+		};
+		let request_id = self.request(peer_id.clone(), req)?;
 
-		Ok(())
+		Ok(Some(request_id))
 	}
 
-	pub fn append_entries(&mut self, address: Address) -> CommonResult<()> {
-		if let Some(peer_id) = self.known_validators.get(&address) {
-			let req = AppendEntriesReq {
-				request_id: RequestId(0),
-				term: self.storage.get_current_term(),
-				commit_log_index: self.storage.get_commit_log_index(),
-				entries: vec![],
-				entry_data_slice: None,
-			};
-			let peer_id = peer_id.clone();
-			self.request(peer_id, req)?;
-		}
-		Ok(())
+	pub fn append_entries(
+		&mut self,
+		address: Address,
+		req: AppendEntriesReq,
+	) -> CommonResult<Option<RequestId>> {
+		let peer_id = match self.known_validators.get(&address) {
+			Some(v) => v,
+			None => return Ok(None),
+		};
+		let peer_id = peer_id.clone();
+		let request_id = self.request(peer_id, req)?;
+
+		Ok(Some(request_id))
 	}
 
-	pub fn request_vote(&mut self, address: Address) -> CommonResult<()> {
-		if let Some(peer_id) = self.known_validators.get(&address) {
-			let (last_log_index, last_log_term) = self.storage.get_last_log_index_term();
+	pub fn request_vote(
+		&mut self,
+		address: Address,
+		req: RequestVoteReq,
+	) -> CommonResult<Option<RequestId>> {
+		let peer_id = match self.known_validators.get(&address) {
+			Some(v) => v,
+			None => return Ok(None),
+		};
+		let peer_id = peer_id.clone();
+		let request_id = self.request(peer_id, req)?;
 
-			let req = RequestVoteReq {
-				request_id: RequestId(0),
-				term: self.storage.get_current_term(),
-				last_log_index,
-				last_log_term,
-			};
-			let peer_id = peer_id.clone();
-			self.request(peer_id, req)?;
-		}
-		Ok(())
+		Ok(Some(request_id))
 	}
 
 	fn on_req_register_validator(
@@ -170,9 +169,12 @@ where
 
 	fn on_res_append_entries(
 		&mut self,
-		_address: Address,
-		_res: AppendEntriesRes,
+		address: Address,
+		res: AppendEntriesRes,
 	) -> CommonResult<()> {
+		if let Some(tx) = &self.append_entries_res_tx {
+			let _ = tx.unbounded_send((address, res));
+		}
 		Ok(())
 	}
 
@@ -353,12 +355,12 @@ impl<S> RaftStream<S>
 where
 	S: ConsensusSupport,
 {
-	fn request<Req>(&mut self, peer_id: PeerId, mut request: Req) -> CommonResult<()>
+	fn request<Req>(&mut self, peer_id: PeerId, mut request: Req) -> CommonResult<RequestId>
 	where
 		Req: RequestIdAware + Into<RaftMessage>,
 	{
 		let request_id = Self::next_request_id(&mut self.next_request_id);
-		request.set_request_id(request_id);
+		request.set_request_id(request_id.clone());
 
 		let message = request.into();
 		let out_message = ConsensusOutMessage::NetworkMessage {
@@ -367,7 +369,7 @@ where
 		};
 		self.send_out_message(out_message)?;
 
-		Ok(())
+		Ok(request_id)
 	}
 
 	fn get_peer_address(&self, peer_id: &PeerId) -> Option<Address> {
