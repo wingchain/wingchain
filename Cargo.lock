@@ -3133,6 +3133,7 @@ dependencies = [
  "parity-scale-codec",
  "parking_lot 0.10.2",
  "primitives",
+ "rand 0.7.3",
  "tempfile",
  "tokio 1.0.0",
  "utils-enum-codec",

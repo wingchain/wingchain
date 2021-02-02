@@ -16,34 +16,31 @@
 //! TODO rm
 #![allow(dead_code)]
 
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use futures::channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
-use futures::prelude::*;
-use log::{error, info};
+use log::info;
 use parking_lot::RwLock;
 
-use crypto::address::Address as AddressT;
-use crypto::dsa::{Dsa, KeyPair};
 use node_consensus_base::support::ConsensusSupport;
 use node_consensus_base::{
-	Consensus as ConsensusT, ConsensusConfig, ConsensusInMessage, ConsensusOutMessage, PeerId,
+	Consensus as ConsensusT, ConsensusConfig, ConsensusInMessage, ConsensusOutMessage,
 };
 use node_consensus_primitives::CONSENSUS_RAFT;
-use node_executor::module::{self, raft::Meta};
+use node_executor::module;
 use node_executor_primitives::EmptyParams;
 use primitives::errors::CommonResult;
-use primitives::{Address, BlockNumber, Header, PublicKey, SecretKey};
+use primitives::{BlockNumber, Header};
 
-use crate::protocol::RequestId;
-use crate::state::{LogIndex, Term};
+use crate::stream::RaftStream;
 
-mod chain;
 pub mod errors;
 mod network;
+mod proof;
 mod protocol;
 mod state;
+mod storage;
+mod stream;
 
 pub struct Raft<S>
 where
@@ -107,88 +104,6 @@ where
 	}
 }
 
-struct PeerInfo {
-	local_nonce: u64,
-	remote_nonce: u64,
-	address: Option<Address>,
-}
-
-#[allow(clippy::type_complexity)]
-struct RaftStream<S>
-where
-	S: ConsensusSupport,
-{
-	support: Arc<S>,
-	raft_meta: Meta,
-	secret_key: SecretKey,
-	public_key: PublicKey,
-	address: Address,
-	out_tx: UnboundedSender<ConsensusOutMessage>,
-	in_rx: UnboundedReceiver<ConsensusInMessage>,
-	peers: HashMap<PeerId, PeerInfo>,
-	known_validators: HashMap<Address, PeerId>,
-	next_request_id: RequestId,
-	last_log_index: LogIndex,
-	last_log_term: Term,
-	current_term: Term,
-}
-
-impl<S> RaftStream<S>
-where
-	S: ConsensusSupport,
-{
-	fn spawn(
-		support: Arc<S>,
-		raft_meta: Meta,
-		secret_key: Option<SecretKey>,
-		out_tx: UnboundedSender<ConsensusOutMessage>,
-		in_rx: UnboundedReceiver<ConsensusInMessage>,
-	) -> CommonResult<()> {
-		let secret_key = match secret_key {
-			Some(v) => v,
-			None => return Ok(()),
-		};
-
-		let public_key = get_public_key(&secret_key, &support)?;
-		let address = get_address(&public_key, &support)?;
-
-		let this = Self {
-			support,
-			raft_meta,
-			secret_key,
-			public_key,
-			address,
-			out_tx,
-			in_rx,
-			peers: HashMap::new(),
-			known_validators: HashMap::new(),
-			next_request_id: RequestId(0),
-			last_log_index: Default::default(),
-			last_log_term: Default::default(),
-			current_term: Default::default(),
-		};
-		tokio::spawn(this.start());
-		Ok(())
-	}
-
-	async fn start(mut self) -> CommonResult<()> {
-		info!("Start raft work");
-
-		self.last_log_index = self.chain_get_last_log_index()?;
-		self.last_log_term = self.chain_get_last_log_term()?;
-		self.current_term = self.chain_get_current_term()?;
-
-		loop {
-			tokio::select! {
-				Some(in_message) = self.in_rx.next() => {
-					self.on_in_message(in_message)
-						.unwrap_or_else(|e| error!("Consensus raft handle in message error: {}", e));
-				}
-			}
-		}
-	}
-}
-
 fn get_raft_meta<S: ConsensusSupport>(
 	support: &Arc<S>,
 	number: &BlockNumber,
@@ -202,31 +117,4 @@ fn get_raft_meta<S: ConsensusSupport>(
 			EmptyParams,
 		)
 		.map(|x| x.expect("qed"))
-}
-
-fn get_public_key<S: ConsensusSupport>(
-	secret_key: &SecretKey,
-	support: &Arc<S>,
-) -> CommonResult<PublicKey> {
-	let dsa = support.get_basic()?.dsa.clone();
-	let (_, public_key_len, _) = dsa.length().into();
-	let mut public_key = vec![0u8; public_key_len];
-	dsa.key_pair_from_secret_key(&secret_key.0)?
-		.public_key(&mut public_key);
-
-	let public_key = PublicKey(public_key);
-	Ok(public_key)
-}
-
-fn get_address<S: ConsensusSupport>(
-	public_key: &PublicKey,
-	support: &Arc<S>,
-) -> CommonResult<Address> {
-	let addresser = support.get_basic()?.address.clone();
-	let address_len = addresser.length().into();
-	let mut address = vec![0u8; address_len];
-	addresser.address(&mut address, &public_key.0);
-
-	let address = Address(address);
-	Ok(address)
 }

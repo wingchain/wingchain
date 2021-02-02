@@ -65,9 +65,11 @@ impl<C: Context, U: Util> Module<C, U> {
 			return Err("Not genesis".into());
 		}
 		self.block_interval.set(&params.block_interval)?;
-		self.heartbeat_interval.set(&params.block_interval)?;
-		self.election_timeout_min.set(&params.block_interval)?;
-		self.election_timeout_max.set(&params.block_interval)?;
+		self.heartbeat_interval.set(&params.heartbeat_interval)?;
+		self.election_timeout_min
+			.set(&params.election_timeout_min)?;
+		self.election_timeout_max
+			.set(&params.election_timeout_max)?;
 		self.admin.set(&params.admin)?;
 		self.authorities.set(&params.authorities)?;
 		Ok(())

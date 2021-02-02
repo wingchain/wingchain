@@ -83,7 +83,7 @@ async fn test_raft_balance() {
 		.map(|x| base::get_service(&x.0, &x.1, x.2.clone(), x.3, bootnodes.clone()))
 		.collect::<Vec<_>>();
 
-	tokio::time::sleep(Duration::from_secs(10)).await;
+	tokio::time::sleep(Duration::from_secs(30)).await;
 }
 
 #[test]

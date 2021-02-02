@@ -14,7 +14,7 @@
 
 use derive_more::{Display, From, TryInto};
 use primitives::codec::{Decode, Encode};
-use primitives::{PublicKey, Signature};
+use primitives::{Hash, PublicKey, Signature};
 use utils_enum_codec::enum_codec;
 
 #[enum_codec]
@@ -22,6 +22,10 @@ use utils_enum_codec::enum_codec;
 pub enum RaftMessage {
 	RegisterValidatorReq(RegisterValidatorReq),
 	RegisterValidatorRes(RegisterValidatorRes),
+	AppendEntriesReq(AppendEntriesReq),
+	AppendEntriesRes(AppendEntriesRes),
+	RequestVoteReq(RequestVoteReq),
+	RequestVoteRes(RequestVoteRes),
 }
 
 #[derive(Encode, Decode)]
@@ -37,6 +41,63 @@ pub struct RegisterValidatorRes {
 	pub success: bool,
 }
 
+#[derive(Encode, Decode)]
+pub struct AppendEntriesReq {
+	pub request_id: RequestId,
+	pub term: u64,
+	pub commit_log_index: u64,
+	pub entries: Vec<Entry>,
+	pub entry_data_slice: Option<EntryDataSlice>,
+}
+
+#[derive(Encode, Decode)]
+pub struct AppendEntriesRes {
+	pub request_id: RequestId,
+	pub success: bool,
+	pub term: u64,
+}
+
+#[derive(Encode, Decode)]
+pub struct RequestVoteReq {
+	pub request_id: RequestId,
+	pub term: u64,
+	pub last_log_index: u64,
+	pub last_log_term: u64,
+}
+
+#[derive(Encode, Decode)]
+pub struct RequestVoteRes {
+	pub request_id: RequestId,
+	pub term: u64,
+	pub vote_granted: bool,
+}
+
+#[derive(Encode, Decode)]
+pub struct Entry {
+	pub term: u64,
+	pub index: u64,
+	pub data: EntryData,
+}
+
+#[derive(Encode, Decode)]
+pub enum EntryData {
+	Blank,
+	Data { id: Hash },
+}
+
+#[derive(Encode, Decode)]
+pub enum EntryDataSlice {
+	Header {
+		id: Hash,
+		count: u32,
+	},
+	Payload {
+		id: Hash,
+		index: u32,
+		value: Vec<u8>,
+	},
+}
+
 impl RequestIdAware for RegisterValidatorReq {
 	fn get_request_id(&self) -> RequestId {
 		self.request_id.clone()
@@ -47,6 +108,42 @@ impl RequestIdAware for RegisterValidatorReq {
 }
 
 impl RequestIdAware for RegisterValidatorRes {
+	fn get_request_id(&self) -> RequestId {
+		self.request_id.clone()
+	}
+	fn set_request_id(&mut self, request_id: RequestId) {
+		self.request_id = request_id;
+	}
+}
+
+impl RequestIdAware for AppendEntriesReq {
+	fn get_request_id(&self) -> RequestId {
+		self.request_id.clone()
+	}
+	fn set_request_id(&mut self, request_id: RequestId) {
+		self.request_id = request_id;
+	}
+}
+
+impl RequestIdAware for AppendEntriesRes {
+	fn get_request_id(&self) -> RequestId {
+		self.request_id.clone()
+	}
+	fn set_request_id(&mut self, request_id: RequestId) {
+		self.request_id = request_id;
+	}
+}
+
+impl RequestIdAware for RequestVoteReq {
+	fn get_request_id(&self) -> RequestId {
+		self.request_id.clone()
+	}
+	fn set_request_id(&mut self, request_id: RequestId) {
+		self.request_id = request_id;
+	}
+}
+
+impl RequestIdAware for RequestVoteRes {
 	fn get_request_id(&self) -> RequestId {
 		self.request_id.clone()
 	}

@@ -22,7 +22,7 @@ use primitives::codec::{Decode, Encode};
 use primitives::errors::CommonResult;
 use primitives::types::CallResult;
 use primitives::{
-	Address, BlockNumber, BuildBlockParams, Call, FullTransaction, Hash, Header, Transaction,
+	Address, BlockNumber, BuildBlockParams, Call, FullTransaction, Hash, Header, Proof, Transaction,
 };
 
 pub trait ConsensusSupport: Send + Sync + 'static {
@@ -30,6 +30,7 @@ pub trait ConsensusSupport: Send + Sync + 'static {
 	fn get_execution_number(&self) -> CommonResult<Option<BlockNumber>>;
 	fn get_block_hash(&self, number: &BlockNumber) -> CommonResult<Option<Hash>>;
 	fn get_header(&self, block_hash: &Hash) -> CommonResult<Option<Header>>;
+	fn get_proof(&self, block_hash: &Hash) -> CommonResult<Option<Proof>>;
 	fn get_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Transaction>>;
 	fn validate_transaction(
 		&self,
@@ -88,6 +89,9 @@ impl ConsensusSupport for DefaultConsensusSupport {
 	}
 	fn get_header(&self, block_hash: &Hash) -> CommonResult<Option<Header>> {
 		self.chain.get_header(block_hash)
+	}
+	fn get_proof(&self, block_hash: &Hash) -> CommonResult<Option<Proof>> {
+		self.chain.get_proof(block_hash)
 	}
 	fn get_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Transaction>> {
 		self.chain.get_transaction(tx_hash)

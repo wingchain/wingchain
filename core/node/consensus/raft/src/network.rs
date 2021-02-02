@@ -13,18 +13,23 @@
 // limitations under the License.
 
 use log::info;
+use tokio::time::Instant;
 
 use crypto::dsa::{Dsa, KeyPair, Verifier};
 use node_consensus_base::support::ConsensusSupport;
 use node_consensus_base::{ConsensusInMessage, ConsensusOutMessage, PeerId};
 use primitives::codec::{self, Encode};
 use primitives::errors::CommonResult;
-use primitives::Signature;
+use primitives::{Address, Signature};
 
 use crate::protocol::{
-	RaftMessage, RegisterValidatorReq, RegisterValidatorRes, RequestId, RequestIdAware,
+	AppendEntriesReq, AppendEntriesRes, RaftMessage, RegisterValidatorReq, RegisterValidatorRes,
+	RequestId, RequestIdAware, RequestVoteReq, RequestVoteRes,
 };
-use crate::{get_address, PeerInfo, RaftStream};
+use crate::state::State;
+use crate::stream::{get_address, RaftStream};
+
+pub struct Network {}
 
 /// methods for request/response
 impl<S> RaftStream<S>
@@ -55,27 +60,59 @@ where
 		Ok(())
 	}
 
+	pub fn append_entries(&mut self, address: Address) -> CommonResult<()> {
+		if let Some(peer_id) = self.known_validators.get(&address) {
+			let req = AppendEntriesReq {
+				request_id: RequestId(0),
+				term: self.storage.get_current_term(),
+				commit_log_index: self.storage.get_commit_log_index(),
+				entries: vec![],
+				entry_data_slice: None,
+			};
+			let peer_id = peer_id.clone();
+			self.request(peer_id, req)?;
+		}
+		Ok(())
+	}
+
+	pub fn request_vote(&mut self, address: Address) -> CommonResult<()> {
+		if let Some(peer_id) = self.known_validators.get(&address) {
+			let (last_log_index, last_log_term) = self.storage.get_last_log_index_term();
+
+			let req = RequestVoteReq {
+				request_id: RequestId(0),
+				term: self.storage.get_current_term(),
+				last_log_index,
+				last_log_term,
+			};
+			let peer_id = peer_id.clone();
+			self.request(peer_id, req)?;
+		}
+		Ok(())
+	}
+
 	fn on_req_register_validator(
 		&mut self,
 		peer_id: PeerId,
 		req: RegisterValidatorReq,
 	) -> CommonResult<RegisterValidatorRes> {
 		let mut success = false;
-		if let Some(peer_info) = self.peers.get(&peer_id) {
+		if let Some(peer_info) = self.peers.get_mut(&peer_id) {
 			let dsa = self.support.get_basic()?.dsa.clone();
 			let verifier = dsa.verifier_from_public_key(&req.public_key.0)?;
 			let message = codec::encode(&peer_info.local_nonce)?;
 			let result = verifier.verify(&message, &req.signature.0);
 			success = result.is_ok();
-		}
 
-		if success {
-			let address = get_address(&req.public_key, &self.support)?;
-			info!(
-				"Register validator accepted: peer_id: {}, address: {}",
-				peer_id, address
-			);
-			self.known_validators.insert(address, peer_id);
+			if success {
+				let address = get_address(&req.public_key, &self.support)?;
+				info!(
+					"Register validator accepted: peer_id: {}, address: {}",
+					peer_id, address
+				);
+				peer_info.address = Some(address.clone());
+				self.known_validators.insert(address, peer_id);
+			}
 		}
 
 		Ok(RegisterValidatorRes {
@@ -93,6 +130,130 @@ where
 			"Register validator result: peer_id: {}, success: {}",
 			peer_id, res.success
 		);
+		Ok(())
+	}
+
+	fn on_req_append_entries(
+		&mut self,
+		address: Address,
+		req: AppendEntriesReq,
+	) -> CommonResult<AppendEntriesRes> {
+		let current_term = self.storage.get_current_term();
+		if req.term < current_term {
+			return Ok(AppendEntriesRes {
+				request_id: req.request_id,
+				success: false,
+				term: current_term,
+			});
+		}
+
+		self.update_next_election_instant(true);
+		self.storage.update_commit_log_index(req.commit_log_index)?;
+
+		if req.term != current_term {
+			self.storage.update_current_term(req.term)?;
+			self.storage.update_current_voted_for(None)?;
+		}
+
+		self.update_current_leader(Some(address));
+
+		self.update_state(State::Follower);
+
+		// TODO process entries
+
+		Ok(AppendEntriesRes {
+			request_id: req.request_id,
+			success: true,
+			term: current_term,
+		})
+	}
+
+	fn on_res_append_entries(
+		&mut self,
+		_address: Address,
+		_res: AppendEntriesRes,
+	) -> CommonResult<()> {
+		Ok(())
+	}
+
+	fn on_req_request_vote(
+		&mut self,
+		address: Address,
+		req: RequestVoteReq,
+	) -> CommonResult<RequestVoteRes> {
+		let current_term = self.storage.get_current_term();
+		if req.term < current_term {
+			return Ok(RequestVoteRes {
+				request_id: req.request_id,
+				term: current_term,
+				vote_granted: false,
+			});
+		}
+
+		if let Some(last_heartbeat_instant) = &self.last_heartbeat_instant {
+			let now = Instant::now();
+			let duration = now.duration_since(*last_heartbeat_instant);
+			if self.raft_meta.election_timeout_min >= (duration.as_millis() as u64) {
+				return Ok(RequestVoteRes {
+					request_id: req.request_id,
+					term: current_term,
+					vote_granted: false,
+				});
+			}
+		}
+
+		if req.term > current_term {
+			self.update_next_election_instant(false);
+			self.update_state(State::Follower);
+
+			self.storage.update_current_term(req.term)?;
+			self.storage.update_current_voted_for(None)?;
+		}
+
+		let (last_log_index, last_log_term) = self.storage.get_last_log_index_term();
+
+		let uptodate = req.last_log_index >= last_log_index && req.last_log_term >= last_log_term;
+
+		if !uptodate {
+			return Ok(RequestVoteRes {
+				request_id: req.request_id,
+				term: current_term,
+				vote_granted: false,
+			});
+		}
+
+		let current_voted_for = self.storage.get_current_voted_for();
+
+		match &current_voted_for {
+			Some(voted_address) if voted_address == &address => Ok(RequestVoteRes {
+				request_id: req.request_id,
+				term: current_term,
+				vote_granted: true,
+			}),
+			Some(_) => Ok(RequestVoteRes {
+				request_id: req.request_id,
+				term: current_term,
+				vote_granted: false,
+			}),
+			None => {
+				self.update_state(State::Follower);
+				self.update_next_election_instant(false);
+
+				self.storage.update_current_voted_for(Some(address))?;
+
+				Ok(RequestVoteRes {
+					request_id: req.request_id,
+					term: current_term,
+					vote_granted: true,
+				})
+			}
+		}
+	}
+
+	fn on_res_request_vote(&mut self, address: Address, res: RequestVoteRes) -> CommonResult<()> {
+		if let Some(tx) = &self.request_vote_res_tx {
+			let _ = tx.unbounded_send((address, res));
+		}
 		Ok(())
 	}
 }
@@ -160,6 +321,28 @@ where
 			RaftMessage::RegisterValidatorRes(res) => {
 				self.on_res_register_validator(peer_id, res)?;
 			}
+			RaftMessage::AppendEntriesReq(req) => {
+				if let Some(address) = self.get_peer_address(&peer_id) {
+					let res = self.on_req_append_entries(address, req)?;
+					self.response(peer_id, res)?;
+				}
+			}
+			RaftMessage::AppendEntriesRes(res) => {
+				if let Some(address) = self.get_peer_address(&peer_id) {
+					self.on_res_append_entries(address, res)?;
+				}
+			}
+			RaftMessage::RequestVoteReq(req) => {
+				if let Some(address) = self.get_peer_address(&peer_id) {
+					let res = self.on_req_request_vote(address, req)?;
+					self.response(peer_id, res)?;
+				}
+			}
+			RaftMessage::RequestVoteRes(res) => {
+				if let Some(address) = self.get_peer_address(&peer_id) {
+					self.on_res_request_vote(address, res)?;
+				}
+			}
 		};
 		Ok(())
 	}
@@ -187,6 +370,13 @@ where
 		Ok(())
 	}
 
+	fn get_peer_address(&self, peer_id: &PeerId) -> Option<Address> {
+		match self.peers.get(peer_id) {
+			Some(peer_info) => peer_info.address.clone(),
+			None => None,
+		}
+	}
+
 	fn response<Res>(&self, peer_id: PeerId, res: Res) -> CommonResult<()>
 	where
 		Res: Into<RaftMessage>,
@@ -211,4 +401,10 @@ where
 			.map_err(|e| node_consensus_base::errors::ErrorKind::Channel(Box::new(e)))?;
 		Ok(())
 	}
+}
+
+pub struct PeerInfo {
+	local_nonce: u64,
+	remote_nonce: u64,
+	address: Option<Address>,
 }
