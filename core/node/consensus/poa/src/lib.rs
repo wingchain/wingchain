@@ -184,7 +184,7 @@ where
 					match item {
 						Ok(v) => {
 							self.work(v)
-								.unwrap_or_else(|e| error!("Consensus poa handle work error: {}", e));
+								.unwrap_or_else(|e| error!("Poa stream handle work error: {}", e));
 						},
 						Err(e) => {
 							error!("Terminated with an error: {:?}", e);
@@ -194,7 +194,7 @@ where
 				}
 				Some(in_message) = self.in_rx.next() => {
 					self.on_in_message(in_message)
-						.unwrap_or_else(|e| error!("Consensus poa handle in message error: {}", e));
+						.unwrap_or_else(|e| error!("Poa stream handle in message error: {}", e));
 				}
 			}
 		}

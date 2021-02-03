@@ -23,6 +23,7 @@ use node_executor::module::raft::Authorities;
 use node_executor_primitives::EmptyParams;
 use parking_lot::RwLock;
 use std::collections::BTreeMap;
+use std::ops::RangeBounds;
 use std::sync::Arc;
 
 const DB_KEY_CURRENT_TERM: &[u8] = b"current_term";
@@ -171,6 +172,10 @@ where
 		Ok(())
 	}
 
+	pub fn get_base_log_index_term(&self) -> (u64, u64) {
+		(*self.base_log_index.read(), *self.base_log_term.read())
+	}
+
 	pub fn get_last_log_index_term(&self) -> (u64, u64) {
 		match self.logs.read().iter().last() {
 			Some((_k, v)) => (v.index, v.term),
@@ -236,6 +241,63 @@ where
 
 	pub fn authorities_contains(&self, address: &Address) -> bool {
 		self.authorities.read().contains(address)
+	}
+
+	pub fn get_log_entries<R>(&self, range: R) -> Vec<Entry>
+	where
+		R: RangeBounds<u64>,
+	{
+		self.logs
+			.read()
+			.range(range)
+			.map(|(_, v)| v.clone())
+			.collect()
+	}
+
+	pub fn append_log_entries(&self, entry: Vec<Entry>) -> CommonResult<()> {
+		(*self.logs.write()).extend(entry.into_iter().map(|x| (x.index, x)));
+		let logs_vec = self
+			.logs
+			.read()
+			.iter()
+			.map(|(k, v)| (*k, v.clone()))
+			.collect::<Vec<_>>();
+		self.commit_consensus_data(|transaction| {
+			self.support
+				.update_consensus_data(transaction, DB_KEY_LOGS, &logs_vec)?;
+			Ok(())
+		})?;
+		Ok(())
+	}
+
+	pub fn delete_log_entries<R>(&self, range: R) -> CommonResult<()>
+	where
+		R: RangeBounds<u64>,
+	{
+		let to_remove_key = self
+			.logs
+			.read()
+			.range(range)
+			.map(|(k, _)| *k)
+			.collect::<Vec<_>>();
+
+		let mut guard = self.logs.write();
+		for key in &to_remove_key {
+			guard.remove(key);
+		}
+		drop(guard);
+		let logs_vec = self
+			.logs
+			.read()
+			.iter()
+			.map(|(k, v)| (*k, v.clone()))
+			.collect::<Vec<_>>();
+		self.commit_consensus_data(|transaction| {
+			self.support
+				.update_consensus_data(transaction, DB_KEY_LOGS, &logs_vec)?;
+			Ok(())
+		})?;
+		Ok(())
 	}
 
 	fn get_proof(&self) -> CommonResult<Option<Proof>> {

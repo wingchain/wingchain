@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use log::info;
+use log::{info, trace};
 use tokio::time::Instant;
 
 use crypto::dsa::{Dsa, KeyPair, Verifier};
@@ -39,6 +39,7 @@ where
 			Some(v) => v,
 			None => return Ok(None),
 		};
+		trace!("Request validator: peer_id: {}", peer_id);
 
 		let message = codec::encode(&peer_info.remote_nonce)?;
 		let dsa = self.support.get_basic()?.dsa.clone();
@@ -69,6 +70,8 @@ where
 			Some(v) => v,
 			None => return Ok(None),
 		};
+		trace!("Append entries: address: {}, req: {:?}", address, req);
+
 		let peer_id = peer_id.clone();
 		let request_id = self.request(peer_id, req)?;
 
@@ -84,6 +87,8 @@ where
 			Some(v) => v,
 			None => return Ok(None),
 		};
+		trace!("Request vote: address: {}, req: {:?}", address, req);
+
 		let peer_id = peer_id.clone();
 		let request_id = self.request(peer_id, req)?;
 
@@ -95,6 +100,12 @@ where
 		peer_id: PeerId,
 		req: RegisterValidatorReq,
 	) -> CommonResult<RegisterValidatorRes> {
+		trace!(
+			"On req register validator: peer_id: {}, req: {:?}",
+			peer_id,
+			req
+		);
+
 		let mut success = false;
 		if let Some(peer_info) = self.peers.get_mut(&peer_id) {
 			let dsa = self.support.get_basic()?.dsa.clone();
@@ -125,9 +136,10 @@ where
 		peer_id: PeerId,
 		res: RegisterValidatorRes,
 	) -> CommonResult<()> {
-		info!(
-			"Register validator result: peer_id: {}, success: {}",
-			peer_id, res.success
+		trace!(
+			"On res register validator: peer_id: {}, res: {:?}",
+			peer_id,
+			res
 		);
 		Ok(())
 	}
@@ -137,12 +149,21 @@ where
 		address: Address,
 		req: AppendEntriesReq,
 	) -> CommonResult<AppendEntriesRes> {
+		trace!(
+			"On req append entries: address: {}, req: {:?}",
+			address,
+			req
+		);
+		let (last_log_index, last_log_term) = self.storage.get_last_log_index_term();
+
 		let current_term = self.storage.get_current_term();
 		if req.term < current_term {
 			return Ok(AppendEntriesRes {
 				request_id: req.request_id,
 				success: false,
 				term: current_term,
+				last_log_index,
+				last_log_term,
 			});
 		}
 
@@ -158,12 +179,83 @@ where
 
 		self.update_state(State::Follower);
 
-		// TODO process entries
+		if req.entries.is_empty() {
+			return Ok(AppendEntriesRes {
+				request_id: req.request_id,
+				success: true,
+				term: current_term,
+				last_log_index,
+				last_log_term,
+			});
+		}
+
+		if req.entries.first().map(|x| x.index) != Some(req.prev_log_index + 1) {
+			return Ok(AppendEntriesRes {
+				request_id: req.request_id,
+				success: false,
+				term: current_term,
+				last_log_index,
+				last_log_term,
+			});
+		}
+
+		let (last_log_index, last_log_term) = self.storage.get_last_log_index_term();
+		let index_and_term_match =
+			(req.prev_log_index == last_log_index) && (req.prev_log_term == last_log_term);
+		if index_and_term_match {
+			self.storage.append_log_entries(req.entries)?;
+			let (last_log_index, last_log_term) = self.storage.get_last_log_index_term();
+			trace!(
+				"Storage appended log entries: last_log_index: {}, last_log_term: {}",
+				last_log_index,
+				last_log_term
+			);
+
+			return Ok(AppendEntriesRes {
+				request_id: req.request_id,
+				success: true,
+				term: current_term,
+				last_log_index,
+				last_log_term,
+			});
+		}
+
+		let (base_log_index, base_log_term) = self.storage.get_base_log_index_term();
+
+		let prev_log_exists = self
+			.storage
+			.get_log_entries(req.prev_log_index..=req.prev_log_index)
+			.into_iter()
+			.any(|x| x.term == req.prev_log_term)
+			|| (req.prev_log_index == base_log_index && req.prev_log_term == base_log_term);
+
+		if !prev_log_exists {
+			return Ok(AppendEntriesRes {
+				request_id: req.request_id,
+				success: false,
+				term: current_term,
+				last_log_index: base_log_index,
+				last_log_term: base_log_term,
+			});
+		}
+
+		self.storage
+			.delete_log_entries((req.prev_log_index + 1)..)?;
+		self.storage.append_log_entries(req.entries)?;
+
+		let (last_log_index, last_log_term) = self.storage.get_last_log_index_term();
+		trace!(
+			"Storage appended log entries: last_log_index: {}, last_log_term: {}",
+			last_log_index,
+			last_log_term
+		);
 
 		Ok(AppendEntriesRes {
 			request_id: req.request_id,
 			success: true,
 			term: current_term,
+			last_log_index,
+			last_log_term,
 		})
 	}
 
@@ -172,6 +264,12 @@ where
 		address: Address,
 		res: AppendEntriesRes,
 	) -> CommonResult<()> {
+		trace!(
+			"On res append entries: address: {}, res: {:?}",
+			address,
+			res
+		);
+
 		if let Some(tx) = &self.append_entries_res_tx {
 			let _ = tx.unbounded_send((address, res));
 		}
@@ -183,6 +281,8 @@ where
 		address: Address,
 		req: RequestVoteReq,
 	) -> CommonResult<RequestVoteRes> {
+		trace!("On req request vote: address: {}, req: {:?}", address, req);
+
 		let current_term = self.storage.get_current_term();
 		if req.term < current_term {
 			return Ok(RequestVoteRes {
@@ -253,6 +353,8 @@ where
 	}
 
 	fn on_res_request_vote(&mut self, address: Address, res: RequestVoteRes) -> CommonResult<()> {
+		trace!("On res request vote: address: {}, res: {:?}", address, res);
+
 		if let Some(tx) = &self.request_vote_res_tx {
 			let _ = tx.unbounded_send((address, res));
 		}

@@ -28,14 +28,14 @@ pub enum RaftMessage {
 	RequestVoteRes(RequestVoteRes),
 }
 
-#[derive(Encode, Decode)]
+#[derive(Encode, Decode, Debug)]
 pub struct RegisterValidatorReq {
 	pub request_id: RequestId,
 	pub public_key: PublicKey,
 	pub signature: Signature,
 }
 
-#[derive(Encode, Decode)]
+#[derive(Encode, Decode, Debug)]
 pub struct RegisterValidatorRes {
 	pub request_id: RequestId,
 	pub success: bool,
@@ -49,7 +49,6 @@ pub struct AppendEntriesReq {
 	pub prev_log_term: u64,
 	pub commit_log_index: u64,
 	pub entries: Vec<Entry>,
-	pub entry_data_slice: Option<EntryDataSlice>,
 }
 
 #[derive(Encode, Decode, Debug)]
@@ -57,9 +56,11 @@ pub struct AppendEntriesRes {
 	pub request_id: RequestId,
 	pub success: bool,
 	pub term: u64,
+	pub last_log_index: u64,
+	pub last_log_term: u64,
 }
 
-#[derive(Encode, Decode)]
+#[derive(Encode, Decode, Debug)]
 pub struct RequestVoteReq {
 	pub request_id: RequestId,
 	pub term: u64,
@@ -67,28 +68,28 @@ pub struct RequestVoteReq {
 	pub last_log_term: u64,
 }
 
-#[derive(Encode, Decode)]
+#[derive(Encode, Decode, Debug)]
 pub struct RequestVoteRes {
 	pub request_id: RequestId,
 	pub term: u64,
 	pub vote_granted: bool,
 }
 
-#[derive(Encode, Decode, Debug)]
+#[derive(Encode, Decode, Debug, Clone)]
 pub struct Entry {
 	pub term: u64,
 	pub index: u64,
 	pub data: EntryData,
 }
 
-#[derive(Encode, Decode, Debug)]
+#[derive(Encode, Decode, Debug, Clone)]
 pub enum EntryData {
 	Blank,
 	Data { id: Hash },
 }
 
 #[derive(Encode, Decode, Debug)]
-pub enum EntryDataSlice {
+pub enum DataSlice {
 	Header {
 		id: Hash,
 		count: u32,

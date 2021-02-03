@@ -27,7 +27,7 @@ use primitives::errors::CommonResult;
 use primitives::Address;
 
 use crate::protocol::{
-	AppendEntriesReq, AppendEntriesRes, RequestId, RequestVoteReq, RequestVoteRes,
+	AppendEntriesReq, AppendEntriesRes, Entry, EntryData, RequestId, RequestVoteReq, RequestVoteRes,
 };
 use crate::storage::Storage;
 use crate::stream::RaftStream;
@@ -71,21 +71,25 @@ where
 		let addresses = self.stream.storage.get_authorities();
 		let (last_log_index, last_log_term) = self.stream.storage.get_last_log_index_term();
 		for target in addresses {
-			let replication = Replication::new(
-				self.stream.raft_meta.clone(),
-				self.replication_out_tx.clone(),
-				self.stream.storage.clone(),
-				target.clone(),
-				last_log_index,
-				last_log_term,
-			)?;
-			self.replications.insert(target, replication);
+			if target != self.stream.address {
+				let replication = Replication::new(
+					self.stream.raft_meta.clone(),
+					self.replication_out_tx.clone(),
+					self.stream.storage.clone(),
+					target.clone(),
+					last_log_index,
+					last_log_term,
+				)?;
+				self.replications.insert(target, replication);
+			}
 		}
 
 		self.stream.last_heartbeat_instant = None;
 		self.stream.next_election_instant = None;
 		self.stream
 			.update_current_leader(Some(self.stream.address.clone()));
+
+		self.append_init_entry()?;
 
 		loop {
 			if self.stream.state != State::Leader {
@@ -94,15 +98,15 @@ where
 			tokio::select! {
 				Some(in_message) = self.stream.in_rx.next() => {
 					self.stream.on_in_message(in_message)
-						.unwrap_or_else(|e| error!("Consensus raft handle in message error: {}", e));
+						.unwrap_or_else(|e| error!("Raft stream handle in message error: {}", e));
 				},
 				Some(replication_out_message) = self.replication_out_rx.next() => {
 					self.on_replication_out_message(replication_out_message)
-						.unwrap_or_else(|e| error!("Consensus raft handle replication out message error: {}", e));
+						.unwrap_or_else(|e| error!("Raft stream handle replication out message error: {}", e));
 				}
 				Some((address, res)) = self.append_entries_res_rx.next() => {
 					self.on_append_entries_res(address, res)
-						.unwrap_or_else(|e| error!("Consensus raft handle append entries res error: {}", e));
+						.unwrap_or_else(|e| error!("Raft stream handle append entries res error: {}", e));
 				},
 			}
 		}
@@ -122,6 +126,9 @@ where
 					})?;
 				}
 			}
+			ReplicationOutMessage::UpdateState { state } => {
+				self.stream.update_state(state);
+			}
 		}
 		Ok(())
 	}
@@ -138,6 +145,17 @@ where
 				.unbounded_send(in_message)
 				.map_err(|e| node_consensus_base::errors::ErrorKind::Channel(Box::new(e)))?;
 		}
+		Ok(())
+	}
+
+	fn append_init_entry(&self) -> CommonResult<()> {
+		let (last_log_index, _) = self.stream.storage.get_last_log_index_term();
+		let entry = Entry {
+			term: self.stream.storage.get_current_term(),
+			index: last_log_index + 1,
+			data: EntryData::Blank,
+		};
+		self.stream.storage.append_log_entries(vec![entry])?;
 		Ok(())
 	}
 }
@@ -202,11 +220,11 @@ where
 					},
 					Some(in_message) = self.stream.in_rx.next() => {
 						self.stream.on_in_message(in_message)
-							.unwrap_or_else(|e| error!("Consensus raft handle in message error: {}", e));
+							.unwrap_or_else(|e| error!("Raft stream handle in message error: {}", e));
 					},
 					Some((address, res)) = self.request_vote_res_rx.next() => {
 						self.on_res_request_vote(address, res)
-							.unwrap_or_else(|e| error!("Consensus raft handle request vote res error: {}", e));
+							.unwrap_or_else(|e| error!("Raft stream handle request vote res error: {}", e));
 					},
 				}
 			}
@@ -293,7 +311,7 @@ where
 				},
 				Some(in_message) = self.stream.in_rx.next() => {
 					self.stream.on_in_message(in_message)
-						.unwrap_or_else(|e| error!("Consensus raft handle in message error: {}", e));
+						.unwrap_or_else(|e| error!("Raft stream handle in message error: {}", e));
 				}
 			}
 		}
@@ -322,7 +340,7 @@ where
 			tokio::select! {
 				Some(in_message) = self.stream.in_rx.next() => {
 					self.stream.on_in_message(in_message)
-						.unwrap_or_else(|e| error!("Consensus raft handle in message error: {}", e));
+						.unwrap_or_else(|e| error!("Raft stream handle in message error: {}", e));
 				}
 			}
 		}
@@ -338,6 +356,9 @@ enum ReplicationOutMessage {
 	AppendEntriesReq {
 		address: Address,
 		req: AppendEntriesReq,
+	},
+	UpdateState {
+		state: State,
 	},
 }
 
@@ -419,15 +440,18 @@ where
 	}
 
 	async fn start(mut self) -> CommonResult<()> {
-		info!("Start replication work");
+		info!("Start replication work: target: {}", self.target);
 		loop {
 			tokio::select! {
 				_ = self.heartbeat.tick() => {
-					self.heartbeat()?;
+					self.replicate()?;
 				},
 				in_message = self.in_rx.next() => {
 					match in_message {
-						Some(in_message) => self.on_in_message(in_message),
+						Some(in_message) => {
+							self.on_in_message(in_message)
+							.unwrap_or_else(|e| error!("Replication stream handle in message error: {}", e))
+						},
 						None => break,
 					}
 				}
@@ -436,15 +460,16 @@ where
 		Ok(())
 	}
 
-	fn on_in_message(&mut self, in_message: ReplicationInMessage) {
+	fn on_in_message(&mut self, in_message: ReplicationInMessage) -> CommonResult<()> {
 		match in_message {
 			ReplicationInMessage::AppendEntriesReqResult { request_id } => {
 				self.on_append_entries_req_result(request_id);
 			}
 			ReplicationInMessage::AppendEntriesRes { res } => {
-				self.on_append_entries_res(res);
+				self.on_append_entries_res(res)?;
 			}
 		}
+		Ok(())
 	}
 
 	fn on_append_entries_req_result(&mut self, request_id: Option<RequestId>) {
@@ -453,22 +478,43 @@ where
 		}
 	}
 
-	fn on_append_entries_res(&mut self, res: AppendEntriesRes) {
+	fn on_append_entries_res(&mut self, res: AppendEntriesRes) -> CommonResult<()> {
 		if self.requests.remove(&res.request_id).is_none() {
-			return;
+			return Ok(());
 		}
-		println!("on_append_entries_res: {} {:?}", self.target, res);
+		if res.term > self.storage.get_current_term() {
+			let out_message = ReplicationOutMessage::UpdateState {
+				state: State::Follower,
+			};
+			self.out_tx
+				.unbounded_send(out_message)
+				.map_err(|e| node_consensus_base::errors::ErrorKind::Channel(Box::new(e)))?;
+			return Ok(());
+		}
+
+		self.match_index = res.last_log_index;
+		self.match_term = res.last_log_term;
+
+		Ok(())
 	}
 
-	fn heartbeat(&self) -> CommonResult<()> {
+	fn replicate(&self) -> CommonResult<()> {
+		let (last_log_index, _last_log_term) = self.storage.get_last_log_index_term();
+
+		let entries = if self.match_index < last_log_index {
+			self.storage
+				.get_log_entries((self.match_index + 1)..=last_log_index)
+		} else {
+			vec![]
+		};
+
 		let req = AppendEntriesReq {
 			request_id: RequestId(0),
 			term: self.storage.get_current_term(),
 			prev_log_index: self.match_index,
 			prev_log_term: self.match_term,
 			commit_log_index: self.storage.get_commit_log_index(),
-			entries: vec![],
-			entry_data_slice: None,
+			entries,
 		};
 		self.append_entries(req)?;
 		Ok(())
