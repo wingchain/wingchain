@@ -38,6 +38,10 @@ method = "init"
 params = '''
 {
     "block_interval": 3000,
+    "admin": {
+    	"threshold": 1,
+    	"members": [["", 1]]
+    },
     "authority": ""
 }
 '''

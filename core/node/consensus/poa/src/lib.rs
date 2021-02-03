@@ -180,21 +180,13 @@ where
 		let mut scheduler = Scheduler::new(self.poa_meta.block_interval);
 		loop {
 			tokio::select! {
-				Some(item) = scheduler.next() => {
-					match item {
-						Ok(v) => {
-							self.work(v)
-								.unwrap_or_else(|e| error!("Poa stream handle work error: {}", e));
-						},
-						Err(e) => {
-							error!("Terminated with an error: {:?}", e);
-							break;
-						}
-					}
+				Some(schedule_info) = scheduler.next() => {
+					self.work(schedule_info)
+					.unwrap_or_else(|e| error!("Poa stream handle work error: {}", e));
 				}
 				Some(in_message) = self.in_rx.next() => {
 					self.on_in_message(in_message)
-						.unwrap_or_else(|e| error!("Poa stream handle in message error: {}", e));
+					.unwrap_or_else(|e| error!("Poa stream handle in message error: {}", e));
 				}
 			}
 		}
@@ -405,7 +397,7 @@ struct ScheduleInfo {
 }
 
 impl Stream for Scheduler {
-	type Item = Result<ScheduleInfo, ()>;
+	type Item = ScheduleInfo;
 
 	fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
 		let duration = match self.duration {
@@ -430,14 +422,10 @@ impl Stream for Scheduler {
 		}
 
 		self.delay = None;
+		let timestamp = duration_now().as_millis() as u64;
+		let schedule_info = ScheduleInfo { timestamp };
 
-		let timestamp = SystemTime::now();
-		let timestamp = match timestamp.duration_since(SystemTime::UNIX_EPOCH) {
-			Ok(timestamp) => timestamp.as_millis() as u64,
-			Err(_) => return Poll::Ready(Some(Err(()))),
-		};
-
-		Poll::Ready(Some(Ok(ScheduleInfo { timestamp })))
+		Poll::Ready(Some(schedule_info))
 	}
 }
 
