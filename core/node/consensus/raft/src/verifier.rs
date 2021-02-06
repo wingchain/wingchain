@@ -12,49 +12,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::errors::ErrorKind;
+use crate::protocol::Proposal;
+use node_chain::ChainCommitBlockParams;
+use node_consensus_base::support::ConsensusSupport;
+use primitives::errors::{Catchable, CommonResult, Display};
+use primitives::types::ExecutionGap;
+use primitives::{BlockNumber, BuildBlockParams, FullTransaction, Hash, Header, Transaction};
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use node_chain::ChainCommitBlockParams;
-use primitives::errors::{Catchable, CommonResult, Display};
-use primitives::{
-	BlockNumber, BuildBlockParams, FullTransaction, Hash, Header, Proof, Transaction,
-};
-
-use crate::errors;
-use crate::errors::ErrorKind;
-use crate::protocol::{BlockData, BodyData};
-use crate::stream::StreamSupport;
-use crate::support::CoordinatorSupport;
-
 pub struct Verifier<S>
 where
-	S: CoordinatorSupport,
+	S: ConsensusSupport,
 {
-	support: Arc<StreamSupport<S>>,
-}
-
-impl<S> Verifier<S>
-where
-	S: CoordinatorSupport,
-{
-	pub fn new(support: Arc<StreamSupport<S>>) -> CommonResult<Self> {
-		let verifier = Self { support };
-		Ok(verifier)
-	}
+	support: Arc<S>,
 }
 
 #[derive(Debug, Display)]
 pub enum VerifyError {
-	/// Block duplicated
 	#[display(fmt = "Duplicated")]
 	Duplicated,
 	/// Block is not the best
 	#[display(fmt = "Not best")]
 	NotBest,
-	/// Bad block
-	#[display(fmt = "Bad")]
-	Bad,
 	/// Invalid execution gap
 	#[display(fmt = "Invalid execution gap")]
 	InvalidExecutionGap,
@@ -70,111 +51,104 @@ pub enum VerifyError {
 	/// Transaction invalid
 	#[display(fmt = "Invalid tx: {}", _0)]
 	InvalidTx(node_chain::errors::ValidateTxError),
-	/// Proof invalid
-	#[display(fmt = "Invalid proof: {}", _0)]
-	InvalidProof(String),
 }
 
 impl<S> Verifier<S>
 where
-	S: CoordinatorSupport,
+	S: ConsensusSupport,
 {
-	/// block_data may be taken
-	pub fn verify_block(
+	pub fn new(support: Arc<S>) -> CommonResult<Self> {
+		let verifier = Self { support };
+		Ok(verifier)
+	}
+}
+
+impl<S> Verifier<S>
+where
+	S: ConsensusSupport,
+{
+	/// proposal may be taken
+	pub fn verify_proposal(
 		&self,
-		block_data: &mut Option<BlockData>,
-	) -> CommonResult<ChainCommitBlockParams> {
+		proposal: &mut Option<Proposal>,
+	) -> CommonResult<(Proposal, ChainCommitBlockParams)> {
 		{
-			let block_data_ref = block_data.as_ref().expect("qed");
-			self.verify_data(block_data_ref)?;
-			let block_hash = &block_data_ref.block_hash;
-			let header = block_data_ref.header.as_ref().expect("qed");
+			let proposal_ref = proposal.as_ref().expect("qed");
+			let block_hash = &proposal_ref.block_hash;
+			let number = proposal_ref.number;
+			let execution_number = proposal_ref.execution_number;
 
 			self.verify_not_repeat(block_hash)?;
 			let (_confirmed_number, _confirmed_hash, confirmed_header) =
-				self.verify_best(header)?;
+				self.verify_best(number)?;
 
-			self.verify_execution(header, &confirmed_header)?;
+			self.verify_execution(number, execution_number, &confirmed_header)?;
 		}
 
-		// the following verification need take ownership of block data
-		let block_data = block_data.take().expect("qed");
-		let header = block_data.header.expect("qed");
-		let body = block_data.body.expect("qed");
-		let proof = block_data.proof.expect("qed");
+		// the following verification need take ownership of proposal
+		let proposal = proposal.take().expect("qed");
+		let proposal_clone = proposal.clone();
 
-		self.verify_proof(&header, &proof)?;
+		let (meta_txs, payload_txs) = self.verify_body(proposal.meta_txs, proposal.payload_txs)?;
 
-		let (meta_txs, payload_txs) = self.verify_body(body)?;
+		let commit_block_params = self.verify_header(
+			&proposal.block_hash,
+			proposal.number,
+			proposal.timestamp,
+			proposal.execution_number,
+			meta_txs,
+			payload_txs,
+		)?;
 
-		let commit_block_params = self.verify_header(&header, proof, meta_txs, payload_txs)?;
-
-		Ok(commit_block_params)
-	}
-
-	fn verify_data(&self, block_data: &BlockData) -> CommonResult<()> {
-		let _header = match &block_data.header {
-			Some(v) => v,
-			None => return Err(ErrorKind::VerifyError(VerifyError::Bad).into()),
-		};
-
-		let _body = match &block_data.body {
-			Some(v) => v,
-			None => return Err(ErrorKind::VerifyError(VerifyError::Bad).into()),
-		};
-
-		let _proof = match &block_data.proof {
-			Some(v) => v,
-			None => return Err(ErrorKind::VerifyError(VerifyError::Bad).into()),
-		};
-
-		Ok(())
+		Ok((proposal_clone, commit_block_params))
 	}
 
 	fn verify_not_repeat(&self, block_hash: &Hash) -> CommonResult<()> {
-		if self.support.ori_support().get_header(block_hash)?.is_some() {
+		if self.support.get_header(block_hash)?.is_some() {
 			return Err(ErrorKind::VerifyError(VerifyError::Duplicated).into());
 		}
 		Ok(())
 	}
 
 	/// Return confirmed block (number, block hash, header)
-	fn verify_best(&self, header: &Header) -> CommonResult<(BlockNumber, Hash, Header)> {
+	fn verify_best(&self, number: BlockNumber) -> CommonResult<(BlockNumber, Hash, Header)> {
 		let confirmed = {
-			let current_state = &self.support.ori_support().get_current_state();
+			let current_state = &self.support.get_current_state();
 			let confirmed_number = current_state.confirmed_number;
 			let block_hash = current_state.confirmed_block_hash.clone();
-			let header = self
-				.support
-				.ori_support()
-				.get_header(&block_hash)?
-				.ok_or_else(|| {
-					errors::ErrorKind::Data(format!("Missing header: block_hash: {:?}", block_hash))
-				})?;
+			let header = self.support.get_header(&block_hash)?.ok_or_else(|| {
+				node_consensus_base::errors::ErrorKind::Data(format!(
+					"Missing header: block_hash: {:?}",
+					block_hash
+				))
+			})?;
 			(confirmed_number, block_hash, header)
 		};
 
-		if !(header.number == confirmed.0 + 1 && header.parent_hash == confirmed.1) {
+		if number != confirmed.0 + 1 {
 			return Err(ErrorKind::VerifyError(VerifyError::NotBest).into());
 		}
 
 		Ok(confirmed)
 	}
 
-	fn verify_execution(&self, header: &Header, confirmed_header: &Header) -> CommonResult<()> {
-		let current_state = self.support.ori_support().get_current_state();
+	fn verify_execution(
+		&self,
+		number: BlockNumber,
+		execution_number: BlockNumber,
+		confirmed_header: &Header,
+	) -> CommonResult<()> {
+		let current_state = self.support.get_current_state();
 		let system_meta = &current_state.system_meta;
+		let payload_execution_gap = (number - execution_number) as ExecutionGap;
 
-		if header.payload_execution_gap < 1 {
+		if payload_execution_gap < 1 {
 			return Err(ErrorKind::VerifyError(VerifyError::InvalidExecutionGap).into());
 		}
 
-		if header.payload_execution_gap > system_meta.max_execution_gap {
+		if payload_execution_gap > system_meta.max_execution_gap {
 			return Err(ErrorKind::VerifyError(VerifyError::InvalidExecutionGap).into());
 		}
-
-		// execution number of the verifying block
-		let execution_number = header.number - header.payload_execution_gap as u64;
 
 		// execution number of the confirmed block
 		let confirmed_execution_number =
@@ -192,29 +166,17 @@ where
 		Ok(())
 	}
 
-	fn verify_proof(&self, header: &Header, proof: &Proof) -> CommonResult<()> {
-		self.support
-			.ori_support()
-			.consensus_verify_proof(header, proof)
-			.or_else_catch::<node_consensus_base::errors::ErrorKind, _>(|e| match e {
-				node_consensus_base::errors::ErrorKind::VerifyProofError(e) => Some(Err(
-					ErrorKind::VerifyError(VerifyError::InvalidProof(e.clone())).into(),
-				)),
-				_ => None,
-			})?;
-		Ok(())
-	}
-
 	/// Return verified txs (meta_txs, payload_txs)
 	fn verify_body(
 		&self,
-		body: BodyData,
+		meta_txs: Vec<Transaction>,
+		payload_txs: Vec<Transaction>,
 	) -> CommonResult<(Vec<Arc<FullTransaction>>, Vec<Arc<FullTransaction>>)> {
 		let get_verified_txs = |txs: Vec<Transaction>| -> CommonResult<Vec<Arc<FullTransaction>>> {
 			let mut set = HashSet::new();
 			let mut result = Vec::with_capacity(txs.len());
 			for tx in txs {
-				let tx_hash = self.support.ori_support().hash_transaction(&tx)?;
+				let tx_hash = self.support.hash_transaction(&tx)?;
 				self.verify_transaction(&tx_hash, &tx, &mut set)?;
 				let tx = Arc::new(FullTransaction { tx_hash, tx });
 				result.push(tx);
@@ -222,9 +184,9 @@ where
 			Ok(result)
 		};
 
-		let meta_txs = get_verified_txs(body.meta_txs)?;
+		let meta_txs = get_verified_txs(meta_txs)?;
 
-		let payload_txs = get_verified_txs(body.payload_txs)?;
+		let payload_txs = get_verified_txs(payload_txs)?;
 
 		Ok((meta_txs, payload_txs))
 	}
@@ -232,32 +194,30 @@ where
 	/// return commit block params
 	fn verify_header(
 		&self,
-		header: &Header,
-		proof: Proof,
+		block_hash: &Hash,
+		number: BlockNumber,
+		timestamp: u64,
+		execution_number: BlockNumber,
 		meta_txs: Vec<Arc<FullTransaction>>,
 		payload_txs: Vec<Arc<FullTransaction>>,
 	) -> CommonResult<ChainCommitBlockParams> {
-		let execution_number = header.number - header.payload_execution_gap as u64;
-
 		let build_block_params = BuildBlockParams {
-			number: header.number,
-			timestamp: header.timestamp,
+			number,
+			timestamp,
 			meta_txs,
 			payload_txs,
 			execution_number,
 		};
 
-		let mut commit_block_params = self.support.ori_support().build_block(build_block_params)?;
+		let commit_block_params = self.support.build_block(build_block_params)?;
 
-		if &commit_block_params.header != header {
+		if &commit_block_params.block_hash != block_hash {
 			let msg = format!(
-				"Invalid header: {:?}, expected: {:?}",
-				header, commit_block_params.header
+				"Invalid block_hash: {:?}, expected: {:?}",
+				block_hash, commit_block_params.block_hash
 			);
 			return Err(ErrorKind::VerifyError(VerifyError::InvalidHeader(msg)).into());
 		}
-
-		commit_block_params.proof = proof;
 
 		Ok(commit_block_params)
 	}
@@ -277,7 +237,6 @@ where
 		}
 
 		self.support
-			.ori_support()
 			.validate_transaction(tx_hash, &tx, true)
 			.or_else_catch::<node_chain::errors::ErrorKind, _>(|e| match e {
 				node_chain::errors::ErrorKind::ValidateTxError(e) => Some(Err(

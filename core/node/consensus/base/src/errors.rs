@@ -28,6 +28,9 @@ pub enum ErrorKind {
 	#[display(fmt = "Data error: {}", _0)]
 	Data(String),
 
+	#[display(fmt = "TxPool error: {}", _0)]
+	TxPool(String),
+
 	#[display(fmt = "Channel error: {:?}", _0)]
 	Channel(Box<dyn Error + Send + Sync>),
 }

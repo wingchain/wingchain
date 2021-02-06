@@ -18,10 +18,9 @@ use primitives::errors::CommonResult;
 use primitives::{codec, Address};
 
 use crate::proof::Proof;
-use crate::protocol::Entry;
-use node_executor::module::raft::Authorities;
-use node_executor_primitives::EmptyParams;
+use crate::protocol::{Entry, EntryData, Proposal};
 use parking_lot::RwLock;
+use std::collections::btree_map::Range;
 use std::collections::BTreeMap;
 use std::ops::RangeBounds;
 use std::sync::Arc;
@@ -30,6 +29,7 @@ const DB_KEY_CURRENT_TERM: &[u8] = b"current_term";
 const DB_KEY_CURRENT_VOTED_FOR: &[u8] = b"current_voted_for";
 const DB_KEY_COMMIT_LOG_INDEX: &[u8] = b"commit_log_index";
 const DB_KEY_LOGS: &[u8] = b"logs";
+const DB_KEY_PROPOSAL: &[u8] = b"proposal";
 
 pub struct Storage<S>
 where
@@ -41,7 +41,7 @@ where
 	current_voted_for: RwLock<Option<Address>>,
 	commit_log_index: RwLock<u64>,
 	logs: RwLock<BTreeMap<u64, Entry>>,
-	authorities: RwLock<Vec<Address>>,
+	proposal: RwLock<Option<Proposal>>,
 	support: Arc<S>,
 }
 
@@ -57,7 +57,7 @@ where
 			current_voted_for: RwLock::new(None),
 			commit_log_index: RwLock::new(0),
 			logs: RwLock::new(Default::default()),
-			authorities: RwLock::new(Default::default()),
+			proposal: RwLock::new(None),
 			support,
 		};
 		this.refresh()?;
@@ -122,7 +122,7 @@ where
 		}
 
 		// init logs
-		// and fix if need
+		// and fix if needed
 		let mut logs = {
 			let logs: Vec<(u64, Entry)> = self
 				.support
@@ -146,20 +146,26 @@ where
 			})?;
 		}
 
-		// init authorities
-		let authorities = {
-			let authorities: Authorities = self
-				.support
-				.execute_call_with_block_number(
-					&self.support.get_current_state().confirmed_number,
-					None,
-					"raft".to_string(),
-					"get_authorities".to_string(),
-					EmptyParams,
-				)
-				.map(|x| x.expect("qed"))?;
-			authorities.members
-		};
+		// init proposal
+		// and fix if needed
+		let mut proposal: Option<Proposal> = self
+			.support
+			.get_consensus_data(DB_KEY_PROPOSAL)?
+			.unwrap_or_default();
+		let contained_in_logs = logs.iter().any(|(_, v)| match &v.data {
+			EntryData::Proposal { block_hash, .. } => {
+				Some(block_hash) == proposal.as_ref().map(|p| &p.block_hash)
+			}
+			_ => false,
+		});
+		if !contained_in_logs {
+			proposal = None;
+			self.commit_consensus_data(|transaction| {
+				self.support
+					.update_consensus_data(transaction, DB_KEY_PROPOSAL, &proposal)?;
+				Ok(())
+			})?;
+		}
 
 		(*self.base_log_index.write()) = base_log_index;
 		(*self.base_log_term.write()) = base_log_term;
@@ -167,7 +173,7 @@ where
 		(*self.current_voted_for.write()) = current_voted_for;
 		(*self.commit_log_index.write()) = commit_log_index;
 		(*self.logs.write()) = logs;
-		(*self.authorities.write()) = authorities;
+		(*self.proposal.write()) = proposal;
 
 		Ok(())
 	}
@@ -231,27 +237,19 @@ where
 		Ok(())
 	}
 
-	pub fn get_authorities(&self) -> Vec<Address> {
-		(*self.authorities.read()).clone()
-	}
-
-	pub fn get_authorities_len(&self) -> usize {
-		self.authorities.read().len()
-	}
-
-	pub fn authorities_contains(&self, address: &Address) -> bool {
-		self.authorities.read().contains(address)
-	}
-
 	pub fn get_log_entries<R>(&self, range: R) -> Vec<Entry>
 	where
 		R: RangeBounds<u64>,
 	{
-		self.logs
-			.read()
-			.range(range)
-			.map(|(_, v)| v.clone())
-			.collect()
+		self.get_log_entries_using(range, |x| x.map(|(_, v)| v.clone()).collect())
+	}
+
+	pub fn get_log_entries_using<R, T, F>(&self, range: R, using: F) -> T
+	where
+		F: Fn(Range<u64, Entry>) -> T,
+		R: RangeBounds<u64>,
+	{
+		using(self.logs.read().range(range))
 	}
 
 	pub fn append_log_entries(&self, entry: Vec<Entry>) -> CommonResult<()> {
@@ -297,6 +295,25 @@ where
 				.update_consensus_data(transaction, DB_KEY_LOGS, &logs_vec)?;
 			Ok(())
 		})?;
+
+		Ok(())
+	}
+
+	pub fn get_proposal(&self) -> Option<Proposal> {
+		self.get_proposal_using(|x| x.clone())
+	}
+
+	pub fn get_proposal_using<T, F: Fn(&Option<Proposal>) -> T>(&self, using: F) -> T {
+		using(&*self.proposal.read())
+	}
+
+	pub fn update_proposal(&self, proposal: Option<Proposal>) -> CommonResult<()> {
+		self.commit_consensus_data(|transaction| {
+			self.support
+				.update_consensus_data(transaction, DB_KEY_PROPOSAL, &proposal)?;
+			Ok(())
+		})?;
+		*self.proposal.write() = proposal;
 		Ok(())
 	}
 

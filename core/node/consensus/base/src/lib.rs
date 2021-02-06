@@ -15,9 +15,10 @@
 use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
 pub use node_network::PeerId;
 use primitives::errors::CommonResult;
-use primitives::{Header, Proof, SecretKey};
+use primitives::{BlockNumber, Hash, Header, Proof, SecretKey};
 
 pub mod errors;
+pub mod scheduler;
 pub mod support;
 
 pub struct ConsensusConfig {
@@ -42,6 +43,10 @@ pub enum ConsensusInMessage {
 	NetworkMessage {
 		peer_id: PeerId,
 		message: Vec<u8>,
+	},
+	BlockCommitted {
+		number: BlockNumber,
+		block_hash: Hash,
 	},
 	Generate,
 }

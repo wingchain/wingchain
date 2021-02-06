@@ -290,7 +290,7 @@ mod tests {
 		assert_eq!(
 			param,
 			module::raft::InitParams {
-				block_interval: 3000,
+				block_interval: Some(3000),
 				heartbeat_interval: 100,
 				election_timeout_min: 500,
 				election_timeout_max: 1000,

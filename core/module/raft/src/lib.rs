@@ -32,7 +32,7 @@ where
 	#[allow(dead_code)]
 	context: C,
 	util: U,
-	block_interval: StorageValue<u64, Self>,
+	block_interval: StorageValue<Option<u64>, Self>,
 	heartbeat_interval: StorageValue<u64, Self>,
 	election_timeout_min: StorageValue<u64, Self>,
 	election_timeout_max: StorageValue<u64, Self>,
@@ -125,7 +125,7 @@ pub struct Authorities {
 
 #[derive(Encode, Decode, Debug, PartialEq, Deserialize)]
 pub struct InitParams {
-	pub block_interval: u64,
+	pub block_interval: Option<u64>,
 	pub heartbeat_interval: u64,
 	pub election_timeout_min: u64,
 	pub election_timeout_max: u64,
@@ -135,7 +135,7 @@ pub struct InitParams {
 
 #[derive(Encode, Decode, Debug, PartialEq)]
 pub struct Meta {
-	pub block_interval: u64,
+	pub block_interval: Option<u64>,
 	pub heartbeat_interval: u64,
 	pub election_timeout_min: u64,
 	pub election_timeout_max: u64,

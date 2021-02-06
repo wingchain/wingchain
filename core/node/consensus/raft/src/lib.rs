@@ -14,6 +14,8 @@
 
 //! Raft consensus
 
+#![allow(clippy::type_complexity)]
+
 use std::sync::Arc;
 
 use futures::channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
@@ -27,18 +29,21 @@ use node_consensus_base::{
 use node_consensus_primitives::CONSENSUS_RAFT;
 use node_executor::module;
 use node_executor_primitives::EmptyParams;
+use primitives::codec;
 use primitives::errors::CommonResult;
-use primitives::{BlockNumber, Header};
+use primitives::{Address, BlockNumber, Header};
 
+use crate::proof::Proof;
 use crate::stream::RaftStream;
+use crypto::address::Address as AddressT;
+use node_executor::module::raft::Authorities;
 
 pub mod errors;
-mod network;
 mod proof;
 mod protocol;
-mod state;
 mod storage;
 mod stream;
+mod verifier;
 
 pub struct Raft<S>
 where
@@ -80,7 +85,7 @@ impl<S> ConsensusT for Raft<S>
 where
 	S: ConsensusSupport,
 {
-	fn verify_proof(&self, _header: &Header, proof: &primitives::Proof) -> CommonResult<()> {
+	fn verify_proof(&self, header: &Header, proof: &primitives::Proof) -> CommonResult<()> {
 		let name = &proof.name;
 		if name != CONSENSUS_RAFT {
 			return Err(
@@ -91,7 +96,28 @@ where
 				.into(),
 			);
 		}
-		unimplemented!()
+		let data = &proof.data;
+		let proof: Proof = codec::decode(&mut &data[..]).map_err(|_| {
+			node_consensus_base::errors::ErrorKind::VerifyProofError("Decode error".to_string())
+		})?;
+
+		let address = {
+			let addresser = self.support.get_basic()?.address.clone();
+			let address_len = addresser.length().into();
+			let mut address = vec![0u8; address_len];
+			addresser.address(&mut address, &proof.public_key.0);
+			Address(address)
+		};
+
+		let authorities = get_poa_authorities(&self.support, &(header.number - 1))?;
+		let is_authority = authorities.members.contains(&address);
+		if !is_authority {
+			return Err(node_consensus_base::errors::ErrorKind::VerifyProofError(
+				"Not authority".to_string(),
+			)
+			.into());
+		}
+		Ok(())
 	}
 
 	fn in_message_tx(&self) -> UnboundedSender<ConsensusInMessage> {
@@ -113,6 +139,21 @@ fn get_raft_meta<S: ConsensusSupport>(
 			None,
 			"raft".to_string(),
 			"get_meta".to_string(),
+			EmptyParams,
+		)
+		.map(|x| x.expect("qed"))
+}
+
+fn get_poa_authorities<S: ConsensusSupport>(
+	support: &Arc<S>,
+	number: &BlockNumber,
+) -> CommonResult<Authorities> {
+	support
+		.execute_call_with_block_number(
+			number,
+			None,
+			"raft".to_string(),
+			"get_authorities".to_string(),
 			EmptyParams,
 		)
 		.map(|x| x.expect("qed"))

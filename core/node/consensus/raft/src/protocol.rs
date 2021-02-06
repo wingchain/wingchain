@@ -14,7 +14,7 @@
 
 use derive_more::{Display, From, TryInto};
 use primitives::codec::{Decode, Encode};
-use primitives::{Hash, PublicKey, Signature};
+use primitives::{BlockNumber, Hash, PublicKey, Signature, Transaction};
 use utils_enum_codec::enum_codec;
 
 #[enum_codec]
@@ -26,6 +26,8 @@ pub enum RaftMessage {
 	AppendEntriesRes(AppendEntriesRes),
 	RequestVoteReq(RequestVoteReq),
 	RequestVoteRes(RequestVoteRes),
+	RequestProposalReq(RequestProposalReq),
+	RequestProposalRes(RequestProposalRes),
 }
 
 #[derive(Encode, Decode, Debug)]
@@ -75,6 +77,18 @@ pub struct RequestVoteRes {
 	pub vote_granted: bool,
 }
 
+#[derive(Encode, Decode, Debug)]
+pub struct RequestProposalReq {
+	pub request_id: RequestId,
+}
+
+#[derive(Encode, Decode, Debug)]
+pub struct RequestProposalRes {
+	pub request_id: RequestId,
+	pub extra_election_timeout: u64,
+	pub proposal: Option<Proposal>,
+}
+
 #[derive(Encode, Decode, Debug, Clone)]
 pub struct Entry {
 	pub term: u64,
@@ -85,20 +99,17 @@ pub struct Entry {
 #[derive(Encode, Decode, Debug, Clone)]
 pub enum EntryData {
 	Blank,
-	Data { id: Hash },
+	Proposal { block_hash: Hash },
 }
 
-#[derive(Encode, Decode, Debug)]
-pub enum DataSlice {
-	Header {
-		id: Hash,
-		count: u32,
-	},
-	Payload {
-		id: Hash,
-		index: u32,
-		value: Vec<u8>,
-	},
+#[derive(Encode, Decode, Clone, Debug)]
+pub struct Proposal {
+	pub block_hash: Hash,
+	pub number: BlockNumber,
+	pub timestamp: u64,
+	pub meta_txs: Vec<Transaction>,
+	pub payload_txs: Vec<Transaction>,
+	pub execution_number: BlockNumber,
 }
 
 impl RequestIdAware for RegisterValidatorReq {
@@ -147,6 +158,24 @@ impl RequestIdAware for RequestVoteReq {
 }
 
 impl RequestIdAware for RequestVoteRes {
+	fn get_request_id(&self) -> RequestId {
+		self.request_id.clone()
+	}
+	fn set_request_id(&mut self, request_id: RequestId) {
+		self.request_id = request_id;
+	}
+}
+
+impl RequestIdAware for RequestProposalReq {
+	fn get_request_id(&self) -> RequestId {
+		self.request_id.clone()
+	}
+	fn set_request_id(&mut self, request_id: RequestId) {
+		self.request_id = request_id;
+	}
+}
+
+impl RequestIdAware for RequestProposalRes {
 	fn get_request_id(&self) -> RequestId {
 		self.request_id.clone()
 	}

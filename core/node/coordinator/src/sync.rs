@@ -40,6 +40,7 @@ use futures::future::BoxFuture;
 use futures::stream::FuturesUnordered;
 use futures::FutureExt;
 use futures_timer::Delay;
+use node_consensus_base::ConsensusInMessage;
 use tokio::time::Duration;
 
 const PEER_KNOWN_BLOCKS_SIZE: u32 = 1024;
@@ -300,13 +301,14 @@ where
 					let from = Arc::new(peer_id);
 					for block_data in block_response.blocks {
 						let number = block_data.number;
-						let pending_block_info = PendingBlockInfo {
-							state: PendingBlockState::Downloaded {
-								from: from.clone(),
-								block_data: Some(block_data),
-							},
-						};
-						self.pending_blocks.insert(number, pending_block_info);
+						if let Some(pending_block) = self.pending_blocks.get_mut(&number) {
+							if matches!(pending_block.state, PendingBlockState::Downloading {..}) {
+								pending_block.state = PendingBlockState::Downloaded {
+									from: from.clone(),
+									block_data: Some(block_data),
+								}
+							}
+						}
 					}
 					peer_info.state = PeerState::Vacant;
 				}
@@ -318,20 +320,23 @@ where
 		Ok(())
 	}
 
-	pub fn on_block_committed(&mut self, number: BlockNumber, hash: Hash) -> CommonResult<()> {
+	pub fn on_block_committed(
+		&mut self,
+		number: BlockNumber,
+		block_hash: Hash,
+	) -> CommonResult<()> {
 		// update handshake builder
-		(*self.support.get_handshake_builder().confirmed.write()) = (number, hash.clone());
+		(*self.support.get_handshake_builder().confirmed.write()) = (number, block_hash.clone());
 
 		// update pending_blocks
-		// TODO
+		self.pending_blocks.remove(&number);
 
 		// announce to all connected peers
-		let (block_hash, header) = {
-			let header = self.support.get_header_by_block_hash(&hash)?;
-			let block_hash = hash;
-			(block_hash, header)
-		};
-		self.announce_block(block_hash, header, MessageTarget::All)?;
+		let header = self.support.get_header_by_block_hash(&block_hash)?;
+		self.announce_block(block_hash.clone(), header, MessageTarget::All)?;
+
+		self.support
+			.consensus_send_message(ConsensusInMessage::BlockCommitted { number, block_hash });
 
 		Ok(())
 	}
@@ -384,6 +389,10 @@ where
 				min_to_append,
 				max_to_append
 			);
+		} else {
+			for number in (max_to_append + 1)..=max_pending_number {
+				self.pending_blocks.remove(&number);
+			}
 		}
 		Ok(())
 	}

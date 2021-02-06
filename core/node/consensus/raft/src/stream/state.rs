@@ -17,20 +17,21 @@ use std::sync::Arc;
 
 use futures::channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
 use futures::prelude::*;
-use log::error;
-use log::{debug, info};
+use log::{debug, error, info, trace};
 use tokio::time::{interval, sleep_until, Duration, Interval};
 
 use node_consensus_base::support::ConsensusSupport;
 use node_executor::module::raft::Meta;
 use primitives::errors::CommonResult;
-use primitives::Address;
+use primitives::{Address, Hash};
 
 use crate::protocol::{
-	AppendEntriesReq, AppendEntriesRes, Entry, EntryData, RequestId, RequestVoteReq, RequestVoteRes,
+	AppendEntriesReq, AppendEntriesRes, Entry, EntryData, Proposal, RequestId, RequestVoteReq,
+	RequestVoteRes,
 };
 use crate::storage::Storage;
-use crate::stream::RaftStream;
+use crate::stream::{InternalMessage, RaftStream};
+use node_consensus_base::scheduler::{ScheduleInfo, Scheduler};
 
 #[derive(PartialEq, Debug)]
 pub enum State {
@@ -68,19 +69,19 @@ where
 		}
 	}
 	pub async fn start(mut self) -> CommonResult<()> {
-		let addresses = self.stream.storage.get_authorities();
-		let (last_log_index, last_log_term) = self.stream.storage.get_last_log_index_term();
+		let addresses = &self.stream.authorities.members;
+		let (base_log_index, base_log_term) = self.stream.storage.get_base_log_index_term();
 		for target in addresses {
-			if target != self.stream.address {
+			if target != &self.stream.address {
 				let replication = Replication::new(
 					self.stream.raft_meta.clone(),
 					self.replication_out_tx.clone(),
 					self.stream.storage.clone(),
 					target.clone(),
-					last_log_index,
-					last_log_term,
+					base_log_index,
+					base_log_term,
 				)?;
-				self.replications.insert(target, replication);
+				self.replications.insert(target.clone(), replication);
 			}
 		}
 
@@ -91,11 +92,21 @@ where
 
 		self.append_init_entry()?;
 
+		let mut scheduler = Scheduler::new(self.stream.raft_meta.block_interval);
+
 		loop {
 			if self.stream.state != State::Leader {
 				return Ok(());
 			}
 			tokio::select! {
+				Some(schedule_info) = scheduler.next() => {
+					self.work(schedule_info)
+					.unwrap_or_else(|e| error!("Raft stream handle work error: {}", e));
+				}
+				Some(internal_message) = self.stream.internal_rx.next() => {
+					self.stream.on_internal_message(internal_message)
+						.unwrap_or_else(|e| error!("Raft stream handle internal message error: {}", e));
+				},
 				Some(in_message) = self.stream.in_rx.next() => {
 					self.stream.on_in_message(in_message)
 						.unwrap_or_else(|e| error!("Raft stream handle in message error: {}", e));
@@ -112,6 +123,64 @@ where
 		}
 	}
 
+	fn work(&mut self, schedule_info: ScheduleInfo) -> CommonResult<()> {
+		let contains_proposal = self
+			.stream
+			.storage
+			.get_log_entries(..)
+			.iter()
+			.any(|x| matches!(x.data, EntryData::Proposal {..}));
+		if contains_proposal {
+			return Ok(());
+		}
+
+		let build_block_params = self.stream.support.prepare_block(schedule_info)?;
+
+		let mut proposal = Proposal {
+			block_hash: Hash(vec![]),
+			number: build_block_params.number,
+			timestamp: build_block_params.timestamp,
+			meta_txs: build_block_params
+				.meta_txs
+				.iter()
+				.map(|x| x.tx.clone())
+				.collect(),
+			payload_txs: build_block_params
+				.payload_txs
+				.iter()
+				.map(|x| x.tx.clone())
+				.collect(),
+			execution_number: build_block_params.execution_number,
+		};
+
+		let commit_block_params = self.stream.support.build_block(build_block_params)?;
+		proposal.block_hash = commit_block_params.block_hash.clone();
+
+		let number = proposal.number;
+		let execution_number = proposal.execution_number;
+		let block_hash = commit_block_params.block_hash;
+
+		trace!(
+			"Proposal: number: {}, execution_number: {}, block_hash: {}",
+			number,
+			execution_number,
+			block_hash
+		);
+
+		self.stream.storage.update_proposal(Some(proposal))?;
+
+		// append proposal entry
+		let (last_log_index, _) = self.stream.storage.get_last_log_index_term();
+		let entry = Entry {
+			term: self.stream.storage.get_current_term(),
+			index: last_log_index + 1,
+			data: EntryData::Proposal { block_hash },
+		};
+		self.stream.storage.append_log_entries(vec![entry])?;
+
+		Ok(())
+	}
+
 	fn on_replication_out_message(
 		&mut self,
 		replication_out_message: ReplicationOutMessage,
@@ -126,8 +195,40 @@ where
 					})?;
 				}
 			}
+			ReplicationOutMessage::UpdateMatchIndex {
+				address,
+				match_index,
+			} => {
+				self.on_update_match_index(address, match_index)?;
+			}
 			ReplicationOutMessage::UpdateState { state } => {
 				self.stream.update_state(state);
+			}
+		}
+		Ok(())
+	}
+
+	fn on_update_match_index(&mut self, address: Address, match_index: u64) -> CommonResult<()> {
+		if let Some(replication) = self.replications.get_mut(&address) {
+			replication.match_index = match_index;
+
+			let match_indices = self
+				.replications
+				.iter()
+				.map(|(_, v)| v.match_index)
+				.collect::<Vec<_>>();
+			let old_commit_log_index = self.stream.storage.get_commit_log_index();
+			let new_commit_log_index =
+				get_new_commit_log_index(match_indices, old_commit_log_index);
+			if new_commit_log_index != old_commit_log_index {
+				self.stream
+					.storage
+					.update_commit_log_index(new_commit_log_index)?;
+				trace!("Storage updated commit_log_index: {}", new_commit_log_index);
+				self.stream
+					.internal_tx
+					.unbounded_send(InternalMessage::LogUpdated)
+					.map_err(|e| node_consensus_base::errors::ErrorKind::Channel(Box::new(e)))?;
 			}
 		}
 		Ok(())
@@ -158,6 +259,18 @@ where
 		self.stream.storage.append_log_entries(vec![entry])?;
 		Ok(())
 	}
+}
+
+fn get_new_commit_log_index(mut match_indices: Vec<u64>, old_commit_log_index: u64) -> u64 {
+	// make match_indices len equal to authorities len
+	match_indices.push(old_commit_log_index);
+	// reverse sort
+	match_indices.sort_unstable_by(|a, b| b.cmp(a));
+
+	let offset = match_indices.len() / 2;
+
+	let new_commit_log_index = match_indices[offset];
+	u64::max(new_commit_log_index, old_commit_log_index)
 }
 
 pub struct CandidateState<'a, S>
@@ -193,10 +306,11 @@ where
 				return Ok(());
 			}
 			self.votes_granted = 1;
-			self.votes_needed = ((self.stream.storage.get_authorities_len() / 2) + 1) as u64;
+			let authorities_len = self.stream.authorities.members.len();
+			self.votes_needed = ((authorities_len / 2) + 1) as u64;
 			self.requests.clear();
 
-			self.stream.update_next_election_instant(false);
+			self.stream.update_next_election_instant(0, false);
 			self.stream.update_current_leader(None);
 
 			self.stream
@@ -218,6 +332,10 @@ where
 					_ = next_election => {
 						break;
 					},
+					Some(internal_message) = self.stream.internal_rx.next() => {
+						self.stream.on_internal_message(internal_message)
+							.unwrap_or_else(|e| error!("Raft stream handle internal message error: {}", e));
+					},
 					Some(in_message) = self.stream.in_rx.next() => {
 						self.stream.on_in_message(in_message)
 							.unwrap_or_else(|e| error!("Raft stream handle in message error: {}", e));
@@ -232,7 +350,7 @@ where
 	}
 
 	fn request_vote(&mut self) -> CommonResult<()> {
-		let addresses = self.stream.storage.get_authorities();
+		let addresses = &self.stream.authorities.members.clone();
 		let term = self.stream.storage.get_current_term();
 		let (last_log_index, last_log_term) = self.stream.storage.get_last_log_index_term();
 		for address in addresses {
@@ -242,7 +360,7 @@ where
 				last_log_index,
 				last_log_term,
 			};
-			let request_id = self.stream.request_vote(address, req)?;
+			let request_id = self.stream.request_vote(address.clone(), req)?;
 			if let Some(request_id) = request_id {
 				self.requests.insert(request_id, ());
 			}
@@ -267,7 +385,7 @@ where
 		}
 
 		if res.vote_granted {
-			if self.stream.storage.authorities_contains(&address) {
+			if self.stream.authorities.members.contains(&address) {
 				self.votes_granted += 1;
 			}
 			debug!(
@@ -304,10 +422,15 @@ where
 				return Ok(());
 			}
 
+			// TODO when syncing
 			let next_election = sleep_until(self.stream.next_election_instant());
 			tokio::select! {
 				_ = next_election => {
 					self.stream.update_state(State::Candidate);
+				},
+				Some(internal_message) = self.stream.internal_rx.next() => {
+					self.stream.on_internal_message(internal_message)
+						.unwrap_or_else(|e| error!("Raft stream handle internal message error: {}", e));
 				},
 				Some(in_message) = self.stream.in_rx.next() => {
 					self.stream.on_in_message(in_message)
@@ -338,6 +461,10 @@ where
 				return Ok(());
 			}
 			tokio::select! {
+				Some(internal_message) = self.stream.internal_rx.next() => {
+					self.stream.on_internal_message(internal_message)
+						.unwrap_or_else(|e| error!("Raft stream handle internal message error: {}", e));
+				},
 				Some(in_message) = self.stream.in_rx.next() => {
 					self.stream.on_in_message(in_message)
 						.unwrap_or_else(|e| error!("Raft stream handle in message error: {}", e));
@@ -357,6 +484,10 @@ enum ReplicationOutMessage {
 		address: Address,
 		req: AppendEntriesReq,
 	},
+	UpdateMatchIndex {
+		address: Address,
+		match_index: u64,
+	},
 	UpdateState {
 		state: State,
 	},
@@ -364,6 +495,7 @@ enum ReplicationOutMessage {
 
 struct Replication {
 	in_tx: UnboundedSender<ReplicationInMessage>,
+	match_index: u64,
 }
 
 impl Replication {
@@ -390,7 +522,7 @@ impl Replication {
 			match_term,
 		)?;
 
-		Ok(Self { in_tx })
+		Ok(Self { in_tx, match_index })
 	}
 }
 
@@ -492,8 +624,20 @@ where
 			return Ok(());
 		}
 
+		let match_index_changed = res.last_log_index != self.match_index;
+
 		self.match_index = res.last_log_index;
 		self.match_term = res.last_log_term;
+
+		if match_index_changed {
+			let out_message = ReplicationOutMessage::UpdateMatchIndex {
+				address: self.target.clone(),
+				match_index: self.match_index,
+			};
+			self.out_tx
+				.unbounded_send(out_message)
+				.map_err(|e| node_consensus_base::errors::ErrorKind::Channel(Box::new(e)))?;
+		}
 
 		Ok(())
 	}

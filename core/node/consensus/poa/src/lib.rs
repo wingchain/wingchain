@@ -17,34 +17,26 @@
 
 use std::collections::HashSet;
 use std::convert::TryInto;
-use std::pin::Pin;
 use std::sync::Arc;
-use std::task::Context;
-use std::time::{Duration, SystemTime};
+use std::time::SystemTime;
 
 use futures::channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
 use futures::prelude::*;
-use futures::task::Poll;
-use futures::{Future, Stream};
-use futures_timer::Delay;
-use log::{debug, error, info, trace, warn};
+use log::{error, info, trace};
 use parking_lot::RwLock;
 
 use crypto::address::Address as AddressT;
 use crypto::dsa::{Dsa, KeyPair};
 use node_consensus_base::{
-	support::ConsensusSupport, Consensus as ConsensusT, ConsensusConfig, ConsensusInMessage,
-	ConsensusOutMessage,
+	scheduler::ScheduleInfo, scheduler::Scheduler, support::ConsensusSupport,
+	Consensus as ConsensusT, ConsensusConfig, ConsensusInMessage, ConsensusOutMessage,
 };
 use node_consensus_primitives::CONSENSUS_POA;
 use node_executor::module;
 use node_executor::module::poa::Meta;
 use node_executor_primitives::EmptyParams;
-use primitives::errors::{Catchable, CommonResult};
-use primitives::types::ExecutionGap;
-use primitives::{
-	codec, Address, BlockNumber, BuildBlockParams, FullTransaction, Header, SecretKey,
-};
+use primitives::errors::CommonResult;
+use primitives::{codec, Address, BlockNumber, Header, SecretKey};
 
 use crate::proof::Proof;
 
@@ -209,66 +201,18 @@ where
 			return Ok(());
 		}
 
-		let system_meta = &current_state.system_meta;
-		let number = current_state.confirmed_number + 1;
-		let timestamp = schedule_info.timestamp;
-		let execution_number = current_state.executed_number;
-
-		let txs = match self.support.txpool_get_transactions() {
-			Ok(txs) => txs,
-			Err(e) => {
-				warn!("Unable to get transactions in txpool: {}", e);
-				return Ok(());
-			}
-		};
-
-		debug!("TxPool txs count: {}", txs.len());
-
-		let mut invalid_txs = vec![];
-		let mut meta_txs = vec![];
-		let mut payload_txs = vec![];
-
-		for tx in &txs {
-			let invalid = self
-				.validate_transaction(tx)
-				.map(|_| false)
-				.or_else_catch::<node_chain::errors::ErrorKind, _>(|e| match e {
-				node_chain::errors::ErrorKind::ValidateTxError(_e) => Some(Ok(true)),
-				_ => None,
-			})?;
-
-			if invalid {
-				invalid_txs.push(tx.clone());
-				continue;
-			}
-			let is_meta = self.support.is_meta_call(&tx.tx.call)?;
-			match is_meta {
-				true => {
-					meta_txs.push(tx.clone());
-				}
-				false => {
-					payload_txs.push(tx.clone());
-				}
-			}
-		}
-		debug!("Invalid txs count: {}", invalid_txs.len());
-
-		let block_execution_gap = (number - execution_number) as ExecutionGap;
-		if block_execution_gap > system_meta.max_execution_gap {
-			warn!(
-				"execution gap exceed max: {}, max: {}",
-				block_execution_gap, system_meta.max_execution_gap
-			);
-			return Ok(());
-		}
-
-		let build_block_params = BuildBlockParams {
-			number,
-			timestamp,
-			meta_txs,
-			payload_txs,
-			execution_number,
-		};
+		let build_block_params = self.support.prepare_block(schedule_info)?;
+		let tx_hash_set = build_block_params
+			.meta_txs
+			.iter()
+			.map(|x| x.tx_hash.clone())
+			.chain(
+				build_block_params
+					.payload_txs
+					.iter()
+					.map(|x| x.tx_hash.clone()),
+			)
+			.collect::<HashSet<_>>();
 
 		let mut commit_block_params = self.support.build_block(build_block_params)?;
 
@@ -280,29 +224,10 @@ where
 		)?;
 		commit_block_params.proof = proof.try_into()?;
 
-		self.support
-			.commit_block(commit_block_params)
-			.or_else_catch::<node_chain::errors::ErrorKind, _>(|e| match e {
-				node_chain::errors::ErrorKind::CommitBlockError(e) => {
-					warn!("Commit block error: {:?}", e);
-					Some(Ok(()))
-				}
-				_ => None,
-			})?;
-
-		let tx_hash_set = txs
-			.iter()
-			.map(|x| x.tx_hash.clone())
-			.collect::<HashSet<_>>();
+		self.support.commit_block(commit_block_params)?;
 
 		self.support.txpool_remove_transactions(&tx_hash_set)?;
 
-		Ok(())
-	}
-
-	fn validate_transaction(&self, tx: &Arc<FullTransaction>) -> CommonResult<()> {
-		self.support
-			.validate_transaction(&tx.tx_hash, &tx.tx, true)?;
 		Ok(())
 	}
 
@@ -376,71 +301,4 @@ fn get_address<S: ConsensusSupport>(
 
 	let address = Address(address);
 	Ok(address)
-}
-
-struct Scheduler {
-	duration: Option<u64>,
-	delay: Option<Delay>,
-}
-
-impl Scheduler {
-	fn new(duration: Option<u64>) -> Self {
-		Self {
-			duration,
-			delay: None,
-		}
-	}
-}
-
-struct ScheduleInfo {
-	timestamp: u64,
-}
-
-impl Stream for Scheduler {
-	type Item = ScheduleInfo;
-
-	fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-		let duration = match self.duration {
-			Some(v) => v,
-			None => return Poll::Pending,
-		};
-
-		self.delay = match self.delay.take() {
-			None => {
-				// schedule wait.
-				let wait_duration = time_until_next(duration_now(), duration);
-				Some(Delay::new(wait_duration))
-			}
-			Some(d) => Some(d),
-		};
-
-		if let Some(ref mut delay) = self.delay {
-			match Future::poll(Pin::new(delay), cx) {
-				Poll::Pending => return Poll::Pending,
-				Poll::Ready(()) => {}
-			}
-		}
-
-		self.delay = None;
-		let timestamp = duration_now().as_millis() as u64;
-		let schedule_info = ScheduleInfo { timestamp };
-
-		Poll::Ready(Some(schedule_info))
-	}
-}
-
-fn time_until_next(now: Duration, duration: u64) -> Duration {
-	let remaining_full_millis = duration - (now.as_millis() as u64 % duration) - 1;
-	Duration::from_millis(remaining_full_millis)
-}
-
-fn duration_now() -> Duration {
-	let now = SystemTime::now();
-	now.duration_since(SystemTime::UNIX_EPOCH)
-		.unwrap_or_else(|e| {
-			panic!(
-				"Current time {:?} is before unix epoch. Something is wrong: {:?}",
-				now, e,
-			)
-		})
 }

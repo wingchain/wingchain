@@ -8,6 +8,8 @@ edition = "2018"
 
 [dependencies]
 futures = "0.3.8"
+futures-timer = "3.0.2"
+log = "0.4.8"
 
 node-chain = { path = "../../chain" }
 node-txpool = { path = "../../txpool" }
