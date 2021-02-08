@@ -13,19 +13,21 @@
 // limitations under the License.
 
 use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
+use futures::channel::oneshot;
 pub use node_network::PeerId;
 use primitives::errors::CommonResult;
-use primitives::{BlockNumber, Hash, Header, Proof, SecretKey};
+use primitives::{BlockNumber, Hash, Header, Proof};
+use serde_json::Value;
+use std::sync::Arc;
 
 pub mod errors;
 pub mod scheduler;
 pub mod support;
 
-pub struct ConsensusConfig {
-	pub secret_key: Option<SecretKey>,
-}
-
-pub trait Consensus {
+pub trait Consensus: Sized {
+	type Config;
+	type Support;
+	fn new(config: Self::Config, support: Arc<Self::Support>) -> CommonResult<Self>;
 	fn verify_proof(&self, header: &Header, proof: &Proof) -> CommonResult<()>;
 	fn in_message_tx(&self) -> UnboundedSender<ConsensusInMessage>;
 	fn out_message_rx(&self) -> Option<UnboundedReceiver<ConsensusOutMessage>>;
@@ -49,6 +51,9 @@ pub enum ConsensusInMessage {
 		block_hash: Hash,
 	},
 	Generate,
+	GetConsensusState {
+		tx: oneshot::Sender<Value>,
+	},
 }
 
 pub enum ConsensusOutMessage {

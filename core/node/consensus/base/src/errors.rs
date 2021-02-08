@@ -15,6 +15,7 @@
 use std::error::Error;
 use std::fmt::Debug;
 
+use futures::channel::mpsc::TrySendError;
 use primitives::errors::{CommonError, CommonErrorKind, Display};
 
 #[derive(Debug, Display)]
@@ -33,6 +34,9 @@ pub enum ErrorKind {
 
 	#[display(fmt = "Channel error: {:?}", _0)]
 	Channel(Box<dyn Error + Send + Sync>),
+
+	#[display(fmt = "Config error: {}", _0)]
+	Config(String),
 }
 
 impl Error for ErrorKind {}
@@ -41,4 +45,8 @@ impl From<ErrorKind> for CommonError {
 	fn from(error: ErrorKind) -> Self {
 		CommonError::new(CommonErrorKind::Consensus, Box::new(error))
 	}
+}
+
+pub fn map_channel_err<T: Send + Sync + 'static>(error: TrySendError<T>) -> CommonError {
+	ErrorKind::Channel(Box::new(error)).into()
 }

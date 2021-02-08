@@ -20,9 +20,9 @@ use std::time::Duration;
 use tempfile::tempdir;
 
 use node_chain::{Chain, ChainConfig, DBConfig};
-use node_consensus::Consensus;
+use node_consensus::{Consensus, ConsensusConfig};
 use node_consensus_base::support::DefaultConsensusSupport;
-use node_consensus_base::ConsensusConfig;
+use node_consensus_poa::PoaConfig;
 use node_coordinator::support::DefaultCoordinatorSupport;
 use node_coordinator::{
 	Coordinator, CoordinatorConfig, Keypair, LinkedHashMap, Multiaddr, NetworkConfig, PeerId,
@@ -55,7 +55,10 @@ pub fn get_service(
 	let support = Arc::new(DefaultConsensusSupport::new(chain.clone(), txpool.clone()));
 
 	let consensus_config = ConsensusConfig {
-		secret_key: Some(account.secret_key.clone()),
+		poa: Some(PoaConfig {
+			secret_key: Some(account.secret_key.clone()),
+		}),
+		raft: None,
 	};
 
 	let consensus = Arc::new(Consensus::new(consensus_config, support).unwrap());
@@ -94,21 +97,6 @@ pub async fn wait_block_execution(chain: &Arc<Chain>, expected_number: BlockNumb
 		}
 		futures_timer::Delay::new(Duration::from_millis(10)).await;
 	}
-}
-
-/// to avoid rocksdb `libc++abi.dylib: Pure virtual function called!`
-#[allow(dead_code)]
-pub async fn safe_close(
-	chain: Arc<Chain>,
-	txpool: Arc<TxPool<DefaultTxPoolSupport>>,
-	consensus: Consensus<DefaultConsensusSupport>,
-	coordinator: Arc<Coordinator<DefaultCoordinatorSupport>>,
-) {
-	drop(chain);
-	drop(txpool);
-	drop(consensus);
-	drop(coordinator);
-	tokio::time::sleep(Duration::from_millis(50)).await;
 }
 
 fn get_coordinator(

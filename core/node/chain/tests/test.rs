@@ -31,7 +31,6 @@ use primitives::{
 	codec, Address, Balance, Block, Body, DBKey, Execution, FullTransaction, Hash, Header, Receipt,
 	TransactionForHash,
 };
-use std::time::Duration;
 use utils_test::test_accounts;
 
 #[tokio::test]
@@ -144,8 +143,6 @@ async fn test_chain_normal() {
 		vec![Arc::new(payload_tx_receipt)],
 		expected_payload_receipts
 	);
-
-	safe_close(chain).await;
 }
 
 #[tokio::test]
@@ -191,8 +188,6 @@ async fn test_chain_execute_call() {
 		.unwrap();
 	let result: Balance = codec::decode(&mut &result[..]).unwrap();
 	assert_eq!(10, result);
-
-	safe_close(chain).await
 }
 
 #[tokio::test]
@@ -335,13 +330,6 @@ fn expected_data(
 		meta_receipts,
 		payload_receipts,
 	)
-}
-
-/// safe close,
-/// to avoid rocksdb `libc++abi.dylib: Pure virtual function called!`
-async fn safe_close(chain: Chain) {
-	drop(chain);
-	tokio::time::sleep(Duration::from_millis(50)).await;
 }
 
 fn hash<E: Encode>(data: E) -> Hash {

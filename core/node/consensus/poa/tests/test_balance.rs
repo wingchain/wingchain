@@ -213,6 +213,4 @@ async fn test_poa_balance() {
 			result: Ok(codec::encode(&()).unwrap()),
 		}
 	);
-
-	base::safe_close(chain, txpool, consensus).await;
 }

@@ -381,8 +381,6 @@ async fn test_poa_contract_tb_success() {
 	let result = String::from_utf8(result).unwrap();
 	log::info!("result: {}", result);
 	assert_eq!(result, r#"40"#.to_string(),);
-
-	base::safe_close(chain, txpool, consensus).await;
 }
 
 #[tokio::test]
@@ -572,8 +570,6 @@ async fn test_poa_contract_tb_failed() {
 	let result = String::from_utf8(result).unwrap();
 	log::info!("result: {}", result);
 	assert_eq!(result, r#"0"#.to_string(),);
-
-	base::safe_close(chain, txpool, consensus).await;
 }
 
 #[tokio::test]
@@ -765,8 +761,6 @@ async fn test_poa_contract_tb_ea() {
 	let result = String::from_utf8(result).unwrap();
 	log::info!("result: {}", result);
 	assert_eq!(result, r#"0"#.to_string(),);
-
-	base::safe_close(chain, txpool, consensus).await;
 }
 
 fn get_token_bank_code() -> &'static [u8] {

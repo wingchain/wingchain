@@ -16,11 +16,14 @@ use crypto::address::AddressImpl;
 use crypto::dsa::DsaImpl;
 use derive_more::{From, TryInto};
 use log::info;
+use node_consensus_base::ConsensusInMessage;
+use node_consensus_raft::proof::Proof;
 use node_coordinator::{Keypair, LinkedHashMap, Multiaddr, PeerId, Protocol};
+use node_executor::module;
 use primitives::codec::{Decode, Encode};
+use primitives::{codec, Balance, Event, Receipt};
 use std::convert::TryInto;
 use std::sync::Arc;
-use tokio::time::Duration;
 use utils_enum_codec::enum_codec;
 use utils_test::test_accounts;
 
@@ -76,12 +79,190 @@ async fn test_raft_balance() {
 		info!("peer id: {}", spec.2.public().into_peer_id());
 	}
 
-	let _services = specs
+	let services = specs
 		.iter()
 		.map(|x| base::get_service(&x.0, &x.1, x.2.clone(), x.3, bootnodes.clone()))
 		.collect::<Vec<_>>();
 
-	tokio::time::sleep(Duration::from_secs(30)).await;
+	let consensus0 = &services[0].2;
+
+	let leader_address = base::wait_leader_elected(&consensus0).await;
+
+	let leader_index = specs
+		.iter()
+		.position(|x| x.1.address == leader_address)
+		.unwrap();
+
+	let leader_service = &services[leader_index];
+
+	let chain = &leader_service.0;
+	let txpool = &leader_service.1;
+	let consensus = &leader_service.2;
+
+	let tx1_hash = base::insert_tx(
+		&chain,
+		&txpool,
+		chain
+			.build_transaction(
+				Some((account1.secret_key.clone(), 0, 10)),
+				chain
+					.build_call(
+						"balance".to_string(),
+						"transfer".to_string(),
+						module::balance::TransferParams {
+							recipient: account2.address.clone(),
+							value: 1,
+						},
+					)
+					.unwrap(),
+			)
+			.unwrap(),
+	)
+	.await;
+	base::wait_txpool(&txpool, 1).await;
+
+	// generate block 1
+	consensus
+		.in_message_tx()
+		.unbounded_send(ConsensusInMessage::Generate)
+		.unwrap();
+	base::wait_block_execution(&chain, 1).await;
+
+	let block_hash = chain.get_block_hash(&1).unwrap().unwrap();
+	let proof = chain.get_proof(&block_hash).unwrap().unwrap();
+	let _proof: Proof = Decode::decode(&mut &proof.data[..]).unwrap();
+
+	let tx2_hash = base::insert_tx(
+		&chain,
+		&txpool,
+		chain
+			.build_transaction(
+				Some((account1.secret_key.clone(), 0, 11)),
+				chain
+					.build_call(
+						"balance".to_string(),
+						"transfer".to_string(),
+						module::balance::TransferParams {
+							recipient: account2.address.clone(),
+							value: 2,
+						},
+					)
+					.unwrap(),
+			)
+			.unwrap(),
+	)
+	.await;
+	base::wait_txpool(&txpool, 1).await;
+
+	// generate block 2
+	consensus
+		.in_message_tx()
+		.unbounded_send(ConsensusInMessage::Generate)
+		.unwrap();
+	base::wait_block_execution(&chain, 2).await;
+
+	let tx3_hash = base::insert_tx(
+		&chain,
+		&txpool,
+		chain
+			.build_transaction(
+				Some((account1.secret_key.clone(), 0, 12)),
+				chain
+					.build_call(
+						"balance".to_string(),
+						"transfer".to_string(),
+						module::balance::TransferParams {
+							recipient: account2.address.clone(),
+							value: 3,
+						},
+					)
+					.unwrap(),
+			)
+			.unwrap(),
+	)
+	.await;
+	base::wait_txpool(&txpool, 1).await;
+
+	// generate block 3
+	consensus
+		.in_message_tx()
+		.unbounded_send(ConsensusInMessage::Generate)
+		.unwrap();
+	base::wait_block_execution(&chain, 3).await;
+
+	// check block 1
+	let balance: Balance = chain
+		.execute_call_with_block_number(
+			&1,
+			Some(&account1.address),
+			"balance".to_string(),
+			"get_balance".to_string(),
+			node_executor_primitives::EmptyParams,
+		)
+		.unwrap()
+		.unwrap();
+	assert_eq!(balance, 9);
+	let block1 = chain
+		.get_block(&chain.get_block_hash(&1).unwrap().unwrap())
+		.unwrap()
+		.unwrap();
+	assert_eq!(block1.body.payload_txs[0], tx1_hash);
+
+	// check block 2
+	let balance: Balance = chain
+		.execute_call_with_block_number(
+			&2,
+			Some(&account1.address),
+			"balance".to_string(),
+			"get_balance".to_string(),
+			node_executor_primitives::EmptyParams,
+		)
+		.unwrap()
+		.unwrap();
+	assert_eq!(balance, 7);
+
+	let block2 = chain
+		.get_block(&chain.get_block_hash(&2).unwrap().unwrap())
+		.unwrap()
+		.unwrap();
+	assert_eq!(block2.body.payload_txs[0], tx2_hash);
+
+	// check block 3
+	let balance: Balance = chain
+		.execute_call_with_block_number(
+			&3,
+			Some(&account1.address),
+			"balance".to_string(),
+			"get_balance".to_string(),
+			node_executor_primitives::EmptyParams,
+		)
+		.unwrap()
+		.unwrap();
+	assert_eq!(balance, 4);
+
+	let block3 = chain
+		.get_block(&chain.get_block_hash(&3).unwrap().unwrap())
+		.unwrap()
+		.unwrap();
+	assert_eq!(block3.body.payload_txs[0], tx3_hash);
+
+	let tx3_receipt = chain.get_receipt(&tx3_hash).unwrap().unwrap();
+	assert_eq!(
+		tx3_receipt,
+		Receipt {
+			block_number: 3,
+			events: vec![Event::from_data(
+				"Transferred".to_string(),
+				module::balance::Transferred {
+					sender: account1.address.clone(),
+					recipient: account2.address.clone(),
+					value: 3,
+				},
+			)
+			.unwrap()],
+			result: Ok(codec::encode(&()).unwrap()),
+		}
+	);
 }
 
 #[test]

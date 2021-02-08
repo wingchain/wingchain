@@ -75,8 +75,6 @@ async fn test_txpool() {
 		}
 		tokio::time::sleep(Duration::from_millis(10)).await;
 	}
-
-	safe_close(chain, txpool).await;
 }
 
 #[tokio::test]
@@ -114,8 +112,6 @@ async fn test_txpool_dup() {
 
 	let result = txpool.insert(tx);
 	assert!(format!("{}", result.unwrap_err()).contains("Duplicated tx"));
-
-	safe_close(chain, txpool).await;
 }
 
 #[tokio::test]
@@ -197,8 +193,6 @@ async fn test_txpool_validate() {
 		format!("{}", result.unwrap_err()),
 		"TxPool Error: Insert error: Invalid tx: Invalid tx until: Exceed min until: 0"
 	);
-
-	safe_close(chain, txpool).await;
 }
 
 #[tokio::test]
@@ -266,16 +260,6 @@ async fn test_txpool_capacity() {
 	txpool.insert(tx2).unwrap();
 	let result = txpool.insert(tx3);
 	assert!(format!("{}", result.unwrap_err()).contains("Exceed capacity"));
-
-	safe_close(chain, txpool).await;
-}
-
-/// safe close,
-/// to avoid rocksdb `libc++abi.dylib: Pure virtual function called!`
-async fn safe_close(chain: Arc<Chain>, txpool: TxPool<DefaultTxPoolSupport>) {
-	drop(chain);
-	drop(txpool);
-	tokio::time::sleep(Duration::from_millis(50)).await;
 }
 
 fn get_chain(address: &Address) -> Arc<Chain> {

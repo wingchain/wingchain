@@ -20,9 +20,9 @@ use std::time::Duration;
 use tempfile::tempdir;
 
 use node_chain::{Chain, ChainConfig, DBConfig};
-use node_consensus::Consensus;
+use node_consensus::{Consensus, ConsensusConfig};
 use node_consensus_base::support::DefaultConsensusSupport;
-use node_consensus_base::ConsensusConfig;
+use node_consensus_poa::PoaConfig;
 use node_txpool::support::DefaultTxPoolSupport;
 use node_txpool::{TxPool, TxPoolConfig};
 use primitives::{BlockNumber, Hash, Transaction};
@@ -34,7 +34,7 @@ pub fn get_service(
 ) -> (
 	Arc<Chain>,
 	Arc<TxPool<DefaultTxPoolSupport>>,
-	Consensus<DefaultConsensusSupport>,
+	Arc<Consensus<DefaultConsensusSupport>>,
 ) {
 	let chain = get_chain(authority_accounts);
 
@@ -46,10 +46,13 @@ pub fn get_service(
 	let support = Arc::new(DefaultConsensusSupport::new(chain.clone(), txpool.clone()));
 
 	let consensus_config = ConsensusConfig {
-		secret_key: Some(account.secret_key.clone()),
+		poa: Some(PoaConfig {
+			secret_key: Some(account.secret_key.clone()),
+		}),
+		raft: None,
 	};
 
-	let consensus = Consensus::new(consensus_config, support).unwrap();
+	let consensus = Arc::new(Consensus::new(consensus_config, support).unwrap());
 
 	(chain, txpool, consensus)
 }
@@ -88,19 +91,6 @@ pub async fn wait_block_execution(chain: &Arc<Chain>, expected_number: BlockNumb
 		}
 		futures_timer::Delay::new(Duration::from_millis(10)).await;
 	}
-}
-
-/// safe close,
-/// to avoid rocksdb `libc++abi.dylib: Pure virtual function called!`
-pub async fn safe_close(
-	chain: Arc<Chain>,
-	txpool: Arc<TxPool<DefaultTxPoolSupport>>,
-	consensus: Consensus<DefaultConsensusSupport>,
-) {
-	drop(chain);
-	drop(txpool);
-	drop(consensus);
-	tokio::time::sleep(Duration::from_millis(50)).await;
 }
 
 fn get_chain(authority_accounts: &[&TestAccount]) -> Arc<Chain> {

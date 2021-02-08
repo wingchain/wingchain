@@ -20,7 +20,7 @@ use primitives::{Hash, PublicKey, SecretKey, Signature};
 use std::convert::TryFrom;
 use std::sync::Arc;
 
-#[derive(Encode, Decode)]
+#[derive(Encode, Decode, Debug)]
 pub struct Proof {
 	pub log_index: u64,
 	pub log_term: u64,

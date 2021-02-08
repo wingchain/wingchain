@@ -35,8 +35,11 @@ use primitives::{
 	Transaction,
 };
 
+use crate::config::{
+	DEFAULT_EXTRA_ELECTION_TIMEOUT_PER_KB, DEFAULT_INIT_EXTRA_ELECTION_TIMEOUT,
+	DEFAULT_REQUEST_PROPOSAL_MIN_INTERVAL,
+};
 use crate::errors::ErrorKind;
-use crate::get_poa_authorities;
 use crate::proof::Proof;
 use crate::protocol::{
 	AppendEntriesReq, AppendEntriesRes, EntryData, Proposal, RaftMessage, RegisterValidatorReq,
@@ -46,13 +49,14 @@ use crate::protocol::{
 use crate::storage::Storage;
 use crate::stream::state::{CandidateState, FollowerState, LeaderState, ObserverState, State};
 use crate::verifier::VerifyError;
+use crate::{get_raft_authorities, RaftConfig};
+use node_consensus_base::errors::map_channel_err;
+use node_consensus_primitives::CONSENSUS_RAFT;
+use serde::Serialize;
+use serde_json::Value;
 use std::convert::TryInto;
 
 mod state;
-
-const INIT_EXTRA_ELECTION_TIMEOUT: u64 = 10000;
-const EXTRA_ELECTION_TIMEOUT_PER_K: u64 = 5;
-const REQUEST_PROPOSAL_MIN_INTERVAL: u64 = 1000;
 
 #[allow(clippy::type_complexity)]
 pub struct RaftStream<S>
@@ -64,6 +68,9 @@ where
 
 	/// Raft meta data
 	raft_meta: Arc<Meta>,
+
+	/// Raft config
+	raft_config: Arc<RaftConfig>,
 
 	/// Secret key of current validator
 	secret_key: SecretKey,
@@ -107,14 +114,6 @@ where
 	/// Authorities
 	authorities: Authorities,
 
-	/// Request vote res sender
-	/// Candidate state should maintain a receiver
-	request_vote_res_tx: Option<UnboundedSender<(Address, RequestVoteRes)>>,
-
-	/// Append entries res sender
-	/// Leader state should maintain a receiver
-	append_entries_res_tx: Option<UnboundedSender<(Address, AppendEntriesRes)>>,
-
 	/// Internal message sender
 	internal_tx: UnboundedSender<InternalMessage>,
 
@@ -127,6 +126,11 @@ where
 
 	/// Received proposal that need wait
 	pending_proposal: Option<Proposal>,
+
+	/// Commit block params
+	/// When building or verifying a proposal, the commit_block_params
+	/// is returned. We just keep it for later use
+	commit_block_params: Option<ChainCommitBlockParams>,
 }
 
 impl<S> RaftStream<S>
@@ -136,27 +140,29 @@ where
 	pub fn spawn(
 		support: Arc<S>,
 		raft_meta: Meta,
-		secret_key: Option<SecretKey>,
+		raft_config: RaftConfig,
 		out_tx: UnboundedSender<ConsensusOutMessage>,
 		in_rx: UnboundedReceiver<ConsensusInMessage>,
 	) -> CommonResult<()> {
-		let secret_key = match secret_key {
-			Some(v) => v,
+		let secret_key = match &raft_config.secret_key {
+			Some(v) => v.clone(),
 			None => return Ok(()),
 		};
 
 		let public_key = get_public_key(&secret_key, &support)?;
 		let address = get_address(&public_key, &support)?;
 		let raft_meta = Arc::new(raft_meta);
+		let raft_config = Arc::new(raft_config);
 		let storage = Arc::new(Storage::new(support.clone())?);
 		let confirmed_number = support.get_current_state().confirmed_number;
-		let authorities = get_poa_authorities(&support, &confirmed_number)?;
+		let authorities = get_raft_authorities(&support, &confirmed_number)?;
 
 		let (internal_tx, internal_rx) = unbounded();
 
 		let this = Self {
 			support,
 			raft_meta,
+			raft_config,
 			secret_key,
 			public_key,
 			address,
@@ -171,12 +177,11 @@ where
 			last_heartbeat_instant: None,
 			state: State::Observer,
 			authorities,
-			request_vote_res_tx: None,
-			append_entries_res_tx: None,
 			internal_tx,
 			internal_rx,
 			last_request_proposal_instant: None,
 			pending_proposal: None,
+			commit_block_params: None,
 		};
 		tokio::spawn(this.start());
 		Ok(())
@@ -187,8 +192,12 @@ where
 
 		self.update_state(State::Follower);
 		if self.state == State::Follower {
+			let init_extra_election_timeout = self
+				.raft_config
+				.init_extra_election_timeout
+				.unwrap_or(DEFAULT_INIT_EXTRA_ELECTION_TIMEOUT);
 			let next_election_instant = Instant::now()
-				+ Duration::from_millis(self.rand_election_timeout() + INIT_EXTRA_ELECTION_TIMEOUT);
+				+ Duration::from_millis(self.rand_election_timeout() + init_extra_election_timeout);
 			self.next_election_instant = Some(next_election_instant);
 		}
 
@@ -242,6 +251,19 @@ where
 			self.raft_meta.election_timeout_min,
 			self.raft_meta.election_timeout_max,
 		)
+	}
+
+	fn consensus_state(&self) -> CommonResult<ConsensusState> {
+		let current_state = self.support.get_current_state();
+		let authorities = get_raft_authorities(&self.support, &current_state.confirmed_number)?;
+
+		Ok(ConsensusState {
+			consensus_name: CONSENSUS_RAFT.to_string(),
+			address: self.address.clone(),
+			meta: (*self.raft_meta).clone(),
+			authorities,
+			current_leader: self.current_leader.clone(),
+		})
 	}
 }
 
@@ -474,9 +496,10 @@ where
 			res
 		);
 
-		if let Some(tx) = &self.append_entries_res_tx {
-			let _ = tx.unbounded_send((address, res));
-		}
+		self.internal_tx
+			.unbounded_send(InternalMessage::AppendEntriesRes { address, res })
+			.map_err(map_channel_err)?;
+
 		Ok(())
 	}
 
@@ -520,7 +543,8 @@ where
 				trace!("Proposal verify result: {}", result_desc);
 				let action = self.on_proposal_verify_result(result)?;
 				match action {
-					VerifyAction::Ok(proposal, _commit_block_params) => {
+					VerifyAction::Ok(proposal, commit_block_params) => {
+						self.commit_block_params = Some(commit_block_params);
 						self.storage.update_proposal(Some(proposal))?;
 					}
 					VerifyAction::Wait => {
@@ -540,7 +564,11 @@ where
 				if let Some(last_request_proposal_instant) = &self.last_request_proposal_instant {
 					let now = Instant::now();
 					let duration = now.duration_since(*last_request_proposal_instant);
-					if REQUEST_PROPOSAL_MIN_INTERVAL >= (duration.as_millis() as u64) {
+					let request_proposal_min_interval = self
+						.raft_config
+						.request_proposal_min_interval
+						.unwrap_or(DEFAULT_REQUEST_PROPOSAL_MIN_INTERVAL);
+					if request_proposal_min_interval >= (duration.as_millis() as u64) {
 						request_proposal_now = false;
 					}
 				}
@@ -666,9 +694,10 @@ where
 	fn on_res_request_vote(&mut self, address: Address, res: RequestVoteRes) -> CommonResult<()> {
 		trace!("On res request vote: address: {}, res: {:?}", address, res);
 
-		if let Some(tx) = &self.request_vote_res_tx {
-			let _ = tx.unbounded_send((address, res));
-		}
+		self.internal_tx
+			.unbounded_send(InternalMessage::RequestVoteRes { address, res })
+			.map_err(map_channel_err)?;
+
 		Ok(())
 	}
 
@@ -688,7 +717,11 @@ where
 		})?;
 
 		let proposal_size = codec::encode(&proposal)?.len() as u64;
-		let extra_election_timeout = EXTRA_ELECTION_TIMEOUT_PER_K * proposal_size / 1024;
+		let extra_election_timeout_per_kb = self
+			.raft_config
+			.extra_election_timeout_per_kb
+			.unwrap_or(DEFAULT_EXTRA_ELECTION_TIMEOUT_PER_KB);
+		let extra_election_timeout = extra_election_timeout_per_kb * proposal_size / 1024;
 
 		// send extra election timeout
 		if let Some(peer_id) = self.known_validators.get(&address) {
@@ -742,8 +775,8 @@ where
 		trace!("Proposal verify result: {}", result_desc);
 		let action = self.on_proposal_verify_result(result)?;
 		match action {
-			VerifyAction::Ok(proposal, _commit_block_params) => {
-				// TODO cache commit_block_params
+			VerifyAction::Ok(proposal, commit_block_params) => {
+				self.commit_block_params = Some(commit_block_params);
 				self.storage.update_proposal(Some(proposal))?;
 			}
 			VerifyAction::Wait => {
@@ -815,7 +848,15 @@ where
 			ConsensusInMessage::BlockCommitted { number, block_hash } => {
 				self.on_block_committed(number, block_hash)?;
 			}
-			_ => {}
+			ConsensusInMessage::Generate => {
+				self.internal_tx
+					.unbounded_send(InternalMessage::Generate)
+					.map_err(map_channel_err)?;
+			}
+			ConsensusInMessage::GetConsensusState { tx } => {
+				let value = serde_json::to_value(self.consensus_state()?).unwrap_or(Value::Null);
+				let _ = tx.send(value);
+			}
 		}
 		Ok(())
 	}
@@ -863,9 +904,7 @@ where
 					let res = self.on_req_append_entries(address, req)?;
 					self.internal_tx
 						.unbounded_send(InternalMessage::LogUpdated)
-						.map_err(|e| {
-							node_consensus_base::errors::ErrorKind::Channel(Box::new(e))
-						})?;
+						.map_err(map_channel_err)?;
 					self.response(peer_id, res)?;
 				}
 			}
@@ -902,6 +941,7 @@ where
 }
 
 /// methods for internal messages
+#[allow(clippy::single_match)]
 impl<S> RaftStream<S>
 where
 	S: ConsensusSupport,
@@ -911,41 +951,61 @@ where
 			InternalMessage::LogUpdated => {
 				self.on_log_updated()?;
 			}
+			_ => {}
 		}
 		Ok(())
 	}
 
 	fn on_log_updated(&mut self) -> CommonResult<()> {
 		let commit_log_index = self.storage.get_commit_log_index();
-		let contains_proposal = self
+		let committed_proposal_block_hash = self
 			.storage
 			.get_log_entries(..=commit_log_index)
 			.iter()
-			.any(|x| matches!(x.data, EntryData::Proposal {..}));
+			.find_map(|x| match &x.data {
+				EntryData::Proposal { block_hash } => Some(block_hash.clone()),
+				_ => None,
+			});
 
-		if contains_proposal {
+		if let Some(committed_proposal_block_hash) = committed_proposal_block_hash {
 			let proposal = self.storage.get_proposal().ok_or_else(|| {
 				node_consensus_base::errors::ErrorKind::Data("Missing proposal".to_string())
 			})?;
 
-			let convert_txs = |txs: Vec<Transaction>| -> CommonResult<Vec<Arc<FullTransaction>>> {
-				txs.into_iter()
-					.map(|tx| -> CommonResult<Arc<FullTransaction>> {
-						let tx_hash = self.support.hash_transaction(&tx)?;
-						Ok(Arc::new(FullTransaction { tx_hash, tx }))
-					})
-					.collect()
-			};
+			// clear discordant commit_block_params
+			let commit_block_params_accordant = self
+				.commit_block_params
+				.as_ref()
+				.map(|x| x.block_hash == committed_proposal_block_hash);
+			if commit_block_params_accordant != Some(true) {
+				self.commit_block_params = None;
+			}
 
-			let build_block_params = BuildBlockParams {
-				number: proposal.number,
-				timestamp: proposal.timestamp,
-				meta_txs: convert_txs(proposal.meta_txs)?,
-				payload_txs: convert_txs(proposal.payload_txs)?,
-				execution_number: proposal.execution_number,
-			};
+			// take kept commit_block_params or build one
+			let mut commit_block_params = match self.commit_block_params.take() {
+				Some(v) => v,
+				None => {
+					let support = self.support.clone();
+					let convert_txs =
+						|txs: Vec<Transaction>| -> CommonResult<Vec<Arc<FullTransaction>>> {
+							txs.into_iter()
+								.map(|tx| -> CommonResult<Arc<FullTransaction>> {
+									let tx_hash = support.hash_transaction(&tx)?;
+									Ok(Arc::new(FullTransaction { tx_hash, tx }))
+								})
+								.collect()
+						};
 
-			let mut commit_block_params = self.support.build_block(build_block_params)?;
+					let build_block_params = BuildBlockParams {
+						number: proposal.number,
+						timestamp: proposal.timestamp,
+						meta_txs: convert_txs(proposal.meta_txs)?,
+						payload_txs: convert_txs(proposal.payload_txs)?,
+						execution_number: proposal.execution_number,
+					};
+					self.support.build_block(build_block_params)?
+				}
+			};
 
 			let (log_index, log_term) = self.storage.get_last_log_index_term();
 			let proof = Proof::new(
@@ -1034,7 +1094,7 @@ where
 	fn send_out_message(&self, out_message: ConsensusOutMessage) -> CommonResult<()> {
 		self.out_tx
 			.unbounded_send(out_message)
-			.map_err(|e| node_consensus_base::errors::ErrorKind::Channel(Box::new(e)))?;
+			.map_err(map_channel_err)?;
 		Ok(())
 	}
 }
@@ -1081,4 +1141,25 @@ enum VerifyAction {
 
 enum InternalMessage {
 	LogUpdated,
+	/// The candidate state will follow RequestVoteRes message
+	RequestVoteRes {
+		address: Address,
+		res: RequestVoteRes,
+	},
+	/// The leader state will follow AppendEntriesRes message
+	AppendEntriesRes {
+		address: Address,
+		res: AppendEntriesRes,
+	},
+	/// The leader state will follow Generate message
+	Generate,
+}
+
+#[derive(Serialize)]
+struct ConsensusState {
+	consensus_name: String,
+	address: Address,
+	meta: Meta,
+	authorities: Authorities,
+	current_leader: Option<Address>,
 }

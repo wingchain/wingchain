@@ -46,6 +46,27 @@ params = '''
 }
 '''
 
+# [[genesis.txs]]
+# module = "raft"
+# method = "init"
+# params = '''
+# {
+#     "block_interval": 3000,
+# 	"heartbeat_interval": 100,
+# 	"election_timeout_min": 500,
+# 	"election_timeout_max": 1000,
+# 	"admin": {
+#     	"threshold": 1,
+#     	"members": [["", 1]]
+#     },
+# 	"authorities": {
+# 		"members": [
+# 			""
+# 		]
+# 	}
+# }
+# '''
+
 [[genesis.txs]]
 module = "contract"
 method = "init"

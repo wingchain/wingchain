@@ -23,9 +23,7 @@ use log::info;
 use parking_lot::RwLock;
 
 use node_consensus_base::support::ConsensusSupport;
-use node_consensus_base::{
-	Consensus as ConsensusT, ConsensusConfig, ConsensusInMessage, ConsensusOutMessage,
-};
+use node_consensus_base::{Consensus as ConsensusT, ConsensusInMessage, ConsensusOutMessage};
 use node_consensus_primitives::CONSENSUS_RAFT;
 use node_executor::module;
 use node_executor_primitives::EmptyParams;
@@ -38,8 +36,11 @@ use crate::stream::RaftStream;
 use crypto::address::Address as AddressT;
 use node_executor::module::raft::Authorities;
 
+pub use crate::config::RaftConfig;
+
+mod config;
 pub mod errors;
-mod proof;
+pub mod proof;
 mod protocol;
 mod storage;
 mod stream;
@@ -55,19 +56,20 @@ where
 	out_rx: RwLock<Option<UnboundedReceiver<ConsensusOutMessage>>>,
 }
 
-impl<S> Raft<S>
+impl<S> ConsensusT for Raft<S>
 where
 	S: ConsensusSupport,
 {
-	pub fn new(config: ConsensusConfig, support: Arc<S>) -> CommonResult<Self> {
-		let raft_meta = get_raft_meta(&support, &0)?;
+	type Config = RaftConfig;
+	type Support = S;
 
-		let secret_key = config.secret_key;
+	fn new(config: RaftConfig, support: Arc<S>) -> CommonResult<Self> {
+		let raft_meta = get_raft_meta(&support, &0)?;
 
 		let (in_tx, in_rx) = unbounded();
 		let (out_tx, out_rx) = unbounded();
 
-		RaftStream::spawn(support.clone(), raft_meta, secret_key, out_tx, in_rx)?;
+		RaftStream::spawn(support.clone(), raft_meta, config, out_tx, in_rx)?;
 
 		info!("Initializing consensus raft");
 
@@ -79,12 +81,7 @@ where
 
 		Ok(raft)
 	}
-}
 
-impl<S> ConsensusT for Raft<S>
-where
-	S: ConsensusSupport,
-{
 	fn verify_proof(&self, header: &Header, proof: &primitives::Proof) -> CommonResult<()> {
 		let name = &proof.name;
 		if name != CONSENSUS_RAFT {
@@ -109,7 +106,7 @@ where
 			Address(address)
 		};
 
-		let authorities = get_poa_authorities(&self.support, &(header.number - 1))?;
+		let authorities = get_raft_authorities(&self.support, &(header.number - 1))?;
 		let is_authority = authorities.members.contains(&address);
 		if !is_authority {
 			return Err(node_consensus_base::errors::ErrorKind::VerifyProofError(
@@ -144,7 +141,7 @@ fn get_raft_meta<S: ConsensusSupport>(
 		.map(|x| x.expect("qed"))
 }
 
-fn get_poa_authorities<S: ConsensusSupport>(
+fn get_raft_authorities<S: ConsensusSupport>(
 	support: &Arc<S>,
 	number: &BlockNumber,
 ) -> CommonResult<Authorities> {

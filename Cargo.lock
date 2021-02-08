@@ -3081,6 +3081,7 @@ dependencies = [
  "node-network",
  "node-txpool",
  "primitives",
+ "serde_json",
 ]
 
 [[package]]
@@ -3104,6 +3105,8 @@ dependencies = [
  "parity-scale-codec",
  "parking_lot 0.10.2",
  "primitives",
+ "serde",
+ "serde_json",
  "tempfile",
  "tokio 1.0.0",
  "utils-test",
@@ -3123,6 +3126,7 @@ dependencies = [
  "env_logger",
  "futures",
  "futures-timer",
+ "hex",
  "log",
  "node-chain",
  "node-consensus",
@@ -3136,6 +3140,8 @@ dependencies = [
  "parking_lot 0.10.2",
  "primitives",
  "rand 0.7.3",
+ "serde",
+ "serde_json",
  "tempfile",
  "tokio 1.0.0",
  "utils-enum-codec",

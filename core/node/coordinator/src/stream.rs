@@ -19,6 +19,7 @@ use futures::StreamExt;
 use log::{error, info, warn};
 
 use node_chain::ChainOutMessage;
+use node_consensus_base::{ConsensusInMessage, ConsensusOutMessage};
 use node_network::{BytesMut, NetworkInMessage, NetworkOutMessage, PMInMessage, PeerId};
 use node_txpool::TxPoolOutMessage;
 use primitives::codec::{Decode, Encode};
@@ -32,7 +33,6 @@ use crate::protocol::{
 use crate::support::CoordinatorSupport;
 use crate::sync::ChainSync;
 use crate::{errors, CoordinatorInMessage, DefaultHandshakeBuilder};
-use node_consensus_base::{ConsensusInMessage, ConsensusOutMessage};
 
 pub struct CoordinatorStream<S>
 where
@@ -93,6 +93,7 @@ where
 				Some(chain_message) = self.chain_rx.next() => {
 					self.on_chain_message(chain_message)
 						.unwrap_or_else(|e| error!("Coordinator handle chain message error: {}", e));
+
 				}
 				Some(network_message) = self.network_rx.next() => {
 					self.on_network_message(network_message)

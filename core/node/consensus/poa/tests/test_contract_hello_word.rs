@@ -314,8 +314,6 @@ async fn test_poa_contract_hw_read() {
 	let result = String::from_utf8(result).unwrap();
 	log::info!("result: {}", result);
 	assert_eq!(result, r#"10"#,);
-
-	base::safe_close(chain, txpool, consensus).await;
 }
 
 #[tokio::test]
@@ -495,8 +493,6 @@ async fn test_poa_contract_hw_write() {
 	let result = String::from_utf8(result).unwrap();
 	log::info!("result: {}", result);
 	assert_eq!(result, r#"{"value":"abc"}"#.to_string(),);
-
-	base::safe_close(chain, txpool, consensus).await;
 }
 
 #[tokio::test]
@@ -648,8 +644,6 @@ async fn test_poa_contract_hw_transfer_success() {
 		.unwrap();
 	log::info!("result: {}", result);
 	assert_eq!(result, 1);
-
-	base::safe_close(chain, txpool, consensus).await;
 }
 
 #[tokio::test]
@@ -787,8 +781,6 @@ async fn test_poa_contract_hw_transfer_failed() {
 		.unwrap();
 	log::info!("result: {}", result);
 	assert_eq!(result, 0);
-
-	base::safe_close(chain, txpool, consensus).await;
 }
 
 #[tokio::test]
@@ -933,8 +925,6 @@ async fn test_poa_contract_hw_transfer_partial_failed() {
 		.unwrap();
 	log::info!("result: {}", result);
 	assert_eq!(result, 0);
-
-	base::safe_close(chain, txpool, consensus).await;
 }
 
 #[tokio::test]
@@ -1023,8 +1013,6 @@ async fn test_poa_contract_hw_nested_contract() {
 	let tx1_error = tx1_receipt.result.unwrap_err();
 	log::info!("tx1_error: {:?}", tx1_error);
 	assert_eq!(tx1_error, "ContractError: NestDepthExceeded".to_string());
-
-	base::safe_close(chain, txpool, consensus).await;
 }
 
 fn get_code() -> &'static [u8] {

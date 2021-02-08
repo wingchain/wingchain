@@ -19,12 +19,12 @@ use std::sync::Arc;
 use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use node_consensus_base::support::ConsensusSupport;
-use node_consensus_base::{
-	Consensus as ConsensusT, ConsensusConfig, ConsensusInMessage, ConsensusOutMessage,
-};
+use node_consensus_base::{Consensus as ConsensusT, ConsensusInMessage, ConsensusOutMessage};
 use node_consensus_poa::Poa;
+pub use node_consensus_poa::PoaConfig;
 use node_consensus_primitives::{CONSENSUS_POA, CONSENSUS_RAFT};
 use node_consensus_raft::Raft;
+pub use node_consensus_raft::RaftConfig;
 use primitives::errors::CommonResult;
 use primitives::{Header, Proof};
 
@@ -33,6 +33,11 @@ where
 	S: ConsensusSupport,
 {
 	dispatcher: Dispatcher<S>,
+}
+
+pub struct ConsensusConfig {
+	pub poa: Option<PoaConfig>,
+	pub raft: Option<RaftConfig>,
 }
 
 enum Dispatcher<S>
@@ -48,16 +53,7 @@ where
 	S: ConsensusSupport,
 {
 	pub fn new(config: ConsensusConfig, support: Arc<S>) -> CommonResult<Self> {
-		let system_meta = &support.get_current_state().system_meta;
-		let consensus = system_meta.consensus.as_str();
-
-		let dispatcher = match consensus {
-			CONSENSUS_POA => Dispatcher::Poa(Poa::new(config, support)?),
-			CONSENSUS_RAFT => Dispatcher::Raft(Raft::new(config, support)?),
-			other => {
-				panic!("Unknown consensus: {}", other);
-			}
-		};
+		let dispatcher = Dispatcher::new(config, support)?;
 
 		let consensus = Consensus { dispatcher };
 
@@ -81,6 +77,33 @@ impl<S> ConsensusT for Dispatcher<S>
 where
 	S: ConsensusSupport,
 {
+	type Config = ConsensusConfig;
+	type Support = S;
+
+	fn new(config: ConsensusConfig, support: Arc<S>) -> CommonResult<Self> {
+		let system_meta = &support.get_current_state().system_meta;
+		let consensus = system_meta.consensus.as_str();
+
+		let dispatcher = match consensus {
+			CONSENSUS_POA => {
+				let config = config.poa.ok_or_else(|| {
+					node_consensus_base::errors::ErrorKind::Data("Missing poa config".to_string())
+				})?;
+				Dispatcher::Poa(Poa::new(config, support)?)
+			}
+			CONSENSUS_RAFT => {
+				let config = config.raft.ok_or_else(|| {
+					node_consensus_base::errors::ErrorKind::Data("Missing raft config".to_string())
+				})?;
+				Dispatcher::Raft(Raft::new(config, support)?)
+			}
+			other => {
+				panic!("Unknown consensus: {}", other);
+			}
+		};
+		Ok(dispatcher)
+	}
+
 	fn verify_proof(&self, header: &Header, proof: &Proof) -> CommonResult<()> {
 		match self {
 			Dispatcher::Poa(c) => c.verify_proof(header, proof),

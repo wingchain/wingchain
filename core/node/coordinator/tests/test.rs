@@ -136,10 +136,6 @@ async fn test_coordinator_block_sync() {
 	let chain1_block_3_hash = chain0.get_block_hash(&3).unwrap().unwrap();
 
 	assert_eq!(chain0_block_3_hash, chain1_block_3_hash);
-
-	for service in services {
-		base::safe_close(service.0, service.1, service.2, service.3).await;
-	}
 }
 
 #[tokio::test]
@@ -229,9 +225,5 @@ async fn test_coordinator_txpool_sync() {
 			}
 		}
 		futures_timer::Delay::new(Duration::from_millis(10)).await;
-	}
-
-	for service in services {
-		base::safe_close(service.0, service.1, service.2, service.3).await;
 	}
 }

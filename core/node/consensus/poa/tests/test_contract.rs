@@ -128,7 +128,6 @@ async fn test_poa_contract_create() {
 			members: vec![(account1.address.clone(), 1)],
 		})
 	);
-	base::safe_close(chain, txpool, consensus).await;
 }
 
 #[tokio::test]
@@ -142,7 +141,7 @@ async fn test_poa_contract_create_fail() {
 	let (account1, _account2) = (&test_accounts[0], &test_accounts[1]);
 
 	let authority_accounts = [account1];
-	let (chain, txpool, consensus) = base::get_service(&authority_accounts, account1);
+	let (chain, _txpool, _consensus) = base::get_service(&authority_accounts, account1);
 
 	let ori_code = get_code().to_vec();
 
@@ -198,8 +197,6 @@ async fn test_poa_contract_create_fail() {
 		"Chain Error: Validate tx error: PreCompileError: ValidationError: Bad magic number (at offset 0)"
 			.to_string()
 	);
-
-	base::safe_close(chain, txpool, consensus).await;
 }
 
 #[tokio::test]
@@ -444,8 +441,6 @@ async fn test_poa_contract_update_admin() {
 			members: vec![(account2.address.clone(), 1)],
 		})
 	);
-
-	base::safe_close(chain, txpool, consensus).await;
 }
 
 #[tokio::test]
@@ -719,8 +714,6 @@ async fn test_poa_contract_update_code() {
 	};
 	log::info!("code_hash: {:?}", code_hash);
 	assert_eq!(code_hash, Some(expect_code_hash),);
-
-	base::safe_close(chain, txpool, consensus).await;
 }
 
 fn get_code() -> &'static [u8] {

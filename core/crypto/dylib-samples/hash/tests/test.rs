@@ -74,7 +74,7 @@ fn test_dylib_hash() {
 		let call_name_free: Symbol<CallNameFree> =
 			lib.get(b"_crypto_hash_custom_name_free").unwrap();
 		let raw = call_name();
-		let name = CStr::from_ptr(raw).to_str().expect("").to_owned();
+		let name = CStr::from_ptr(raw).to_str().unwrap().to_owned();
 		call_name_free(raw);
 		name
 	};

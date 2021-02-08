@@ -21,7 +21,7 @@ use executor_primitives::{
 };
 use primitives::codec::{Decode, Encode};
 use primitives::{codec, Address, Call};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 pub struct Module<C, U>
 where
@@ -107,7 +107,7 @@ pub struct InitParams {
 	pub authority: Address,
 }
 
-#[derive(Encode, Decode, Debug, PartialEq)]
+#[derive(Encode, Decode, Debug, PartialEq, Clone, Serialize)]
 pub struct Meta {
 	pub block_interval: Option<u64>,
 }

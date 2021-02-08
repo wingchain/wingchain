@@ -19,10 +19,12 @@ use std::sync::Arc;
 use std::time::Duration;
 use tempfile::tempdir;
 
+use futures::channel::oneshot;
 use node_chain::{Chain, ChainConfig, DBConfig};
-use node_consensus::Consensus;
+use node_consensus::{Consensus, ConsensusConfig};
 use node_consensus_base::support::DefaultConsensusSupport;
-use node_consensus_base::ConsensusConfig;
+use node_consensus_base::ConsensusInMessage;
+use node_consensus_raft::RaftConfig;
 use node_coordinator::support::DefaultCoordinatorSupport;
 use node_coordinator::{
 	Coordinator, CoordinatorConfig, Keypair, LinkedHashMap, Multiaddr, NetworkConfig, PeerId,
@@ -30,7 +32,7 @@ use node_coordinator::{
 };
 use node_txpool::support::DefaultTxPoolSupport;
 use node_txpool::{TxPool, TxPoolConfig};
-use primitives::BlockNumber;
+use primitives::{Address, BlockNumber, Hash, Transaction};
 use utils_test::TestAccount;
 
 pub fn get_service(
@@ -55,7 +57,13 @@ pub fn get_service(
 	let support = Arc::new(DefaultConsensusSupport::new(chain.clone(), txpool.clone()));
 
 	let consensus_config = ConsensusConfig {
-		secret_key: Some(account.secret_key.clone()),
+		poa: None,
+		raft: Some(RaftConfig {
+			secret_key: Some(account.secret_key.clone()),
+			init_extra_election_timeout: Some(0),
+			extra_election_timeout_per_kb: Some(5),
+			request_proposal_min_interval: Some(1000),
+		}),
 	};
 
 	let consensus = Arc::new(Consensus::new(consensus_config, support).unwrap());
@@ -68,6 +76,16 @@ pub fn get_service(
 	let coordinator = get_coordinator(local_key_pair, port, bootnodes, coordinator_support);
 
 	(chain, txpool, consensus, coordinator)
+}
+
+pub async fn insert_tx(
+	chain: &Arc<Chain>,
+	txpool: &Arc<TxPool<DefaultTxPoolSupport>>,
+	tx: Transaction,
+) -> Hash {
+	let tx_hash = chain.hash_transaction(&tx).unwrap();
+	txpool.insert(tx).unwrap();
+	tx_hash
 }
 
 pub async fn wait_txpool(txpool: &Arc<TxPool<DefaultTxPoolSupport>>, count: usize) {
@@ -96,19 +114,24 @@ pub async fn wait_block_execution(chain: &Arc<Chain>, expected_number: BlockNumb
 	}
 }
 
-/// to avoid rocksdb `libc++abi.dylib: Pure virtual function called!`
-#[allow(dead_code)]
-pub async fn safe_close(
-	chain: Arc<Chain>,
-	txpool: Arc<TxPool<DefaultTxPoolSupport>>,
-	consensus: Consensus<DefaultConsensusSupport>,
-	coordinator: Arc<Coordinator<DefaultCoordinatorSupport>>,
-) {
-	drop(chain);
-	drop(txpool);
-	drop(consensus);
-	drop(coordinator);
-	tokio::time::sleep(Duration::from_millis(50)).await;
+pub async fn wait_leader_elected(consensus: &Arc<Consensus<DefaultConsensusSupport>>) -> Address {
+	let in_tx = consensus.in_message_tx();
+	let address = loop {
+		{
+			let (tx, rx) = oneshot::channel();
+			let _ = in_tx.unbounded_send(ConsensusInMessage::GetConsensusState { tx });
+			let consensus_state = rx.await.unwrap();
+			let current_leader = &consensus_state["current_leader"];
+
+			if current_leader.is_string() {
+				break current_leader.as_str().unwrap().to_string();
+			}
+		}
+		futures_timer::Delay::new(Duration::from_millis(10)).await;
+	};
+
+	let address = hex::decode(address).unwrap();
+	Address(address)
 }
 
 fn get_coordinator(
@@ -202,7 +225,7 @@ module = "raft"
 method = "init"
 params = '''
 {{
-    "block_interval": 3000,
+    "block_interval": null,
 	"heartbeat_interval": 100,
 	"election_timeout_min": 500,
 	"election_timeout_max": 1000,

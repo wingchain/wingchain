@@ -31,7 +31,9 @@ use crate::protocol::{
 };
 use crate::storage::Storage;
 use crate::stream::{InternalMessage, RaftStream};
+use node_consensus_base::errors::map_channel_err;
 use node_consensus_base::scheduler::{ScheduleInfo, Scheduler};
+use std::time::SystemTime;
 
 #[derive(PartialEq, Debug)]
 pub enum State {
@@ -49,7 +51,6 @@ where
 	replications: HashMap<Address, Replication>,
 	replication_out_tx: UnboundedSender<ReplicationOutMessage>,
 	replication_out_rx: UnboundedReceiver<ReplicationOutMessage>,
-	append_entries_res_rx: UnboundedReceiver<(Address, AppendEntriesRes)>,
 }
 
 impl<'a, S> LeaderState<'a, S>
@@ -58,14 +59,11 @@ where
 {
 	pub fn new(stream: &'a mut RaftStream<S>) -> Self {
 		let (replication_out_tx, replication_out_rx) = unbounded();
-		let (append_entries_res_tx, append_entries_res_rx) = unbounded();
-		stream.append_entries_res_tx = Some(append_entries_res_tx);
 		Self {
 			stream,
 			replications: HashMap::new(),
 			replication_out_tx,
 			replication_out_rx,
-			append_entries_res_rx,
 		}
 	}
 	pub async fn start(mut self) -> CommonResult<()> {
@@ -104,8 +102,20 @@ where
 					.unwrap_or_else(|e| error!("Raft stream handle work error: {}", e));
 				}
 				Some(internal_message) = self.stream.internal_rx.next() => {
-					self.stream.on_internal_message(internal_message)
-						.unwrap_or_else(|e| error!("Raft stream handle internal message error: {}", e));
+					match internal_message{
+						InternalMessage::AppendEntriesRes {address, res} => {
+							self.on_append_entries_res(address, res)
+								.unwrap_or_else(|e| error!("Raft stream handle append entries res error: {}", e));
+						},
+						InternalMessage::Generate => {
+							self.generate()
+								.unwrap_or_else(|e| error!("Raft stream handle generate message error: {}", e));
+						},
+						_ => {
+							self.stream.on_internal_message(internal_message)
+								.unwrap_or_else(|e| error!("Raft stream handle internal message error: {}", e));
+						}
+					}
 				},
 				Some(in_message) = self.stream.in_rx.next() => {
 					self.stream.on_in_message(in_message)
@@ -115,12 +125,19 @@ where
 					self.on_replication_out_message(replication_out_message)
 						.unwrap_or_else(|e| error!("Raft stream handle replication out message error: {}", e));
 				}
-				Some((address, res)) = self.append_entries_res_rx.next() => {
-					self.on_append_entries_res(address, res)
-						.unwrap_or_else(|e| error!("Raft stream handle append entries res error: {}", e));
-				},
 			}
 		}
+	}
+
+	fn generate(&mut self) -> CommonResult<()> {
+		let timestamp = SystemTime::now();
+		let timestamp = timestamp
+			.duration_since(SystemTime::UNIX_EPOCH)
+			.map_err(|_| node_consensus_base::errors::ErrorKind::Time)?;
+		let timestamp = timestamp.as_millis() as u64;
+		let schedule_info = ScheduleInfo { timestamp };
+		self.work(schedule_info)?;
+		Ok(())
 	}
 
 	fn work(&mut self, schedule_info: ScheduleInfo) -> CommonResult<()> {
@@ -158,7 +175,9 @@ where
 
 		let number = proposal.number;
 		let execution_number = proposal.execution_number;
-		let block_hash = commit_block_params.block_hash;
+		let block_hash = commit_block_params.block_hash.clone();
+
+		self.stream.commit_block_params = Some(commit_block_params);
 
 		trace!(
 			"Proposal: number: {}, execution_number: {}, block_hash: {}",
@@ -190,9 +209,10 @@ where
 				if let Some(replication) = self.replications.get(&address) {
 					let request_id = self.stream.append_entries(address, req)?;
 					let in_message = ReplicationInMessage::AppendEntriesReqResult { request_id };
-					replication.in_tx.unbounded_send(in_message).map_err(|e| {
-						node_consensus_base::errors::ErrorKind::Channel(Box::new(e))
-					})?;
+					replication
+						.in_tx
+						.unbounded_send(in_message)
+						.map_err(map_channel_err)?;
 				}
 			}
 			ReplicationOutMessage::UpdateMatchIndex {
@@ -228,7 +248,7 @@ where
 				self.stream
 					.internal_tx
 					.unbounded_send(InternalMessage::LogUpdated)
-					.map_err(|e| node_consensus_base::errors::ErrorKind::Channel(Box::new(e)))?;
+					.map_err(map_channel_err)?;
 			}
 		}
 		Ok(())
@@ -244,7 +264,7 @@ where
 			replication
 				.in_tx
 				.unbounded_send(in_message)
-				.map_err(|e| node_consensus_base::errors::ErrorKind::Channel(Box::new(e)))?;
+				.map_err(map_channel_err)?;
 		}
 		Ok(())
 	}
@@ -280,7 +300,6 @@ where
 	stream: &'a mut RaftStream<S>,
 	votes_granted: u64,
 	votes_needed: u64,
-	request_vote_res_rx: UnboundedReceiver<(Address, RequestVoteRes)>,
 	requests: HashMap<RequestId, ()>,
 }
 
@@ -289,14 +308,10 @@ where
 	S: ConsensusSupport,
 {
 	pub fn new(stream: &'a mut RaftStream<S>) -> Self {
-		let (tx, rx) = unbounded();
-		stream.request_vote_res_tx = Some(tx);
-
 		Self {
 			stream,
 			votes_granted: 0,
 			votes_needed: 0,
-			request_vote_res_rx: rx,
 			requests: Default::default(),
 		}
 	}
@@ -333,16 +348,20 @@ where
 						break;
 					},
 					Some(internal_message) = self.stream.internal_rx.next() => {
-						self.stream.on_internal_message(internal_message)
-							.unwrap_or_else(|e| error!("Raft stream handle internal message error: {}", e));
+						match internal_message {
+							InternalMessage::RequestVoteRes {address, res} => {
+								self.on_res_request_vote(address, res)
+									.unwrap_or_else(|e| error!("Raft stream handle request vote res error: {}", e));
+							},
+							_ => {
+								self.stream.on_internal_message(internal_message)
+									.unwrap_or_else(|e| error!("Raft stream handle internal message error: {}", e));
+							}
+						}
 					},
 					Some(in_message) = self.stream.in_rx.next() => {
 						self.stream.on_in_message(in_message)
 							.unwrap_or_else(|e| error!("Raft stream handle in message error: {}", e));
-					},
-					Some((address, res)) = self.request_vote_res_rx.next() => {
-						self.on_res_request_vote(address, res)
-							.unwrap_or_else(|e| error!("Raft stream handle request vote res error: {}", e));
 					},
 				}
 			}
@@ -620,7 +639,7 @@ where
 			};
 			self.out_tx
 				.unbounded_send(out_message)
-				.map_err(|e| node_consensus_base::errors::ErrorKind::Channel(Box::new(e)))?;
+				.map_err(map_channel_err)?;
 			return Ok(());
 		}
 
@@ -636,7 +655,7 @@ where
 			};
 			self.out_tx
 				.unbounded_send(out_message)
-				.map_err(|e| node_consensus_base::errors::ErrorKind::Channel(Box::new(e)))?;
+				.map_err(map_channel_err)?;
 		}
 
 		Ok(())
@@ -670,7 +689,7 @@ where
 				address: self.target.clone(),
 				req,
 			})
-			.map_err(|e| node_consensus_base::errors::ErrorKind::Channel(Box::new(e)))?;
+			.map_err(map_channel_err)?;
 		Ok(())
 	}
 }

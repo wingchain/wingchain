@@ -29,7 +29,7 @@ use crypto::address::Address as AddressT;
 use crypto::dsa::{Dsa, KeyPair};
 use node_consensus_base::{
 	scheduler::ScheduleInfo, scheduler::Scheduler, support::ConsensusSupport,
-	Consensus as ConsensusT, ConsensusConfig, ConsensusInMessage, ConsensusOutMessage,
+	Consensus as ConsensusT, ConsensusInMessage, ConsensusOutMessage,
 };
 use node_consensus_primitives::CONSENSUS_POA;
 use node_executor::module;
@@ -37,10 +37,16 @@ use node_executor::module::poa::Meta;
 use node_executor_primitives::EmptyParams;
 use primitives::errors::CommonResult;
 use primitives::{codec, Address, BlockNumber, Header, SecretKey};
+use serde::Serialize;
 
 use crate::proof::Proof;
+use serde_json::Value;
 
 pub mod proof;
+
+pub struct PoaConfig {
+	pub secret_key: Option<SecretKey>,
+}
 
 pub struct Poa<S>
 where
@@ -51,19 +57,20 @@ where
 	out_rx: RwLock<Option<UnboundedReceiver<ConsensusOutMessage>>>,
 }
 
-impl<S> Poa<S>
+impl<S> ConsensusT for Poa<S>
 where
 	S: ConsensusSupport,
 {
-	pub fn new(config: ConsensusConfig, support: Arc<S>) -> CommonResult<Self> {
-		let poa_meta = get_poa_meta(&support, &0)?;
+	type Config = PoaConfig;
+	type Support = S;
 
-		let secret_key = config.secret_key;
+	fn new(config: PoaConfig, support: Arc<S>) -> CommonResult<Self> {
+		let poa_meta = get_poa_meta(&support, &0)?;
 
 		let (in_tx, in_rx) = unbounded();
 		let (out_tx, out_rx) = unbounded();
 
-		PoaStream::spawn(support.clone(), poa_meta, secret_key, out_tx, in_rx)?;
+		PoaStream::spawn(support.clone(), poa_meta, config, out_tx, in_rx)?;
 
 		info!("Initializing consensus poa");
 
@@ -75,12 +82,6 @@ where
 
 		Ok(poa)
 	}
-}
-
-impl<S> ConsensusT for Poa<S>
-where
-	S: ConsensusSupport,
-{
 	fn verify_proof(&self, header: &Header, proof: &primitives::Proof) -> CommonResult<()> {
 		let name = &proof.name;
 		if name != CONSENSUS_POA {
@@ -130,7 +131,9 @@ where
 	S: ConsensusSupport,
 {
 	support: Arc<S>,
-	poa_meta: Meta,
+	poa_meta: Arc<Meta>,
+	#[allow(dead_code)]
+	poa_config: Arc<PoaConfig>,
 	secret_key: SecretKey,
 	address: Address,
 	#[allow(dead_code)]
@@ -145,19 +148,22 @@ where
 	fn spawn(
 		support: Arc<S>,
 		poa_meta: Meta,
-		secret_key: Option<SecretKey>,
+		poa_config: PoaConfig,
 		out_tx: UnboundedSender<ConsensusOutMessage>,
 		in_rx: UnboundedReceiver<ConsensusInMessage>,
 	) -> CommonResult<()> {
-		let secret_key = match secret_key {
-			Some(v) => v,
+		let secret_key = match &poa_config.secret_key {
+			Some(v) => v.clone(),
 			None => return Ok(()),
 		};
 		let address = get_address(&secret_key, &support)?;
+		let poa_meta = Arc::new(poa_meta);
+		let poa_config = Arc::new(poa_config);
 
 		let this = Self {
 			support,
 			poa_meta,
+			poa_config,
 			secret_key,
 			address,
 			out_tx,
@@ -242,15 +248,35 @@ where
 		Ok(())
 	}
 
-	#[allow(clippy::single_match)]
 	fn on_in_message(&self, in_message: ConsensusInMessage) -> CommonResult<()> {
 		match in_message {
 			ConsensusInMessage::Generate => {
 				self.generate()?;
 			}
+			ConsensusInMessage::GetConsensusState { tx } => {
+				let value = serde_json::to_value(self.consensus_state()?).unwrap_or(Value::Null);
+				let _ = tx.send(value);
+			}
 			_ => {}
 		}
 		Ok(())
+	}
+}
+
+impl<S> PoaStream<S>
+where
+	S: ConsensusSupport,
+{
+	fn consensus_state(&self) -> CommonResult<ConsensusState> {
+		let current_state = self.support.get_current_state();
+		let authority = get_poa_authority(&self.support, &current_state.confirmed_number)?;
+
+		Ok(ConsensusState {
+			consensus_name: CONSENSUS_POA.to_string(),
+			address: self.address.clone(),
+			meta: (*self.poa_meta).clone(),
+			authority,
+		})
 	}
 }
 
@@ -301,4 +327,12 @@ fn get_address<S: ConsensusSupport>(
 
 	let address = Address(address);
 	Ok(address)
+}
+
+#[derive(Serialize)]
+struct ConsensusState {
+	consensus_name: String,
+	address: Address,
+	meta: Meta,
+	authority: Address,
 }

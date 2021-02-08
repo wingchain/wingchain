@@ -21,7 +21,7 @@ use executor_primitives::{
 };
 use primitives::codec::{Decode, Encode};
 use primitives::{codec, Address, Call};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 pub struct Module<C, U>
 where
@@ -118,7 +118,7 @@ pub struct Admin {
 	pub members: Vec<(Address, u32)>,
 }
 
-#[derive(Encode, Decode, Debug, PartialEq, Deserialize)]
+#[derive(Encode, Decode, Debug, PartialEq, Deserialize, Serialize)]
 pub struct Authorities {
 	pub members: Vec<Address>,
 }
@@ -133,7 +133,7 @@ pub struct InitParams {
 	pub authorities: Authorities,
 }
 
-#[derive(Encode, Decode, Debug, PartialEq)]
+#[derive(Encode, Decode, Debug, PartialEq, Clone, Serialize)]
 pub struct Meta {
 	pub block_interval: Option<u64>,
 	pub heartbeat_interval: u64,

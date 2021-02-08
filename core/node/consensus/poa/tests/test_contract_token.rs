@@ -175,8 +175,6 @@ async fn test_poa_contract_token_read() {
 	let result = String::from_utf8(result).unwrap();
 	log::info!("result: {}", result);
 	assert_eq!(result, r#"2100000000000000"#.to_string(),);
-
-	base::safe_close(chain, txpool, consensus).await;
 }
 
 #[tokio::test]
@@ -311,8 +309,6 @@ async fn test_poa_contract_token_transfer() {
 	let result = String::from_utf8(result).unwrap();
 	log::info!("result: {}", result);
 	assert_eq!(result, r#"100000000000000"#.to_string(),);
-
-	base::safe_close(chain, txpool, consensus).await;
 }
 
 #[tokio::test]
@@ -536,8 +532,6 @@ async fn test_poa_contract_token_transfer_from() {
 	let result = String::from_utf8(result).unwrap();
 	log::info!("result: {}", result);
 	assert_eq!(result, r#"100000000"#.to_string(),);
-
-	base::safe_close(chain, txpool, consensus).await;
 }
 
 fn get_code() -> &'static [u8] {
