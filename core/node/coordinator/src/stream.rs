@@ -99,9 +99,16 @@ where
 					self.on_network_message(network_message)
 						.unwrap_or_else(|e| error!("Coordinator handle network message error: {}", e));
 				}
-				Some(in_message) = self.in_rx.next() => {
-					self.on_in_message(in_message)
-						.unwrap_or_else(|e| error!("Coordinator handle in message error: {}", e));
+				in_message = self.in_rx.next() => {
+					match in_message {
+						Some(in_message) => {
+							self.on_in_message(in_message)
+								.unwrap_or_else(|e| error!("Coordinator handle in message error: {}", e));
+						},
+						// in tx has been dropped
+						None => break,
+					}
+
 				}
 				Some(txpool_message) = self.txpool_rx.next() => {
 					self.on_txpool_message(txpool_message)

@@ -93,6 +93,7 @@ async fn test_api() {
 	let support = Arc::new(DefaultApiSupport::new(
 		chain0.clone(),
 		txpool0.clone(),
+		consensus0.clone(),
 		coordinator0.clone(),
 	));
 
@@ -239,6 +240,16 @@ async fn test_api() {
 	let opened_peers = &response["result"]["opened_peers"];
 	let opened_peer_count = opened_peers.as_array().unwrap().len();
 	assert_eq!(opened_peer_count, 1);
+
+	// consensus_getState
+	let request =
+		format!(r#"{{"jsonrpc": "2.0", "method": "consensus_getState", "params": [], "id": 1}}"#);
+	let response = call_rpc(&request).await;
+	info!("consensus_getState response: {}", response);
+	assert_eq!(
+		response,
+		r#"{"jsonrpc":"2.0","result":{"address":"b4decd5a5f8f2ba708f8ced72eec89f44f3be96a","authority":"b4decd5a5f8f2ba708f8ced72eec89f44f3be96a","consensus_name":"poa","meta":{"block_interval":null}},"id":1}"#
+	)
 }
 
 async fn call_rpc(request: &str) -> String {

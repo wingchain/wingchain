@@ -18,6 +18,9 @@ use async_trait::async_trait;
 use futures::channel::mpsc::UnboundedSender;
 
 use node_chain::Chain;
+use node_consensus::Consensus;
+use node_consensus_base::support::DefaultConsensusSupport;
+use node_consensus_base::ConsensusInMessage;
 use node_coordinator::support::DefaultCoordinatorSupport;
 use node_coordinator::{Coordinator, CoordinatorInMessage};
 use node_txpool::support::DefaultTxPoolSupport;
@@ -54,11 +57,13 @@ pub trait ApiSupport: Send + Sync + 'static {
 	) -> CommonResult<Transaction>;
 	fn txpool_get_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Transaction>>;
 	fn coordinator_tx(&self) -> CommonResult<UnboundedSender<CoordinatorInMessage>>;
+	fn consensus_tx(&self) -> CommonResult<UnboundedSender<ConsensusInMessage>>;
 }
 
 pub struct DefaultApiSupport {
 	chain: Arc<Chain>,
 	txpool: Arc<TxPool<DefaultTxPoolSupport>>,
+	consensus: Arc<Consensus<DefaultConsensusSupport>>,
 	coordinator: Arc<Coordinator<DefaultCoordinatorSupport>>,
 }
 
@@ -66,11 +71,13 @@ impl DefaultApiSupport {
 	pub fn new(
 		chain: Arc<Chain>,
 		txpool: Arc<TxPool<DefaultTxPoolSupport>>,
+		consensus: Arc<Consensus<DefaultConsensusSupport>>,
 		coordinator: Arc<Coordinator<DefaultCoordinatorSupport>>,
 	) -> Self {
 		Self {
 			chain,
 			txpool,
+			consensus,
 			coordinator,
 		}
 	}
@@ -138,5 +145,9 @@ impl ApiSupport for DefaultApiSupport {
 
 	fn coordinator_tx(&self) -> CommonResult<UnboundedSender<CoordinatorInMessage>> {
 		Ok(self.coordinator.coordinator_tx())
+	}
+
+	fn consensus_tx(&self) -> CommonResult<UnboundedSender<ConsensusInMessage>> {
+		Ok(self.consensus.in_message_tx())
 	}
 }

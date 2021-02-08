@@ -26,6 +26,7 @@ use primitives::{codec, SecretKey};
 use crate::errors;
 use crate::errors::ErrorKind;
 use crate::support::ApiSupport;
+use node_consensus_base::ConsensusInMessage;
 use node_coordinator::{CoordinatorInMessage, NetworkInMessage};
 use std::collections::HashSet;
 
@@ -311,6 +312,21 @@ pub async fn network_get_state<S: ApiSupport>(
 		.map_err(|e| CommonError::from(ErrorKind::CallError(format!("{}", e))))?;
 	let network_state = network_state.into();
 	Ok(network_state)
+}
+
+pub async fn consensus_get_state<S: ApiSupport>(
+	data: Data<Arc<S>>,
+	Params(_request): Params<EmptyRequest>,
+) -> CustomResult<serde_json::Value> {
+	let consensus_tx = data.0.consensus_tx()?;
+	let (tx, rx) = oneshot::channel();
+	consensus_tx
+		.unbounded_send(ConsensusInMessage::GetConsensusState { tx })
+		.map_err(|e| CommonError::from(ErrorKind::CallError(format!("{}", e))))?;
+	let consensus_state = rx
+		.await
+		.map_err(|e| CommonError::from(ErrorKind::CallError(format!("{}", e))))?;
+	Ok(consensus_state)
 }
 
 /// Number input: number, hex or tag (confirmed, confirmed_executed)

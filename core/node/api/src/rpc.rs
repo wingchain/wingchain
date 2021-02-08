@@ -96,6 +96,7 @@ where
 		)
 		.with_method("txpool_getTransaction", method::txpool_get_transaction::<S>)
 		.with_method("network_getState", method::network_get_state::<S>)
+		.with_method("consensus_getState", method::consensus_get_state::<S>)
 		.finish();
 
 	let workers = match config.rpc_workers {

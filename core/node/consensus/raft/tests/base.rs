@@ -187,6 +187,12 @@ fn init(home: &PathBuf, authority_accounts: &[&TestAccount]) {
 
 	fs::create_dir_all(&config_path).unwrap();
 
+	let members = authority_accounts
+		.into_iter()
+		.map(|x| format!("\"{}\"", x.address))
+		.collect::<Vec<_>>()
+		.join(",");
+
 	let spec = format!(
 		r#"
 [basic]
@@ -234,11 +240,7 @@ params = '''
     	"members": [["{}", 1]]
     }},
 	"authorities": {{
-		"members": [
-			"{}",
-			"{}",
-			"{}"
-		]
+		"members": [{}]
 	}}
 }}
 '''
@@ -251,11 +253,7 @@ params = '''
 }}
 '''
 	"#,
-		authority_accounts[0].address,
-		authority_accounts[0].address,
-		authority_accounts[0].address,
-		authority_accounts[1].address,
-		authority_accounts[2].address,
+		authority_accounts[0].address, authority_accounts[0].address, members
 	);
 
 	fs::write(config_path.join("spec.toml"), &spec).unwrap();

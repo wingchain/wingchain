@@ -41,6 +41,7 @@ pub enum State {
 	Candidate,
 	Follower,
 	Observer,
+	Shutdown,
 }
 
 pub struct LeaderState<'a, S>
@@ -117,9 +118,17 @@ where
 						}
 					}
 				},
-				Some(in_message) = self.stream.in_rx.next() => {
-					self.stream.on_in_message(in_message)
-						.unwrap_or_else(|e| error!("Raft stream handle in message error: {}", e));
+				in_message = self.stream.in_rx.next() => {
+					match in_message {
+						Some(in_message) => {
+							self.stream.on_in_message(in_message)
+								.unwrap_or_else(|e| error!("Raft stream handle in message error: {}", e));
+						},
+						// in tx has been dropped
+						None => {
+							self.stream.update_state(State::Shutdown);
+						},
+					}
 				},
 				Some(replication_out_message) = self.replication_out_rx.next() => {
 					self.on_replication_out_message(replication_out_message)
@@ -195,7 +204,7 @@ where
 			index: last_log_index + 1,
 			data: EntryData::Proposal { block_hash },
 		};
-		self.stream.storage.append_log_entries(vec![entry])?;
+		self.append_entries(vec![entry])?;
 
 		Ok(())
 	}
@@ -231,25 +240,33 @@ where
 	fn on_update_match_index(&mut self, address: Address, match_index: u64) -> CommonResult<()> {
 		if let Some(replication) = self.replications.get_mut(&address) {
 			replication.match_index = match_index;
+		}
+		self.on_maybe_commit()?;
+		Ok(())
+	}
 
-			let match_indices = self
-				.replications
-				.iter()
-				.map(|(_, v)| v.match_index)
-				.collect::<Vec<_>>();
-			let old_commit_log_index = self.stream.storage.get_commit_log_index();
-			let new_commit_log_index =
-				get_new_commit_log_index(match_indices, old_commit_log_index);
-			if new_commit_log_index != old_commit_log_index {
-				self.stream
-					.storage
-					.update_commit_log_index(new_commit_log_index)?;
-				trace!("Storage updated commit_log_index: {}", new_commit_log_index);
-				self.stream
-					.internal_tx
-					.unbounded_send(InternalMessage::LogUpdated)
-					.map_err(map_channel_err)?;
-			}
+	fn on_maybe_commit(&self) -> CommonResult<()> {
+		let mut match_indices = self
+			.replications
+			.iter()
+			.map(|(_, v)| v.match_index)
+			.collect::<Vec<_>>();
+
+		// add leader last_log_index as match_index
+		let (last_log_index, _) = self.stream.storage.get_last_log_index_term();
+		match_indices.push(last_log_index);
+
+		let old_commit_log_index = self.stream.storage.get_commit_log_index();
+		let new_commit_log_index = get_new_commit_log_index(match_indices, old_commit_log_index);
+		if new_commit_log_index != old_commit_log_index {
+			self.stream
+				.storage
+				.update_commit_log_index(new_commit_log_index)?;
+			trace!("Storage updated commit_log_index: {}", new_commit_log_index);
+			self.stream
+				.internal_tx
+				.unbounded_send(InternalMessage::LogUpdated)
+				.map_err(map_channel_err)?;
 		}
 		Ok(())
 	}
@@ -269,21 +286,28 @@ where
 		Ok(())
 	}
 
-	fn append_init_entry(&self) -> CommonResult<()> {
+	fn append_init_entry(&mut self) -> CommonResult<()> {
 		let (last_log_index, _) = self.stream.storage.get_last_log_index_term();
 		let entry = Entry {
 			term: self.stream.storage.get_current_term(),
 			index: last_log_index + 1,
 			data: EntryData::Blank,
 		};
-		self.stream.storage.append_log_entries(vec![entry])?;
+		self.append_entries(vec![entry])?;
+		Ok(())
+	}
+
+	fn append_entries(&mut self, entries: Vec<Entry>) -> CommonResult<()> {
+		self.stream.storage.append_log_entries(entries)?;
+		if self.replications.is_empty() {
+			let (last_log_index, _) = self.stream.storage.get_last_log_index_term();
+			self.on_update_match_index(self.stream.address.clone(), last_log_index)?;
+		}
 		Ok(())
 	}
 }
 
 fn get_new_commit_log_index(mut match_indices: Vec<u64>, old_commit_log_index: u64) -> u64 {
-	// make match_indices len equal to authorities len
-	match_indices.push(old_commit_log_index);
 	// reverse sort
 	match_indices.sort_unstable_by(|a, b| b.cmp(a));
 
@@ -359,9 +383,17 @@ where
 							}
 						}
 					},
-					Some(in_message) = self.stream.in_rx.next() => {
-						self.stream.on_in_message(in_message)
-							.unwrap_or_else(|e| error!("Raft stream handle in message error: {}", e));
+					in_message = self.stream.in_rx.next() => {
+						match in_message {
+							Some(in_message) => {
+								self.stream.on_in_message(in_message)
+									.unwrap_or_else(|e| error!("Raft stream handle in message error: {}", e));
+							},
+							// in tx has been dropped
+							None => {
+								self.stream.update_state(State::Shutdown);
+							},
+						}
 					},
 				}
 			}
@@ -372,19 +404,34 @@ where
 		let addresses = &self.stream.authorities.members.clone();
 		let term = self.stream.storage.get_current_term();
 		let (last_log_index, last_log_term) = self.stream.storage.get_last_log_index_term();
-		for address in addresses {
-			let req = RequestVoteReq {
-				request_id: RequestId(0),
-				term,
-				last_log_index,
-				last_log_term,
-			};
-			let request_id = self.stream.request_vote(address.clone(), req)?;
-			if let Some(request_id) = request_id {
-				self.requests.insert(request_id, ());
+		let targets = addresses
+			.iter()
+			.filter(|&x| x != &self.stream.address)
+			.collect::<Vec<_>>();
+		if targets.is_empty() {
+			self.on_maybe_become_leader();
+		} else {
+			for address in targets {
+				let req = RequestVoteReq {
+					request_id: RequestId(0),
+					term,
+					last_log_index,
+					last_log_term,
+				};
+				let request_id = self.stream.request_vote(address.clone(), req)?;
+				if let Some(request_id) = request_id {
+					self.requests.insert(request_id, ());
+				}
 			}
 		}
 		Ok(())
+	}
+
+	fn on_maybe_become_leader(&mut self) {
+		if self.votes_granted >= self.votes_needed {
+			info!("Become leader");
+			self.stream.update_state(State::Leader);
+		}
 	}
 
 	fn on_res_request_vote(&mut self, address: Address, res: RequestVoteRes) -> CommonResult<()> {
@@ -411,10 +458,7 @@ where
 				"Request vote result: address: {}, votes_granted: {}, votes_needed: {}",
 				address, self.votes_granted, self.votes_needed
 			);
-			if self.votes_granted >= self.votes_needed {
-				self.stream.update_state(State::Leader);
-				return Ok(());
-			}
+			self.on_maybe_become_leader();
 		}
 
 		Ok(())
@@ -443,6 +487,7 @@ where
 
 			// TODO when syncing
 			let next_election = sleep_until(self.stream.next_election_instant());
+
 			tokio::select! {
 				_ = next_election => {
 					self.stream.update_state(State::Candidate);
@@ -451,10 +496,18 @@ where
 					self.stream.on_internal_message(internal_message)
 						.unwrap_or_else(|e| error!("Raft stream handle internal message error: {}", e));
 				},
-				Some(in_message) = self.stream.in_rx.next() => {
-					self.stream.on_in_message(in_message)
-						.unwrap_or_else(|e| error!("Raft stream handle in message error: {}", e));
-				}
+				in_message = self.stream.in_rx.next() => {
+					match in_message {
+						Some(in_message) => {
+							self.stream.on_in_message(in_message)
+								.unwrap_or_else(|e| error!("Raft stream handle in message error: {}", e));
+						},
+						// in tx has been dropped
+						None => {
+							self.stream.update_state(State::Shutdown);
+						},
+					}
+				},
 			}
 		}
 	}
@@ -484,10 +537,18 @@ where
 					self.stream.on_internal_message(internal_message)
 						.unwrap_or_else(|e| error!("Raft stream handle internal message error: {}", e));
 				},
-				Some(in_message) = self.stream.in_rx.next() => {
-					self.stream.on_in_message(in_message)
-						.unwrap_or_else(|e| error!("Raft stream handle in message error: {}", e));
-				}
+				in_message = self.stream.in_rx.next() => {
+					match in_message {
+						Some(in_message) => {
+							self.stream.on_in_message(in_message)
+								.unwrap_or_else(|e| error!("Raft stream handle in message error: {}", e));
+						},
+						// in tx has been dropped
+						None => {
+							self.stream.update_state(State::Shutdown);
+						},
+					}
+				},
 			}
 		}
 	}

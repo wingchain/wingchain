@@ -171,7 +171,8 @@ impl Stream for NetworkStream {
 						let _ = tx.send(self.network_state());
 					}
 				},
-				Poll::Ready(None) => break,
+				// in tx has been dropped
+				Poll::Ready(None) => return Poll::Ready(None),
 				Poll::Pending => break,
 			}
 		}

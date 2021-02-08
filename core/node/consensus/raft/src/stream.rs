@@ -208,6 +208,7 @@ where
 				State::Candidate => CandidateState::new(&mut self).start().await?,
 				State::Follower => FollowerState::new(&mut self).start().await?,
 				State::Observer => ObserverState::new(&mut self).start().await?,
+				State::Shutdown => return Ok(()),
 			}
 		}
 	}

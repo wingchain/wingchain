@@ -122,6 +122,7 @@ impl Service {
 		let api_support = Arc::new(DefaultApiSupport::new(
 			chain.clone(),
 			txpool.clone(),
+			consensus.clone(),
 			coordinator.clone(),
 		));
 		let api = Arc::new(Api::new(other_config.api, api_support));
