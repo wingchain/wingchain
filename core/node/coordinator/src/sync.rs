@@ -329,7 +329,15 @@ where
 		(*self.support.get_handshake_builder().confirmed.write()) = (number, block_hash.clone());
 
 		// update pending_blocks
+		let old_latency = self.latency();
 		self.pending_blocks.remove(&number);
+		let new_latency = self.latency();
+		if new_latency != old_latency {
+			self.support
+				.consensus_send_message(ConsensusInMessage::SyncLatencyUpdated {
+					latency: new_latency,
+				});
+		}
 
 		// announce to all connected peers
 		let header = self.support.get_header_by_block_hash(&block_hash)?;
@@ -356,6 +364,19 @@ where
 		Ok(())
 	}
 
+	pub fn latency(&self) -> BlockNumber {
+		let confirmed_number = self
+			.support
+			.ori_support()
+			.get_current_state()
+			.confirmed_number;
+		let max_pending_number = match self.pending_blocks.iter().last() {
+			Some((k, _v)) => *k,
+			None => confirmed_number,
+		};
+		max_pending_number - confirmed_number
+	}
+
 	fn maintain_new(&mut self) -> CommonResult<()> {
 		let max_peer_number = match self.peers.values().map(|x| x.confirmed_number).max() {
 			Some(v) => v,
@@ -375,6 +396,8 @@ where
 			max_pending_number + PENDING_BLOCKS_SIZE as u64 - self.pending_blocks.len() as u64,
 		);
 		let min_to_append = max_pending_number + 1;
+
+		let old_latency = self.latency();
 		if max_to_append >= min_to_append {
 			for number in min_to_append..=max_to_append {
 				self.pending_blocks.insert(
@@ -394,6 +417,15 @@ where
 				self.pending_blocks.remove(&number);
 			}
 		}
+
+		let new_latency = self.latency();
+		if new_latency != old_latency {
+			self.support
+				.consensus_send_message(ConsensusInMessage::SyncLatencyUpdated {
+					latency: new_latency,
+				});
+		}
+
 		Ok(())
 	}
 
@@ -466,6 +498,7 @@ where
 	}
 
 	fn maintain_downloaded(&mut self) -> CommonResult<()> {
+		let old_latency = self.latency();
 		loop {
 			let first_downloaded_number = {
 				let (number, pending_block) = match self.pending_blocks.iter().next() {
@@ -543,6 +576,13 @@ where
 					break;
 				}
 			}
+		}
+		let new_latency = self.latency();
+		if new_latency != old_latency {
+			self.support
+				.consensus_send_message(ConsensusInMessage::SyncLatencyUpdated {
+					latency: new_latency,
+				});
 		}
 		self.sync()?;
 

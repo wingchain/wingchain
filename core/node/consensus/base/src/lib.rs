@@ -54,6 +54,9 @@ pub enum ConsensusInMessage {
 	GetConsensusState {
 		tx: oneshot::Sender<Value>,
 	},
+	SyncLatencyUpdated {
+		latency: BlockNumber,
+	},
 }
 
 pub enum ConsensusOutMessage {

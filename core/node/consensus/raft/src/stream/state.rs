@@ -485,7 +485,6 @@ where
 				return Ok(());
 			}
 
-			// TODO when syncing
 			let next_election = sleep_until(self.stream.next_election_instant());
 
 			tokio::select! {

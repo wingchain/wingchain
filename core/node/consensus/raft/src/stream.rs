@@ -58,6 +58,8 @@ use std::convert::TryInto;
 
 mod state;
 
+const SYNC_EXTRA_ELECTION_TIMEOUT: u64 = 1000;
+
 #[allow(clippy::type_complexity)]
 pub struct RaftStream<S>
 where
@@ -131,6 +133,9 @@ where
 	/// When building or verifying a proposal, the commit_block_params
 	/// is returned. We just keep it for later use
 	commit_block_params: Option<ChainCommitBlockParams>,
+
+	/// Sync latency
+	sync_latency: BlockNumber,
 }
 
 impl<S> RaftStream<S>
@@ -182,6 +187,7 @@ where
 			last_request_proposal_instant: None,
 			pending_proposal: None,
 			commit_block_params: None,
+			sync_latency: 0,
 		};
 		tokio::spawn(this.start());
 		Ok(())
@@ -226,9 +232,17 @@ where
 
 	fn update_next_election_instant(&mut self, extra: u64, heartbeat: bool) {
 		let now = Instant::now();
+
+		let sync_extra = if self.state == State::Follower && self.sync_latency > 0 {
+			SYNC_EXTRA_ELECTION_TIMEOUT
+		} else {
+			0
+		};
+
 		self.next_election_instant = Some(
 			now + Duration::from_millis(self.rand_election_timeout())
-				+ Duration::from_millis(extra),
+				+ Duration::from_millis(extra)
+				+ Duration::from_millis(sync_extra),
 		);
 		if heartbeat {
 			self.last_heartbeat_instant = Some(now);
@@ -245,6 +259,13 @@ where
 			return;
 		}
 		self.state = state;
+	}
+
+	fn update_sync_latency(&mut self, latency: BlockNumber) {
+		self.sync_latency = latency;
+		if self.sync_latency == 0 {
+			self.update_next_election_instant(0, false);
+		}
 	}
 
 	fn rand_election_timeout(&self) -> u64 {
@@ -857,6 +878,9 @@ where
 			ConsensusInMessage::GetConsensusState { tx } => {
 				let value = serde_json::to_value(self.consensus_state()?).unwrap_or(Value::Null);
 				let _ = tx.send(value);
+			}
+			ConsensusInMessage::SyncLatencyUpdated { latency } => {
+				self.update_sync_latency(latency);
 			}
 		}
 		Ok(())
