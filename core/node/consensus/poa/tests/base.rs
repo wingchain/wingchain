@@ -23,12 +23,58 @@ use node_chain::{Chain, ChainConfig, DBConfig};
 use node_consensus::{Consensus, ConsensusConfig};
 use node_consensus_base::support::DefaultConsensusSupport;
 use node_consensus_poa::PoaConfig;
+use node_coordinator::support::DefaultCoordinatorSupport;
+use node_coordinator::{
+	Coordinator, CoordinatorConfig, Keypair, LinkedHashMap, Multiaddr, NetworkConfig, PeerId,
+	Protocol,
+};
 use node_txpool::support::DefaultTxPoolSupport;
 use node_txpool::{TxPool, TxPoolConfig};
 use primitives::{BlockNumber, Hash, Transaction};
 use utils_test::TestAccount;
 
+#[allow(dead_code)]
 pub fn get_service(
+	authority_accounts: &[&TestAccount],
+	account: &TestAccount,
+	local_key_pair: Keypair,
+	port: u16,
+	bootnodes: LinkedHashMap<(PeerId, Multiaddr), ()>,
+) -> (
+	Arc<Chain>,
+	Arc<TxPool<DefaultTxPoolSupport>>,
+	Arc<Consensus<DefaultConsensusSupport>>,
+	Arc<Coordinator<DefaultCoordinatorSupport>>,
+) {
+	let chain = get_chain(authority_accounts);
+
+	let txpool_config = TxPoolConfig { pool_capacity: 32 };
+
+	let txpool_support = Arc::new(DefaultTxPoolSupport::new(chain.clone()));
+	let txpool = Arc::new(TxPool::new(txpool_config, txpool_support).unwrap());
+
+	let support = Arc::new(DefaultConsensusSupport::new(chain.clone(), txpool.clone()));
+
+	let consensus_config = ConsensusConfig {
+		poa: Some(PoaConfig {
+			secret_key: Some(account.secret_key.clone()),
+		}),
+		raft: None,
+	};
+
+	let consensus = Arc::new(Consensus::new(consensus_config, support).unwrap());
+
+	let coordinator_support = Arc::new(DefaultCoordinatorSupport::new(
+		chain.clone(),
+		txpool.clone(),
+		consensus.clone(),
+	));
+	let coordinator = get_coordinator(local_key_pair, port, bootnodes, coordinator_support);
+
+	(chain, txpool, consensus, coordinator)
+}
+
+pub fn get_standalone_service(
 	authority_accounts: &[&TestAccount],
 	account: &TestAccount,
 ) -> (
@@ -91,6 +137,35 @@ pub async fn wait_block_execution(chain: &Arc<Chain>, expected_number: BlockNumb
 		}
 		futures_timer::Delay::new(Duration::from_millis(10)).await;
 	}
+}
+
+fn get_coordinator(
+	local_key_pair: Keypair,
+	port: u16,
+	bootnodes: LinkedHashMap<(PeerId, Multiaddr), ()>,
+	support: Arc<DefaultCoordinatorSupport>,
+) -> Arc<Coordinator<DefaultCoordinatorSupport>> {
+	let agent_version = "wingchain/1.0.0".to_string();
+	let listen_address = Multiaddr::empty()
+		.with(Protocol::Ip4([0, 0, 0, 0].into()))
+		.with(Protocol::Tcp(port));
+	let listen_addresses = vec![listen_address].into_iter().map(|v| (v, ())).collect();
+	let network_config = NetworkConfig {
+		max_in_peers: 32,
+		max_out_peers: 32,
+		listen_addresses,
+		external_addresses: LinkedHashMap::new(),
+		bootnodes,
+		reserved_nodes: LinkedHashMap::new(),
+		reserved_only: false,
+		agent_version,
+		local_key_pair,
+		handshake_builder: None,
+	};
+	let config = CoordinatorConfig { network_config };
+
+	let coordinator = Coordinator::new(config, support).unwrap();
+	Arc::new(coordinator)
 }
 
 fn get_chain(authority_accounts: &[&TestAccount]) -> Arc<Chain> {

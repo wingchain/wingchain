@@ -35,7 +35,7 @@ async fn test_poa_contract_token_read() {
 	let (account1, _account2) = (&test_accounts[0], &test_accounts[1]);
 
 	let authority_accounts = [account1];
-	let (chain, txpool, consensus) = base::get_service(&authority_accounts, &account1);
+	let (chain, txpool, consensus) = base::get_standalone_service(&authority_accounts, &account1);
 
 	let ori_code = get_code().to_vec();
 
@@ -188,7 +188,7 @@ async fn test_poa_contract_token_transfer() {
 	let (account1, account2) = (&test_accounts[0], &test_accounts[1]);
 
 	let authority_accounts = [account1];
-	let (chain, txpool, consensus) = base::get_service(&authority_accounts, account1);
+	let (chain, txpool, consensus) = base::get_standalone_service(&authority_accounts, account1);
 
 	let ori_code = get_code().to_vec();
 
@@ -322,7 +322,7 @@ async fn test_poa_contract_token_transfer_from() {
 	let (account1, account2) = (&test_accounts[0], &test_accounts[1]);
 
 	let authority_accounts = [account1];
-	let (chain, txpool, consensus) = base::get_service(&authority_accounts, account1);
+	let (chain, txpool, consensus) = base::get_standalone_service(&authority_accounts, account1);
 
 	let ori_code = get_code().to_vec();
 

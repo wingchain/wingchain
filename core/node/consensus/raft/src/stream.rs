@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use futures::channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
@@ -1045,7 +1045,17 @@ where
 			let number = commit_block_params.header.number;
 			let block_hash = commit_block_params.block_hash.clone();
 
+			let tx_hash_set = commit_block_params
+				.body
+				.meta_txs
+				.iter()
+				.chain(commit_block_params.body.payload_txs.iter())
+				.cloned()
+				.collect::<HashSet<_>>();
+
 			self.support.commit_block(commit_block_params)?;
+
+			self.support.txpool_remove_transactions(&tx_hash_set)?;
 
 			info!(
 				"Block committed: number: {}, block_hash: {}",
@@ -1056,15 +1066,22 @@ where
 		Ok(())
 	}
 
-	fn on_block_committed(&self, number: BlockNumber, block_hash: Hash) -> CommonResult<()> {
+	fn on_block_committed(&mut self, number: BlockNumber, block_hash: Hash) -> CommonResult<()> {
 		self.storage.refresh()?;
 		info!(
 			"Storage refreshed: number: {}, block_hash: {}",
 			number, block_hash
 		);
 
-		// TODO update authorities
+		let confirmed_number = self.support.get_current_state().confirmed_number;
+		let authorities = get_raft_authorities(&self.support, &confirmed_number)?;
+		if self.authorities != authorities {
+			self.authorities = authorities.clone();
 
+			self.internal_tx
+				.unbounded_send(InternalMessage::AuthoritiesUpdated { authorities })
+				.map_err(map_channel_err)?;
+		}
 		Ok(())
 	}
 }
@@ -1178,6 +1195,9 @@ enum InternalMessage {
 	},
 	/// The leader state will follow Generate message
 	Generate,
+	AuthoritiesUpdated {
+		authorities: Authorities,
+	},
 }
 
 #[derive(Serialize)]

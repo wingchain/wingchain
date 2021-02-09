@@ -3099,6 +3099,7 @@ dependencies = [
  "node-consensus",
  "node-consensus-base",
  "node-consensus-primitives",
+ "node-coordinator",
  "node-executor",
  "node-executor-primitives",
  "node-txpool",

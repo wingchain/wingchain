@@ -36,7 +36,7 @@ async fn test_poa_contract_create() {
 	let (account1, _account2) = (&test_accounts[0], &test_accounts[1]);
 
 	let authority_accounts = [account1];
-	let (chain, txpool, consensus) = base::get_service(&authority_accounts, &account1);
+	let (chain, txpool, consensus) = base::get_standalone_service(&authority_accounts, &account1);
 
 	let ori_code = get_code().to_vec();
 
@@ -141,7 +141,7 @@ async fn test_poa_contract_create_fail() {
 	let (account1, _account2) = (&test_accounts[0], &test_accounts[1]);
 
 	let authority_accounts = [account1];
-	let (chain, _txpool, _consensus) = base::get_service(&authority_accounts, account1);
+	let (chain, _txpool, _consensus) = base::get_standalone_service(&authority_accounts, account1);
 
 	let ori_code = get_code().to_vec();
 
@@ -210,7 +210,7 @@ async fn test_poa_contract_update_admin() {
 	let (account1, account2) = (&test_accounts[0], &test_accounts[1]);
 
 	let authority_accounts = [account1];
-	let (chain, txpool, consensus) = base::get_service(&authority_accounts, account1);
+	let (chain, txpool, consensus) = base::get_standalone_service(&authority_accounts, account1);
 
 	let ori_code = get_code().to_vec();
 
@@ -455,7 +455,7 @@ async fn test_poa_contract_update_code() {
 	let (account1, account2) = (&test_accounts[0], &test_accounts[1]);
 
 	let authority_accounts = [account1];
-	let (chain, txpool, consensus) = base::get_service(&authority_accounts, account1);
+	let (chain, txpool, consensus) = base::get_standalone_service(&authority_accounts, account1);
 
 	let ori_code = get_code().to_vec();
 

@@ -35,7 +35,7 @@ async fn test_poa_contract_tb_success() {
 	let (account1, _account2) = (&test_accounts[0], &test_accounts[1]);
 
 	let authority_accounts = [account1];
-	let (chain, txpool, consensus) = base::get_service(&authority_accounts, account1);
+	let (chain, txpool, consensus) = base::get_standalone_service(&authority_accounts, account1);
 
 	// create token contract
 	let token_code = get_token_code().to_vec();
@@ -394,7 +394,7 @@ async fn test_poa_contract_tb_failed() {
 	let (account1, _account2) = (&test_accounts[0], &test_accounts[1]);
 
 	let authority_accounts = [account1];
-	let (chain, txpool, consensus) = base::get_service(&authority_accounts, account1);
+	let (chain, txpool, consensus) = base::get_standalone_service(&authority_accounts, account1);
 
 	// create token contract
 	let token_code = get_token_code().to_vec();
@@ -583,7 +583,7 @@ async fn test_poa_contract_tb_ea() {
 	let (account1, _account2) = (&test_accounts[0], &test_accounts[1]);
 
 	let authority_accounts = [account1];
-	let (chain, txpool, consensus) = base::get_service(&authority_accounts, account1);
+	let (chain, txpool, consensus) = base::get_standalone_service(&authority_accounts, account1);
 
 	// create token contract
 	let token_code = get_token_code().to_vec();

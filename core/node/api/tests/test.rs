@@ -48,7 +48,7 @@ async fn test_api() {
 			authority_accounts,
 			account1.clone(),
 			Keypair::generate_ed25519(),
-			3509,
+			3110,
 		),
 		(
 			authority_accounts,

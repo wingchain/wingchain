@@ -35,7 +35,7 @@ async fn test_poa_balance() {
 	let (account1, account2) = (&test_accounts[0], &test_accounts[1]);
 
 	let authority_accounts = [account1];
-	let (chain, txpool, consensus) = base::get_service(&authority_accounts, account1);
+	let (chain, txpool, consensus) = base::get_standalone_service(&authority_accounts, account1);
 
 	let proof = chain
 		.get_proof(&chain.get_block_hash(&0).unwrap().unwrap())

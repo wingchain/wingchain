@@ -37,5 +37,6 @@ node-txpool = { path = "../../txpool" }
 node-executor = { path = "../../executor" }
 node-executor-primitives = { path = "../../executor/primitives" }
 node-consensus = { path = "../" }
+node-coordinator = { path = "../../coordinator" }
 crypto = { path = "../../../crypto" }
 utils-test = { path = "../../../../utils/test" }

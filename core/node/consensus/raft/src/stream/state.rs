@@ -21,7 +21,7 @@ use log::{debug, error, info, trace};
 use tokio::time::{interval, sleep_until, Duration, Interval};
 
 use node_consensus_base::support::ConsensusSupport;
-use node_executor::module::raft::Meta;
+use node_executor::module::raft::{Authorities, Meta};
 use primitives::errors::CommonResult;
 use primitives::{Address, Hash};
 
@@ -111,6 +111,10 @@ where
 						InternalMessage::Generate => {
 							self.generate()
 								.unwrap_or_else(|e| error!("Raft stream handle generate message error: {}", e));
+						},
+						InternalMessage::AuthoritiesUpdated { authorities } => {
+							self.on_authorities_updated(authorities)
+								.unwrap_or_else(|e| error!("Raft stream handle authorities updated message error: {}", e));
 						},
 						_ => {
 							self.stream.on_internal_message(internal_message)
@@ -205,6 +209,50 @@ where
 			data: EntryData::Proposal { block_hash },
 		};
 		self.append_entries(vec![entry])?;
+
+		Ok(())
+	}
+
+	fn on_authorities_updated(&mut self, authorities: Authorities) -> CommonResult<()> {
+		if !authorities.members.contains(&self.stream.address) {
+			self.stream.update_state(State::Observer);
+			return Ok(());
+		}
+		let to_remove = self
+			.replications
+			.iter()
+			.filter_map(|(k, _v)| {
+				if !authorities.members.contains(k) {
+					Some(k.clone())
+				} else {
+					None
+				}
+			})
+			.collect::<Vec<_>>();
+		for address in to_remove {
+			self.replications.remove(&address);
+		}
+
+		let (base_log_index, base_log_term) = self.stream.storage.get_base_log_index_term();
+		for target in authorities.members {
+			if target != self.stream.address && !self.replications.contains_key(&target) {
+				let replication = Replication::new(
+					self.stream.raft_meta.clone(),
+					self.replication_out_tx.clone(),
+					self.stream.storage.clone(),
+					target.clone(),
+					base_log_index,
+					base_log_term,
+				)?;
+				self.replications.insert(target, replication);
+			}
+		}
+
+		info!(
+			"Replications updated: replications len: {}, authorities len: {}",
+			self.replications.len(),
+			self.stream.authorities.members.len(),
+		);
 
 		Ok(())
 	}
@@ -377,6 +425,10 @@ where
 								self.on_res_request_vote(address, res)
 									.unwrap_or_else(|e| error!("Raft stream handle request vote res error: {}", e));
 							},
+							InternalMessage::AuthoritiesUpdated { authorities } => {
+								self.on_authorities_updated(authorities)
+									.unwrap_or_else(|e| error!("Raft stream handle authorities updated message error: {}", e));
+							},
 							_ => {
 								self.stream.on_internal_message(internal_message)
 									.unwrap_or_else(|e| error!("Raft stream handle internal message error: {}", e));
@@ -423,6 +475,13 @@ where
 					self.requests.insert(request_id, ());
 				}
 			}
+		}
+		Ok(())
+	}
+
+	fn on_authorities_updated(&mut self, authorities: Authorities) -> CommonResult<()> {
+		if !authorities.members.contains(&self.stream.address) {
+			self.stream.update_state(State::Observer);
 		}
 		Ok(())
 	}
@@ -479,7 +538,7 @@ where
 	pub fn new(stream: &'a mut RaftStream<S>) -> Self {
 		Self { stream }
 	}
-	pub async fn start(self) -> CommonResult<()> {
+	pub async fn start(mut self) -> CommonResult<()> {
 		loop {
 			if self.stream.state != State::Follower {
 				return Ok(());
@@ -492,8 +551,16 @@ where
 					self.stream.update_state(State::Candidate);
 				},
 				Some(internal_message) = self.stream.internal_rx.next() => {
-					self.stream.on_internal_message(internal_message)
-						.unwrap_or_else(|e| error!("Raft stream handle internal message error: {}", e));
+					match internal_message {
+						InternalMessage::AuthoritiesUpdated { authorities } => {
+							self.on_authorities_updated(authorities)
+								.unwrap_or_else(|e| error!("Raft stream handle authorities updated message error: {}", e));
+						},
+						_ => {
+							self.stream.on_internal_message(internal_message)
+								.unwrap_or_else(|e| error!("Raft stream handle internal message error: {}", e));
+						}
+					}
 				},
 				in_message = self.stream.in_rx.next() => {
 					match in_message {
@@ -509,6 +576,12 @@ where
 				},
 			}
 		}
+	}
+	fn on_authorities_updated(&mut self, authorities: Authorities) -> CommonResult<()> {
+		if !authorities.members.contains(&self.stream.address) {
+			self.stream.update_state(State::Observer);
+		}
+		Ok(())
 	}
 }
 
@@ -526,15 +599,23 @@ where
 	pub fn new(stream: &'a mut RaftStream<S>) -> Self {
 		Self { stream }
 	}
-	pub async fn start(self) -> CommonResult<()> {
+	pub async fn start(mut self) -> CommonResult<()> {
 		loop {
 			if self.stream.state != State::Observer {
 				return Ok(());
 			}
 			tokio::select! {
 				Some(internal_message) = self.stream.internal_rx.next() => {
-					self.stream.on_internal_message(internal_message)
-						.unwrap_or_else(|e| error!("Raft stream handle internal message error: {}", e));
+					match internal_message {
+						InternalMessage::AuthoritiesUpdated { authorities } => {
+							self.on_authorities_updated(authorities)
+								.unwrap_or_else(|e| error!("Raft stream handle authorities updated message error: {}", e));
+						},
+						_ => {
+							self.stream.on_internal_message(internal_message)
+								.unwrap_or_else(|e| error!("Raft stream handle internal message error: {}", e));
+						}
+					}
 				},
 				in_message = self.stream.in_rx.next() => {
 					match in_message {
@@ -550,6 +631,12 @@ where
 				},
 			}
 		}
+	}
+	fn on_authorities_updated(&mut self, authorities: Authorities) -> CommonResult<()> {
+		if authorities.members.contains(&self.stream.address) {
+			self.stream.update_state(State::Follower);
+		}
+		Ok(())
 	}
 }
 

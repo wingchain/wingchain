@@ -46,19 +46,19 @@ async fn test_raft_balance_3_authorities() {
 			authority_accounts,
 			account1.clone(),
 			Keypair::generate_ed25519(),
-			3609,
+			1301,
 		),
 		(
 			authority_accounts,
 			account2.clone(),
 			Keypair::generate_ed25519(),
-			3610,
+			1302,
 		),
 		(
 			authority_accounts,
 			account3.clone(),
 			Keypair::generate_ed25519(),
-			3611,
+			1303,
 		),
 	];
 
@@ -283,19 +283,19 @@ async fn test_raft_balance_2_authorities() {
 			authority_accounts,
 			account1.clone(),
 			Keypair::generate_ed25519(),
-			3709,
+			1304,
 		),
 		(
 			authority_accounts,
 			account2.clone(),
 			Keypair::generate_ed25519(),
-			3710,
+			1305,
 		),
 		(
 			authority_accounts,
 			account3.clone(),
 			Keypair::generate_ed25519(),
-			3711,
+			1306,
 		),
 	];
 
@@ -521,7 +521,7 @@ async fn test_raft_balance_1_authority() {
 		authority_accounts,
 		account1.clone(),
 		Keypair::generate_ed25519(),
-		3809,
+		1307,
 	)];
 
 	let bootnodes = {

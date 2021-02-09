@@ -41,13 +41,13 @@ async fn test_coordinator_block_sync() {
 			authority_accounts,
 			account1.clone(),
 			Keypair::generate_ed25519(),
-			3309,
+			1101,
 		),
 		(
 			authority_accounts,
 			account2.clone(),
 			Keypair::generate_ed25519(),
-			3310,
+			1102,
 		),
 	];
 
@@ -155,13 +155,13 @@ async fn test_coordinator_txpool_sync() {
 			authority_accounts,
 			account1.clone(),
 			Keypair::generate_ed25519(),
-			3409,
+			1103,
 		),
 		(
 			authority_accounts,
 			account2.clone(),
 			Keypair::generate_ed25519(),
-			3410,
+			1104,
 		),
 	];
 
