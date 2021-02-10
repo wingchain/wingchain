@@ -217,7 +217,7 @@ fn start_network(
 	};
 
 	let network = Network::new(network_config).unwrap();
-	networkgit
+	network
 }
 
 async fn wait_connect(network: &Network, expected_opened_count: usize) {
