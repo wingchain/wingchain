@@ -35,17 +35,17 @@ async fn test_network_connect() {
 	let specs = vec![
 		(
 			Keypair::generate_ed25519(),
-			1001,
+			1401,
 			"wingchain/1.0.0".to_string(),
 		),
 		(
 			Keypair::generate_ed25519(),
-			1002,
+			1402,
 			"wingchain/1.0.0".to_string(),
 		),
 		(
 			Keypair::generate_ed25519(),
-			1003,
+			1403,
 			"wingchain/1.0.0".to_string(),
 		),
 	];
@@ -129,12 +129,12 @@ async fn test_network_message() {
 	let specs = vec![
 		(
 			Keypair::generate_ed25519(),
-			1004,
+			1404,
 			"wingchain/1.0.0".to_string(),
 		),
 		(
 			Keypair::generate_ed25519(),
-			1005,
+			1405,
 			"wingchain/1.0.0".to_string(),
 		),
 	];
