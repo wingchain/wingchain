@@ -17,7 +17,7 @@ use std::sync::Arc;
 
 use futures::channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
 use futures::prelude::*;
-use log::{debug, error, info, trace};
+use log::{debug, warn, info, trace};
 use tokio::time::{interval, sleep_until, Duration, Interval};
 
 use node_consensus_base::support::ConsensusSupport;
@@ -100,25 +100,25 @@ where
 			tokio::select! {
 				Some(schedule_info) = scheduler.next() => {
 					self.work(schedule_info)
-					.unwrap_or_else(|e| error!("Raft stream handle work error: {}", e));
+					.unwrap_or_else(|e| warn!("Raft stream handle work error: {}", e));
 				}
 				Some(internal_message) = self.stream.internal_rx.next() => {
 					match internal_message{
 						InternalMessage::AppendEntriesRes {address, res} => {
 							self.on_append_entries_res(address, res)
-								.unwrap_or_else(|e| error!("Raft stream handle append entries res error: {}", e));
+								.unwrap_or_else(|e| warn!("Raft stream handle append entries res error: {}", e));
 						},
 						InternalMessage::Generate => {
 							self.generate()
-								.unwrap_or_else(|e| error!("Raft stream handle generate message error: {}", e));
+								.unwrap_or_else(|e| warn!("Raft stream handle generate message error: {}", e));
 						},
 						InternalMessage::AuthoritiesUpdated { authorities } => {
 							self.on_authorities_updated(authorities)
-								.unwrap_or_else(|e| error!("Raft stream handle authorities updated message error: {}", e));
+								.unwrap_or_else(|e| warn!("Raft stream handle authorities updated message error: {}", e));
 						},
 						_ => {
 							self.stream.on_internal_message(internal_message)
-								.unwrap_or_else(|e| error!("Raft stream handle internal message error: {}", e));
+								.unwrap_or_else(|e| warn!("Raft stream handle internal message error: {}", e));
 						}
 					}
 				},
@@ -126,7 +126,7 @@ where
 					match in_message {
 						Some(in_message) => {
 							self.stream.on_in_message(in_message)
-								.unwrap_or_else(|e| error!("Raft stream handle in message error: {}", e));
+								.unwrap_or_else(|e| warn!("Raft stream handle in message error: {}", e));
 						},
 						// in tx has been dropped
 						None => {
@@ -136,7 +136,7 @@ where
 				},
 				Some(replication_out_message) = self.replication_out_rx.next() => {
 					self.on_replication_out_message(replication_out_message)
-						.unwrap_or_else(|e| error!("Raft stream handle replication out message error: {}", e));
+						.unwrap_or_else(|e| warn!("Raft stream handle replication out message error: {}", e));
 				}
 			}
 		}
@@ -423,15 +423,15 @@ where
 						match internal_message {
 							InternalMessage::RequestVoteRes {address, res} => {
 								self.on_res_request_vote(address, res)
-									.unwrap_or_else(|e| error!("Raft stream handle request vote res error: {}", e));
+									.unwrap_or_else(|e| warn!("Raft stream handle request vote res error: {}", e));
 							},
 							InternalMessage::AuthoritiesUpdated { authorities } => {
 								self.on_authorities_updated(authorities)
-									.unwrap_or_else(|e| error!("Raft stream handle authorities updated message error: {}", e));
+									.unwrap_or_else(|e| warn!("Raft stream handle authorities updated message error: {}", e));
 							},
 							_ => {
 								self.stream.on_internal_message(internal_message)
-									.unwrap_or_else(|e| error!("Raft stream handle internal message error: {}", e));
+									.unwrap_or_else(|e| warn!("Raft stream handle internal message error: {}", e));
 							}
 						}
 					},
@@ -439,7 +439,7 @@ where
 						match in_message {
 							Some(in_message) => {
 								self.stream.on_in_message(in_message)
-									.unwrap_or_else(|e| error!("Raft stream handle in message error: {}", e));
+									.unwrap_or_else(|e| warn!("Raft stream handle in message error: {}", e));
 							},
 							// in tx has been dropped
 							None => {
@@ -554,11 +554,11 @@ where
 					match internal_message {
 						InternalMessage::AuthoritiesUpdated { authorities } => {
 							self.on_authorities_updated(authorities)
-								.unwrap_or_else(|e| error!("Raft stream handle authorities updated message error: {}", e));
+								.unwrap_or_else(|e| warn!("Raft stream handle authorities updated message error: {}", e));
 						},
 						_ => {
 							self.stream.on_internal_message(internal_message)
-								.unwrap_or_else(|e| error!("Raft stream handle internal message error: {}", e));
+								.unwrap_or_else(|e| warn!("Raft stream handle internal message error: {}", e));
 						}
 					}
 				},
@@ -566,7 +566,7 @@ where
 					match in_message {
 						Some(in_message) => {
 							self.stream.on_in_message(in_message)
-								.unwrap_or_else(|e| error!("Raft stream handle in message error: {}", e));
+								.unwrap_or_else(|e| warn!("Raft stream handle in message error: {}", e));
 						},
 						// in tx has been dropped
 						None => {
@@ -609,11 +609,11 @@ where
 					match internal_message {
 						InternalMessage::AuthoritiesUpdated { authorities } => {
 							self.on_authorities_updated(authorities)
-								.unwrap_or_else(|e| error!("Raft stream handle authorities updated message error: {}", e));
+								.unwrap_or_else(|e| warn!("Raft stream handle authorities updated message error: {}", e));
 						},
 						_ => {
 							self.stream.on_internal_message(internal_message)
-								.unwrap_or_else(|e| error!("Raft stream handle internal message error: {}", e));
+								.unwrap_or_else(|e| warn!("Raft stream handle internal message error: {}", e));
 						}
 					}
 				},
@@ -621,7 +621,7 @@ where
 					match in_message {
 						Some(in_message) => {
 							self.stream.on_in_message(in_message)
-								.unwrap_or_else(|e| error!("Raft stream handle in message error: {}", e));
+								.unwrap_or_else(|e| warn!("Raft stream handle in message error: {}", e));
 						},
 						// in tx has been dropped
 						None => {
@@ -748,7 +748,7 @@ where
 					match in_message {
 						Some(in_message) => {
 							self.on_in_message(in_message)
-							.unwrap_or_else(|e| error!("Replication stream handle in message error: {}", e))
+							.unwrap_or_else(|e| warn!("Replication stream handle in message error: {}", e))
 						},
 						None => break,
 					}
