@@ -22,7 +22,7 @@ pub struct Config {
 	pub txpool: TxPoolConfig,
 	pub api: ApiConfig,
 	pub db: DBConfig,
-	pub validator: ValidatorConfig,
+	pub consensus: ConsensusConfig,
 	pub network: NetworkConfig,
 }
 
@@ -52,8 +52,22 @@ pub struct Partition {
 }
 
 #[derive(Deserialize, Debug)]
-pub struct ValidatorConfig {
+pub struct ConsensusConfig {
+	pub poa: Option<PoaConfig>,
+	pub raft: Option<RaftConfig>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct PoaConfig {
 	pub secret_key_file: Option<PathBuf>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct RaftConfig {
+	pub secret_key_file: Option<PathBuf>,
+	pub init_extra_election_timeout: Option<u64>,
+	pub extra_election_timeout_per_kb: Option<u64>,
+	pub request_proposal_min_interval: Option<u64>,
 }
 
 #[derive(Deserialize, Debug)]

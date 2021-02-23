@@ -37,7 +37,8 @@ pub use {
 };
 
 use crate::behaviour::{Behaviour, BehaviourConfig};
-use crate::stream::{start, NetworkStream};
+use crate::stream::NetworkStream;
+use std::sync::Arc;
 
 mod behaviour;
 mod discovery;
@@ -59,7 +60,11 @@ pub struct NetworkConfig {
 	pub reserved_only: bool,
 	pub agent_version: String,
 	pub local_key_pair: Keypair,
-	pub handshake: Vec<u8>,
+	pub handshake_builder: Option<Arc<dyn HandshakeBuilder>>,
+}
+
+pub trait HandshakeBuilder: Send + Sync + 'static {
+	fn build(&self, nonce: u64) -> Vec<u8>;
 }
 
 pub enum NetworkInMessage {
@@ -81,6 +86,7 @@ pub enum NetworkOutMessage {
 	ProtocolOpen {
 		peer_id: PeerId,
 		connected_point: ConnectedPoint,
+		nonce: u64,
 		handshake: Vec<u8>,
 	},
 	ProtocolClose {
@@ -128,12 +134,15 @@ impl Network {
 		let local_public_key = config.local_key_pair.public();
 		let local_peer_id = local_public_key.clone().into_peer_id();
 		let discovery_max_connections = Some(config.max_in_peers + config.max_out_peers);
+		let handshake_builder = config
+			.handshake_builder
+			.expect("qed; handshake_builder should be specified");
 		let behaviour_config = BehaviourConfig {
 			agent_version: config.agent_version,
 			local_public_key,
 			known_addresses,
 			discovery_max_connections,
-			handshake: config.handshake,
+			handshake_builder,
 		};
 
 		let behaviour = Behaviour::new(behaviour_config, peer_manager);
@@ -166,13 +175,7 @@ impl Network {
 		let peer_id = Swarm::local_peer_id(&swarm);
 		info!("Local peer id: {}", peer_id);
 
-		let stream = NetworkStream {
-			swarm,
-			bandwidth,
-			in_rx,
-			out_tx,
-		};
-		tokio::spawn(start(stream));
+		NetworkStream::spawn(swarm, bandwidth, in_rx, out_tx);
 
 		let network = Network {
 			peer_manager_tx,

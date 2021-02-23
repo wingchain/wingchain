@@ -32,7 +32,7 @@ fn test_static_hash() {
 		pub static ref HASH_IMPL_1: MutStatic<Arc<HashImpl>> = MutStatic::new();
 	}
 
-	let hash = Arc::new(HashImpl::from_str("blake2b_256").expect(""));
+	let hash = Arc::new(HashImpl::from_str("blake2b_256").unwrap());
 
 	HASH_IMPL_1.set(hash.clone()).unwrap();
 

@@ -31,7 +31,7 @@ use primitives::codec::{Decode, Encode};
 use primitives::{codec, Address, Balance, DBKey, DBValue, Event, Hash};
 use utils_test::TestAccount;
 
-pub fn test_accounts() -> (TestAccount, TestAccount) {
+pub fn test_accounts() -> Vec<TestAccount> {
 	let address = Arc::new(AddressImpl::Blake2b160);
 	let dsa = Arc::new(DsaImpl::Ed25519);
 	utils_test::test_accounts(dsa, address)
@@ -767,7 +767,7 @@ fn storage_map_raw_get<V: Decode, EC: ExecutorContext>(
 	let value = executor_context.payload_get(key)?;
 	let value = match value {
 		Some(value) => {
-			let value = codec::decode(&value[..])?;
+			let value = codec::decode(&mut &value[..])?;
 			Ok(Some(value))
 		}
 		None => Ok(None),

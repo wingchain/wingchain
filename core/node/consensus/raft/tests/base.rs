@@ -1,0 +1,260 @@
+// Copyright 2019, 2020 Wingchain
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+use std::fs;
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use std::time::Duration;
+use tempfile::tempdir;
+
+use futures::channel::oneshot;
+use node_chain::{Chain, ChainConfig, DBConfig};
+use node_consensus::{Consensus, ConsensusConfig};
+use node_consensus_base::support::DefaultConsensusSupport;
+use node_consensus_base::ConsensusInMessage;
+use node_consensus_raft::RaftConfig;
+use node_coordinator::support::DefaultCoordinatorSupport;
+use node_coordinator::{
+	Coordinator, CoordinatorConfig, Keypair, LinkedHashMap, Multiaddr, NetworkConfig, PeerId,
+	Protocol,
+};
+use node_txpool::support::DefaultTxPoolSupport;
+use node_txpool::{TxPool, TxPoolConfig};
+use primitives::{Address, BlockNumber, Hash, Transaction};
+use utils_test::TestAccount;
+
+pub fn get_service(
+	authority_accounts: &[&TestAccount],
+	account: &TestAccount,
+	local_key_pair: Keypair,
+	port: u16,
+	bootnodes: LinkedHashMap<(PeerId, Multiaddr), ()>,
+) -> (
+	Arc<Chain>,
+	Arc<TxPool<DefaultTxPoolSupport>>,
+	Arc<Consensus<DefaultConsensusSupport>>,
+	Arc<Coordinator<DefaultCoordinatorSupport>>,
+) {
+	let chain = get_chain(authority_accounts);
+
+	let txpool_config = TxPoolConfig { pool_capacity: 32 };
+
+	let txpool_support = Arc::new(DefaultTxPoolSupport::new(chain.clone()));
+	let txpool = Arc::new(TxPool::new(txpool_config, txpool_support).unwrap());
+
+	let support = Arc::new(DefaultConsensusSupport::new(chain.clone(), txpool.clone()));
+
+	let consensus_config = ConsensusConfig {
+		poa: None,
+		raft: Some(RaftConfig {
+			secret_key: Some(account.secret_key.clone()),
+			init_extra_election_timeout: Some(0),
+			extra_election_timeout_per_kb: Some(5),
+			request_proposal_min_interval: Some(1000),
+		}),
+	};
+
+	let consensus = Arc::new(Consensus::new(consensus_config, support).unwrap());
+
+	let coordinator_support = Arc::new(DefaultCoordinatorSupport::new(
+		chain.clone(),
+		txpool.clone(),
+		consensus.clone(),
+	));
+	let coordinator = get_coordinator(local_key_pair, port, bootnodes, coordinator_support);
+
+	(chain, txpool, consensus, coordinator)
+}
+
+pub async fn insert_tx(
+	chain: &Arc<Chain>,
+	txpool: &Arc<TxPool<DefaultTxPoolSupport>>,
+	tx: Transaction,
+) -> Hash {
+	let tx_hash = chain.hash_transaction(&tx).unwrap();
+	txpool.insert(tx).unwrap();
+	tx_hash
+}
+
+pub async fn wait_txpool(txpool: &Arc<TxPool<DefaultTxPoolSupport>>, count: usize) {
+	loop {
+		{
+			let queue = txpool.get_queue().read();
+			if queue.len() == count {
+				break;
+			}
+		}
+		futures_timer::Delay::new(Duration::from_millis(10)).await;
+	}
+}
+
+pub async fn wait_block_execution(chain: &Arc<Chain>, expected_number: BlockNumber) {
+	loop {
+		{
+			let number = chain.get_confirmed_number().unwrap().unwrap();
+			let block_hash = chain.get_block_hash(&number).unwrap().unwrap();
+			let execution = chain.get_execution(&block_hash).unwrap();
+			if number == expected_number && execution.is_some() {
+				break;
+			}
+		}
+		futures_timer::Delay::new(Duration::from_millis(10)).await;
+	}
+}
+
+pub async fn wait_leader_elected(consensus: &Arc<Consensus<DefaultConsensusSupport>>) -> Address {
+	let in_tx = consensus.in_message_tx();
+	let address = loop {
+		{
+			let (tx, rx) = oneshot::channel();
+			let _ = in_tx.unbounded_send(ConsensusInMessage::GetConsensusState { tx });
+			let consensus_state = rx.await.unwrap();
+			let current_leader = &consensus_state["current_leader"];
+
+			if current_leader.is_string() {
+				break current_leader.as_str().unwrap().to_string();
+			}
+		}
+		futures_timer::Delay::new(Duration::from_millis(10)).await;
+	};
+
+	let address = hex::decode(address).unwrap();
+	Address(address)
+}
+
+fn get_coordinator(
+	local_key_pair: Keypair,
+	port: u16,
+	bootnodes: LinkedHashMap<(PeerId, Multiaddr), ()>,
+	support: Arc<DefaultCoordinatorSupport>,
+) -> Arc<Coordinator<DefaultCoordinatorSupport>> {
+	let agent_version = "wingchain/1.0.0".to_string();
+	let listen_address = Multiaddr::empty()
+		.with(Protocol::Ip4([0, 0, 0, 0].into()))
+		.with(Protocol::Tcp(port));
+	let listen_addresses = vec![listen_address].into_iter().map(|v| (v, ())).collect();
+	let network_config = NetworkConfig {
+		max_in_peers: 32,
+		max_out_peers: 32,
+		listen_addresses,
+		external_addresses: LinkedHashMap::new(),
+		bootnodes,
+		reserved_nodes: LinkedHashMap::new(),
+		reserved_only: false,
+		agent_version,
+		local_key_pair,
+		handshake_builder: None,
+	};
+	let config = CoordinatorConfig { network_config };
+
+	let coordinator = Coordinator::new(config, support).unwrap();
+	Arc::new(coordinator)
+}
+
+fn get_chain(authority_accounts: &[&TestAccount]) -> Arc<Chain> {
+	let path = tempdir().expect("Could not create a temp dir");
+	let home = path.into_path();
+
+	init(&home, authority_accounts);
+
+	let db = DBConfig {
+		memory_budget: 1 * 1024 * 1024,
+		path: home.join("data").join("db"),
+		partitions: vec![],
+	};
+
+	let chain_config = ChainConfig { home, db };
+
+	let chain = Arc::new(Chain::new(chain_config).unwrap());
+
+	chain
+}
+
+fn init(home: &PathBuf, authority_accounts: &[&TestAccount]) {
+	let config_path = home.join("config");
+
+	fs::create_dir_all(&config_path).unwrap();
+
+	let members = authority_accounts
+		.into_iter()
+		.map(|x| format!("\"{}\"", x.address))
+		.collect::<Vec<_>>()
+		.join(",");
+
+	let spec = format!(
+		r#"
+[basic]
+hash = "blake2b_256"
+dsa = "ed25519"
+address = "blake2b_160"
+
+[genesis]
+
+[[genesis.txs]]
+module = "system"
+method = "init"
+params = '''
+{{
+    "chain_id": "chain-test",
+    "timestamp": "2020-04-29T15:51:36.502+08:00",
+    "max_until_gap": 20,
+    "max_execution_gap": 8,
+    "consensus": "raft"
+}}
+'''
+
+[[genesis.txs]]
+module = "balance"
+method = "init"
+params = '''
+{{
+    "endow": [
+    	["{}", 10]
+    ]
+}}
+'''
+
+[[genesis.txs]]
+module = "raft"
+method = "init"
+params = '''
+{{
+    "block_interval": null,
+	"heartbeat_interval": 100,
+	"election_timeout_min": 500,
+	"election_timeout_max": 1000,
+	"admin": {{
+    	"threshold": 1,
+    	"members": [["{}", 1]]
+    }},
+	"authorities": {{
+		"members": [{}]
+	}}
+}}
+'''
+
+[[genesis.txs]]
+module = "contract"
+method = "init"
+params = '''
+{{
+}}
+'''
+	"#,
+		authority_accounts[0].address, authority_accounts[0].address, members
+	);
+
+	fs::write(config_path.join("spec.toml"), &spec).unwrap();
+}

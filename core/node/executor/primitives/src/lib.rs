@@ -225,7 +225,7 @@ fn context_get<C: Context, V: Decode>(
 	match value {
 		Ok(value) => match value {
 			Some(value) => {
-				let value = codec::decode(&value[..])?;
+				let value = codec::decode(&mut &value[..])?;
 				Ok(Some(value))
 			}
 			None => Ok(None),

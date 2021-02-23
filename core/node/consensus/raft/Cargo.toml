@@ -1,0 +1,40 @@
+[package]
+name = "node-consensus-raft"
+version = "0.1.0"
+authors = ["developer <developer@wingchain.cn>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+async-trait = "0.1.30"
+futures = "0.3.8"
+log = "0.4.8"
+tokio = { version = "1.0", features = ["rt-multi-thread", "time", "sync", "macros"] }
+futures-timer = "3.0.2"
+scale-codec = { package = "parity-scale-codec", version = "1.3.0", features = ["derive"] }
+parking_lot = "0.10.0"
+derive_more = "0.99"
+rand = "0.7.3"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+node-consensus-primitives = { path = "../primitives" }
+node-consensus-base = { path = "../base" }
+primitives = { path = "../../../primitives" }
+node-chain = { path = "../../chain" }
+node-executor = { path = "../../executor" }
+node-executor-primitives = { path = "../../executor/primitives" }
+crypto = { path = "../../../crypto" }
+utils-enum-codec = { path = "../../../../utils/enum-codec"}
+
+[dev-dependencies]
+tempfile = "3.1.0"
+env_logger = "0.7.1"
+hex = "0.4.2"
+
+node-coordinator = { path = "../../coordinator" }
+node-txpool = { path = "../../txpool" }
+node-executor = { path = "../../executor" }
+node-consensus = { path = "../" }
+utils-test = { path = "../../../../utils/test" }

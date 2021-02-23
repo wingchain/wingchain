@@ -25,7 +25,8 @@ mod base;
 fn test_vm_tb_success() {
 	let _ = env_logger::try_init();
 
-	let (account1, _account2) = base::test_accounts();
+	let test_accounts = base::test_accounts();
+	let (account1, _account2) = (&test_accounts[0], &test_accounts[1]);
 
 	let executor_context = TestExecutorContext::new();
 
@@ -324,7 +325,8 @@ fn test_vm_tb_success() {
 fn test_vm_tb_failed() {
 	let _ = env_logger::try_init();
 
-	let (account1, _account2) = base::test_accounts();
+	let test_accounts = base::test_accounts();
+	let (account1, _account2) = (&test_accounts[0], &test_accounts[1]);
 
 	let executor_context = TestExecutorContext::new();
 
@@ -434,7 +436,8 @@ fn test_vm_tb_failed() {
 fn test_vm_tb_ea() {
 	let _ = env_logger::try_init();
 
-	let (account1, _account2) = base::test_accounts();
+	let test_accounts = base::test_accounts();
+	let (account1, _account2) = (&test_accounts[0], &test_accounts[1]);
 
 	let executor_context = TestExecutorContext::new();
 

@@ -57,7 +57,8 @@ fn test_executor() {
 
 	let timestamp = 1588146696502;
 
-	let (account1, account2) = test_accounts(dsa.clone(), address.clone());
+	let test_accounts = test_accounts(dsa.clone(), address.clone());
+	let (account1, account2) = (&test_accounts[0], &test_accounts[1]);
 
 	let executor = Executor::new(hasher.clone(), dsa.clone(), address.clone());
 
@@ -238,7 +239,12 @@ fn test_executor() {
 	);
 	assert_eq!(
 		(payload_receipts_root, payload_receipts),
-		expected_block_1_receipts_root(&block_1_payload_txs, account1.address, account2.address, 2)
+		expected_block_1_receipts_root(
+			&block_1_payload_txs,
+			account1.address.clone(),
+			account2.address.clone(),
+			2
+		)
 	);
 }
 
@@ -261,7 +267,8 @@ fn test_executor_validate_tx() {
 	let dsa = Arc::new(DsaImpl::Ed25519);
 	let address = Arc::new(AddressImpl::Blake2b160);
 
-	let (account1, account2) = test_accounts(dsa.clone(), address.clone());
+	let test_accounts = test_accounts(dsa.clone(), address.clone());
+	let (account1, account2) = (&test_accounts[0], &test_accounts[1]);
 
 	let executor = Executor::new(hasher.clone(), dsa.clone(), address.clone());
 
@@ -373,7 +380,7 @@ fn test_executor_validate_tx() {
 			)
 			.unwrap();
 		let mut witness = tx.witness.unwrap().clone();
-		witness.public_key = account2.public_key;
+		witness.public_key = account2.public_key.clone();
 		tx.witness = Some(witness);
 		tx
 	};
@@ -416,7 +423,7 @@ fn expected_block_0_receipts_root(
 
 fn expected_block_0_meta_state_root(txs: &Vec<Arc<FullTransaction>>) -> Hash {
 	let tx = &txs[0].tx; // use the last tx
-	let params: module::system::InitParams = codec::decode(&tx.call.params.0[..]).unwrap();
+	let params: module::system::InitParams = codec::decode(&mut &tx.call.params.0[..]).unwrap();
 
 	let data = vec![
 		(
@@ -468,7 +475,7 @@ fn expected_block_0_meta_state_root(txs: &Vec<Arc<FullTransaction>>) -> Hash {
 
 fn expected_block_0_payload_state_root(txs: &Vec<Arc<FullTransaction>>) -> Hash {
 	let tx = &txs[0].tx; // use the last tx
-	let params: module::balance::InitParams = codec::decode(&tx.call.params.0[..]).unwrap();
+	let params: module::balance::InitParams = codec::decode(&mut &tx.call.params.0[..]).unwrap();
 
 	let (account, balance) = &params.endow[0];
 
@@ -514,7 +521,7 @@ fn expected_block_1_payload_state_root(
 	block_1_txs: &Vec<Arc<FullTransaction>>,
 ) -> Hash {
 	let tx = &block_0_txs[0].tx; // use the last tx
-	let params: module::balance::InitParams = codec::decode(&tx.call.params.0[..]).unwrap();
+	let params: module::balance::InitParams = codec::decode(&mut &tx.call.params.0[..]).unwrap();
 	let (account1, balance) = &params.endow[0];
 
 	let data = vec![(
@@ -549,7 +556,8 @@ fn expected_block_1_payload_state_root(
 	db.write(transaction).unwrap();
 
 	let tx = &block_1_txs[0].tx; // use the last tx
-	let params: module::balance::TransferParams = codec::decode(&tx.call.params.0[..]).unwrap();
+	let params: module::balance::TransferParams =
+		codec::decode(&mut &tx.call.params.0[..]).unwrap();
 
 	let (account2, value) = (&params.recipient, params.value);
 

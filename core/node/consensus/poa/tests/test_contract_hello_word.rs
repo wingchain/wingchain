@@ -16,7 +16,7 @@ use std::sync::Arc;
 
 use crypto::address::AddressImpl;
 use crypto::dsa::DsaImpl;
-use node_consensus_base::Consensus;
+use node_consensus_base::ConsensusInMessage;
 use node_executor::module;
 use node_executor_primitives::EmptyParams;
 use primitives::codec::Decode;
@@ -32,9 +32,11 @@ async fn test_poa_contract_hw_read() {
 	let dsa = Arc::new(DsaImpl::Ed25519);
 	let address = Arc::new(AddressImpl::Blake2b160);
 
-	let (account1, _account2) = test_accounts(dsa, address);
+	let test_accounts = test_accounts(dsa, address);
+	let (account1, _account2) = (&test_accounts[0], &test_accounts[1]);
 
-	let (chain, txpool, consensus) = base::get_service(&account1);
+	let authority_accounts = [account1];
+	let (chain, txpool, consensus) = base::get_standalone_service(&authority_accounts, account1);
 
 	let ori_code = get_code().to_vec();
 
@@ -63,8 +65,11 @@ async fn test_poa_contract_hw_read() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 1
-	consensus.generate().unwrap();
-	base::wait_block_execution(&chain).await;
+	consensus
+		.in_message_tx()
+		.unbounded_send(ConsensusInMessage::Generate)
+		.unwrap();
+	base::wait_block_execution(&chain, 1).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
 	let tx1_result = tx1_receipt.result.unwrap();
@@ -309,8 +314,6 @@ async fn test_poa_contract_hw_read() {
 	let result = String::from_utf8(result).unwrap();
 	log::info!("result: {}", result);
 	assert_eq!(result, r#"10"#,);
-
-	base::safe_close(chain, txpool, consensus).await;
 }
 
 #[tokio::test]
@@ -320,9 +323,11 @@ async fn test_poa_contract_hw_write() {
 	let dsa = Arc::new(DsaImpl::Ed25519);
 	let address = Arc::new(AddressImpl::Blake2b160);
 
-	let (account1, _account2) = test_accounts(dsa, address);
+	let test_accounts = test_accounts(dsa, address);
+	let (account1, _account2) = (&test_accounts[0], &test_accounts[1]);
 
-	let (chain, txpool, consensus) = base::get_service(&account1);
+	let authority_accounts = [account1];
+	let (chain, txpool, consensus) = base::get_standalone_service(&authority_accounts, account1);
 
 	let ori_code = get_code().to_vec();
 
@@ -351,8 +356,11 @@ async fn test_poa_contract_hw_write() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 1
-	consensus.generate().unwrap();
-	base::wait_block_execution(&chain).await;
+	consensus
+		.in_message_tx()
+		.unbounded_send(ConsensusInMessage::Generate)
+		.unwrap();
+	base::wait_block_execution(&chain, 1).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
 	let tx1_result = tx1_receipt.result.unwrap();
@@ -428,8 +436,11 @@ async fn test_poa_contract_hw_write() {
 	base::wait_txpool(&txpool, 3).await;
 
 	// generate block 2
-	consensus.generate().unwrap();
-	base::wait_block_execution(&chain).await;
+	consensus
+		.in_message_tx()
+		.unbounded_send(ConsensusInMessage::Generate)
+		.unwrap();
+	base::wait_block_execution(&chain, 2).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
 	let tx1_events = tx1_receipt
@@ -482,8 +493,6 @@ async fn test_poa_contract_hw_write() {
 	let result = String::from_utf8(result).unwrap();
 	log::info!("result: {}", result);
 	assert_eq!(result, r#"{"value":"abc"}"#.to_string(),);
-
-	base::safe_close(chain, txpool, consensus).await;
 }
 
 #[tokio::test]
@@ -493,9 +502,11 @@ async fn test_poa_contract_hw_transfer_success() {
 	let dsa = Arc::new(DsaImpl::Ed25519);
 	let address = Arc::new(AddressImpl::Blake2b160);
 
-	let (account1, account2) = test_accounts(dsa, address);
+	let test_accounts = test_accounts(dsa, address);
+	let (account1, account2) = (&test_accounts[0], &test_accounts[1]);
 
-	let (chain, txpool, consensus) = base::get_service(&account1);
+	let authority_accounts = [account1];
+	let (chain, txpool, consensus) = base::get_standalone_service(&authority_accounts, account1);
 
 	let ori_code = get_code().to_vec();
 
@@ -524,8 +535,11 @@ async fn test_poa_contract_hw_transfer_success() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 1
-	consensus.generate().unwrap();
-	base::wait_block_execution(&chain).await;
+	consensus
+		.in_message_tx()
+		.unbounded_send(ConsensusInMessage::Generate)
+		.unwrap();
+	base::wait_block_execution(&chain, 1).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
 	let tx1_result = tx1_receipt.result.unwrap();
@@ -562,8 +576,11 @@ async fn test_poa_contract_hw_transfer_success() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 2
-	consensus.generate().unwrap();
-	base::wait_block_execution(&chain).await;
+	consensus
+		.in_message_tx()
+		.unbounded_send(ConsensusInMessage::Generate)
+		.unwrap();
+	base::wait_block_execution(&chain, 2).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
 	let tx1_events = tx1_receipt
@@ -627,8 +644,6 @@ async fn test_poa_contract_hw_transfer_success() {
 		.unwrap();
 	log::info!("result: {}", result);
 	assert_eq!(result, 1);
-
-	base::safe_close(chain, txpool, consensus).await;
 }
 
 #[tokio::test]
@@ -638,9 +653,11 @@ async fn test_poa_contract_hw_transfer_failed() {
 	let dsa = Arc::new(DsaImpl::Ed25519);
 	let address = Arc::new(AddressImpl::Blake2b160);
 
-	let (account1, account2) = test_accounts(dsa, address);
+	let test_accounts = test_accounts(dsa, address);
+	let (account1, account2) = (&test_accounts[0], &test_accounts[1]);
 
-	let (chain, txpool, consensus) = base::get_service(&account1);
+	let authority_accounts = [account1];
+	let (chain, txpool, consensus) = base::get_standalone_service(&authority_accounts, account1);
 
 	let ori_code = get_code().to_vec();
 
@@ -669,8 +686,11 @@ async fn test_poa_contract_hw_transfer_failed() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 1
-	consensus.generate().unwrap();
-	base::wait_block_execution(&chain).await;
+	consensus
+		.in_message_tx()
+		.unbounded_send(ConsensusInMessage::Generate)
+		.unwrap();
+	base::wait_block_execution(&chain, 1).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
 	let tx1_result = tx1_receipt.result.unwrap();
@@ -707,8 +727,11 @@ async fn test_poa_contract_hw_transfer_failed() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 2
-	consensus.generate().unwrap();
-	base::wait_block_execution(&chain).await;
+	consensus
+		.in_message_tx()
+		.unbounded_send(ConsensusInMessage::Generate)
+		.unwrap();
+	base::wait_block_execution(&chain, 2).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
 	let tx1_events = tx1_receipt
@@ -758,8 +781,6 @@ async fn test_poa_contract_hw_transfer_failed() {
 		.unwrap();
 	log::info!("result: {}", result);
 	assert_eq!(result, 0);
-
-	base::safe_close(chain, txpool, consensus).await;
 }
 
 #[tokio::test]
@@ -769,9 +790,11 @@ async fn test_poa_contract_hw_transfer_partial_failed() {
 	let dsa = Arc::new(DsaImpl::Ed25519);
 	let address = Arc::new(AddressImpl::Blake2b160);
 
-	let (account1, account2) = test_accounts(dsa, address);
+	let test_accounts = test_accounts(dsa, address);
+	let (account1, account2) = (&test_accounts[0], &test_accounts[1]);
 
-	let (chain, txpool, consensus) = base::get_service(&account1);
+	let authority_accounts = [account1];
+	let (chain, txpool, consensus) = base::get_standalone_service(&authority_accounts, account1);
 
 	let ori_code = get_code().to_vec();
 
@@ -800,8 +823,11 @@ async fn test_poa_contract_hw_transfer_partial_failed() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 1
-	consensus.generate().unwrap();
-	base::wait_block_execution(&chain).await;
+	consensus
+		.in_message_tx()
+		.unbounded_send(ConsensusInMessage::Generate)
+		.unwrap();
+	base::wait_block_execution(&chain, 1).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
 	let tx1_result = tx1_receipt.result.unwrap();
@@ -838,8 +864,11 @@ async fn test_poa_contract_hw_transfer_partial_failed() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 2
-	consensus.generate().unwrap();
-	base::wait_block_execution(&chain).await;
+	consensus
+		.in_message_tx()
+		.unbounded_send(ConsensusInMessage::Generate)
+		.unwrap();
+	base::wait_block_execution(&chain, 2).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
 	let tx1_events = tx1_receipt
@@ -896,8 +925,6 @@ async fn test_poa_contract_hw_transfer_partial_failed() {
 		.unwrap();
 	log::info!("result: {}", result);
 	assert_eq!(result, 0);
-
-	base::safe_close(chain, txpool, consensus).await;
 }
 
 #[tokio::test]
@@ -907,9 +934,11 @@ async fn test_poa_contract_hw_nested_contract() {
 	let dsa = Arc::new(DsaImpl::Ed25519);
 	let address = Arc::new(AddressImpl::Blake2b160);
 
-	let (account1, _account2) = test_accounts(dsa, address);
+	let test_accounts = test_accounts(dsa, address);
+	let (account1, _account2) = (&test_accounts[0], &test_accounts[1]);
 
-	let (chain, txpool, consensus) = base::get_service(&account1);
+	let authority_accounts = [account1];
+	let (chain, txpool, consensus) = base::get_standalone_service(&authority_accounts, account1);
 
 	let ori_code = get_code().to_vec();
 
@@ -938,8 +967,11 @@ async fn test_poa_contract_hw_nested_contract() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 1
-	consensus.generate().unwrap();
-	base::wait_block_execution(&chain).await;
+	consensus
+		.in_message_tx()
+		.unbounded_send(ConsensusInMessage::Generate)
+		.unwrap();
+	base::wait_block_execution(&chain, 1).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
 	let tx1_result = tx1_receipt.result.unwrap();
@@ -971,20 +1003,21 @@ async fn test_poa_contract_hw_nested_contract() {
 	base::wait_txpool(&txpool, 1).await;
 
 	// generate block 2
-	consensus.generate().unwrap();
-	base::wait_block_execution(&chain).await;
+	consensus
+		.in_message_tx()
+		.unbounded_send(ConsensusInMessage::Generate)
+		.unwrap();
+	base::wait_block_execution(&chain, 2).await;
 
 	let tx1_receipt = chain.get_receipt(&tx1_hash).unwrap().unwrap();
 	let tx1_error = tx1_receipt.result.unwrap_err();
 	log::info!("tx1_error: {:?}", tx1_error);
 	assert_eq!(tx1_error, "ContractError: NestDepthExceeded".to_string());
-
-	base::safe_close(chain, txpool, consensus).await;
 }
 
 fn get_code() -> &'static [u8] {
 	let code = include_bytes!(
-		"../../vm/contract-samples/hello-world/release/contract_samples_hello_world_bg.wasm"
+		"../../../vm/contract-samples/hello-world/release/contract_samples_hello_world_bg.wasm"
 	);
 	code
 }

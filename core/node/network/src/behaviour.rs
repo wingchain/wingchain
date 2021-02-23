@@ -33,6 +33,8 @@ use node_peer_manager::PeerManager;
 
 use crate::discovery::{Discovery, DiscoveryConfig, DiscoveryOut};
 use crate::protocol::{Protocol, ProtocolConfig, ProtocolOut};
+use crate::HandshakeBuilder;
+use std::sync::Arc;
 
 const GLOBAL_PROTOCOL_VERSION: &str = "/wingchain/1.0.0";
 
@@ -41,7 +43,7 @@ pub struct BehaviourConfig {
 	pub local_public_key: PublicKey,
 	pub known_addresses: Vec<(PeerId, Multiaddr)>,
 	pub discovery_max_connections: Option<u32>,
-	pub handshake: Vec<u8>,
+	pub handshake_builder: Arc<dyn HandshakeBuilder>,
 }
 
 #[derive(Debug)]
@@ -49,6 +51,7 @@ pub enum BehaviourOut {
 	ProtocolOpen {
 		peer_id: PeerId,
 		connected_point: ConnectedPoint,
+		nonce: u64,
 		handshake: Vec<u8>,
 	},
 	ProtocolClose {
@@ -99,7 +102,7 @@ impl Behaviour {
 
 		let protocol_config = ProtocolConfig {
 			local_peer_id,
-			handshake: config.handshake,
+			handshake_builder: config.handshake_builder,
 		};
 		let protocol = Protocol::new(protocol_config, peer_manager);
 		Self {
@@ -147,6 +150,7 @@ impl NetworkBehaviourEventProcess<ProtocolOut> for Behaviour {
 			ProtocolOut::ProtocolOpen {
 				peer_id,
 				connected_point,
+				nonce,
 				handshake,
 			} => {
 				self.peers.insert(
@@ -160,6 +164,7 @@ impl NetworkBehaviourEventProcess<ProtocolOut> for Behaviour {
 				self.events.push_back(BehaviourOut::ProtocolOpen {
 					peer_id,
 					connected_point,
+					nonce,
 					handshake,
 				});
 			}

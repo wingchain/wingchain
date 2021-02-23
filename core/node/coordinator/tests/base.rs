@@ -20,19 +20,19 @@ use std::time::Duration;
 use tempfile::tempdir;
 
 use node_chain::{Chain, ChainConfig, DBConfig};
-use node_consensus::Consensus;
+use node_consensus::{Consensus, ConsensusConfig, PoaConfig};
 use node_consensus_base::support::DefaultConsensusSupport;
-use node_consensus_base::ConsensusConfig;
 use node_coordinator::support::DefaultCoordinatorSupport;
 use node_coordinator::{Coordinator, CoordinatorConfig};
 use node_network::{Keypair, LinkedHashMap, Multiaddr, NetworkConfig, PeerId, Protocol};
 use node_txpool::support::DefaultTxPoolSupport;
 use node_txpool::{TxPool, TxPoolConfig};
-use primitives::{Address, Hash, PublicKey, SecretKey, Transaction};
+use primitives::{BlockNumber, Hash, Transaction};
+use utils_test::TestAccount;
 
 pub fn get_service(
-	authority_account: &(SecretKey, PublicKey, Address),
-	account: &(SecretKey, PublicKey, Address),
+	authority_accounts: &[&TestAccount],
+	account: &TestAccount,
 	local_key_pair: Keypair,
 	port: u16,
 	bootnodes: LinkedHashMap<(PeerId, Multiaddr), ()>,
@@ -42,7 +42,7 @@ pub fn get_service(
 	Arc<Consensus<DefaultConsensusSupport>>,
 	Arc<Coordinator<DefaultCoordinatorSupport>>,
 ) {
-	let chain = get_chain(&authority_account.2);
+	let chain = get_chain(authority_accounts);
 
 	let txpool_config = TxPoolConfig { pool_capacity: 32 };
 
@@ -52,7 +52,10 @@ pub fn get_service(
 	let support = Arc::new(DefaultConsensusSupport::new(chain.clone(), txpool.clone()));
 
 	let consensus_config = ConsensusConfig {
-		secret_key: Some(account.0.clone()),
+		poa: Some(PoaConfig {
+			secret_key: Some(account.secret_key.clone()),
+		}),
+		raft: None,
 	};
 
 	let consensus = Arc::new(Consensus::new(consensus_config, support).unwrap());
@@ -89,34 +92,18 @@ pub async fn wait_txpool(txpool: &Arc<TxPool<DefaultTxPoolSupport>>, count: usiz
 	}
 }
 
-pub async fn wait_block_execution(chain: &Arc<Chain>) {
+pub async fn wait_block_execution(chain: &Arc<Chain>, expected_number: BlockNumber) {
 	loop {
 		{
 			let number = chain.get_confirmed_number().unwrap().unwrap();
 			let block_hash = chain.get_block_hash(&number).unwrap().unwrap();
 			let execution = chain.get_execution(&block_hash).unwrap();
-			if execution.is_some() {
+			if number == expected_number && execution.is_some() {
 				break;
 			}
 		}
 		futures_timer::Delay::new(Duration::from_millis(10)).await;
 	}
-}
-
-/// safe close,
-/// to avoid rocksdb `libc++abi.dylib: Pure virtual function called!`
-#[allow(dead_code)]
-pub async fn safe_close(
-	chain: Arc<Chain>,
-	txpool: Arc<TxPool<DefaultTxPoolSupport>>,
-	consensus: Arc<Consensus<DefaultConsensusSupport>>,
-	coordinator: Arc<Coordinator<DefaultCoordinatorSupport>>,
-) {
-	drop(chain);
-	drop(txpool);
-	drop(consensus);
-	drop(coordinator);
-	tokio::time::sleep(Duration::from_millis(50)).await;
 }
 
 fn get_coordinator(
@@ -140,7 +127,7 @@ fn get_coordinator(
 		reserved_only: false,
 		agent_version,
 		local_key_pair,
-		handshake: vec![],
+		handshake_builder: None,
 	};
 	let config = CoordinatorConfig { network_config };
 
@@ -148,11 +135,11 @@ fn get_coordinator(
 	Arc::new(coordinator)
 }
 
-fn get_chain(address: &Address) -> Arc<Chain> {
+fn get_chain(authority_accounts: &[&TestAccount]) -> Arc<Chain> {
 	let path = tempdir().expect("Could not create a temp dir");
 	let home = path.into_path();
 
-	init(&home, address);
+	init(&home, authority_accounts);
 
 	let db = DBConfig {
 		memory_budget: 1 * 1024 * 1024,
@@ -167,7 +154,7 @@ fn get_chain(address: &Address) -> Arc<Chain> {
 	chain
 }
 
-fn init(home: &PathBuf, address: &Address) {
+fn init(home: &PathBuf, authority_accounts: &[&TestAccount]) {
 	let config_path = home.join("config");
 
 	fs::create_dir_all(&config_path).unwrap();
@@ -211,6 +198,10 @@ method = "init"
 params = '''
 {{
     "block_interval": null,
+    "admin": {{
+    	"threshold": 1,
+    	"members": [["{}", 1]]
+    }},
     "authority": "{}"
 }}
 '''
@@ -223,7 +214,7 @@ params = '''
 }}
 '''
 	"#,
-		address, address
+		authority_accounts[0].address, authority_accounts[0].address, authority_accounts[0].address
 	);
 
 	fs::write(config_path.join("spec.toml"), &spec).unwrap();

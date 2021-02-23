@@ -29,7 +29,7 @@ mod method;
 /// Start rpc server in a new thread
 pub fn start_rpc<S>(config: &ApiConfig, support: Arc<S>)
 where
-	S: ApiSupport + Send + Sync + 'static,
+	S: ApiSupport,
 {
 	let config = config.clone();
 
@@ -51,7 +51,7 @@ where
 
 async fn start_rpc_app<S>(config: &ApiConfig, support: Arc<S>) -> CommonResult<()>
 where
-	S: ApiSupport + Send + Sync + 'static,
+	S: ApiSupport,
 {
 	let rpc = Server::new()
 		.with_data(Data::new(support))
@@ -96,6 +96,7 @@ where
 		)
 		.with_method("txpool_getTransaction", method::txpool_get_transaction::<S>)
 		.with_method("network_getState", method::network_get_state::<S>)
+		.with_method("consensus_getState", method::consensus_get_state::<S>)
 		.finish();
 
 	let workers = match config.rpc_workers {

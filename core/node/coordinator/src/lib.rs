@@ -25,9 +25,12 @@ use primitives::codec::Encode;
 use primitives::errors::CommonResult;
 
 use crate::protocol::{Handshake, ProtocolMessage};
-use crate::stream::{start, CoordinatorStream};
+use crate::stream::CoordinatorStream;
 use crate::support::CoordinatorSupport;
 use futures::channel::mpsc::{unbounded, UnboundedSender};
+use node_network::HandshakeBuilder;
+use parking_lot::RwLock;
+use primitives::{BlockNumber, Hash};
 
 mod errors;
 mod peer_report;
@@ -47,7 +50,7 @@ pub enum CoordinatorInMessage {
 
 pub struct Coordinator<S>
 where
-	S: CoordinatorSupport + Send + Sync + 'static,
+	S: CoordinatorSupport,
 {
 	#[allow(dead_code)]
 	network: Arc<Network>,
@@ -58,20 +61,21 @@ where
 
 impl<S> Coordinator<S>
 where
-	S: CoordinatorSupport + Send + Sync + 'static,
+	S: CoordinatorSupport,
 {
 	pub fn new(config: CoordinatorConfig, support: Arc<S>) -> CommonResult<Self> {
-		let genesis_hash = support
-			.get_block_hash(&0)?
-			.ok_or_else(|| errors::ErrorKind::Data("Missing genesis block".to_string()))?;
+		let current_state = support.get_current_state();
 
-		let handshake = ProtocolMessage::Handshake(Handshake {
-			genesis_hash: genesis_hash.clone(),
-		})
-		.encode();
+		let handshake_builder = Arc::new(DefaultHandshakeBuilder {
+			genesis_hash: current_state.genesis_hash.clone(),
+			confirmed: RwLock::new((
+				current_state.confirmed_number,
+				current_state.confirmed_block_hash.clone(),
+			)),
+		});
 
 		let mut network_config = config.network_config;
-		network_config.handshake = handshake;
+		network_config.handshake_builder = Some(handshake_builder.clone());
 
 		let network = Network::new(network_config)?;
 
@@ -82,20 +86,25 @@ where
 		let chain_rx = support.chain_rx().expect("Coordinator is the only taker");
 		let txpool_rx = support.txpool_rx().expect("Coordinator is the only taker");
 
+		let consensus_tx = support.consensus_tx();
+		let consensus_rx = support
+			.consensus_rx()
+			.expect("Coordinator is the only taker");
+
 		let (in_tx, in_rx) = unbounded();
 
-		let stream = CoordinatorStream::new(
-			genesis_hash,
+		CoordinatorStream::spawn(
+			handshake_builder,
 			chain_rx,
 			txpool_rx,
 			peer_manager_tx,
 			network_tx,
 			network_rx,
+			consensus_tx,
+			consensus_rx,
 			in_rx,
 			support.clone(),
 		)?;
-
-		tokio::spawn(start(stream));
 
 		let coordinator = Coordinator {
 			network: Arc::new(network),
@@ -108,5 +117,23 @@ where
 
 	pub fn coordinator_tx(&self) -> UnboundedSender<CoordinatorInMessage> {
 		self.coordinator_tx.clone()
+	}
+}
+
+pub struct DefaultHandshakeBuilder {
+	genesis_hash: Hash,
+	confirmed: RwLock<(BlockNumber, Hash)>,
+}
+
+impl HandshakeBuilder for DefaultHandshakeBuilder {
+	fn build(&self, nonce: u64) -> Vec<u8> {
+		let (confirmed_number, confirmed_hash) = (*self.confirmed.read()).clone();
+		ProtocolMessage::Handshake(Handshake {
+			genesis_hash: self.genesis_hash.clone(),
+			confirmed_number,
+			confirmed_hash,
+			nonce,
+		})
+		.encode()
 	}
 }

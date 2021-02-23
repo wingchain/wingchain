@@ -27,7 +27,6 @@ pub trait TxPoolSupport {
 		tx: &Transaction,
 		witness_required: bool,
 	) -> CommonResult<()>;
-	fn get_confirmed_number(&self) -> CommonResult<Option<BlockNumber>>;
 	fn get_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Transaction>>;
 	fn execute_call_with_block_number<P: Encode, R: Decode>(
 		&self,
@@ -61,9 +60,6 @@ impl TxPoolSupport for DefaultTxPoolSupport {
 	) -> CommonResult<()> {
 		self.chain
 			.validate_transaction(tx_hash, tx, witness_required)
-	}
-	fn get_confirmed_number(&self) -> CommonResult<Option<BlockNumber>> {
-		self.chain.get_confirmed_number()
 	}
 	fn get_transaction(&self, tx_hash: &Hash) -> CommonResult<Option<Transaction>> {
 		self.chain.get_transaction(tx_hash)

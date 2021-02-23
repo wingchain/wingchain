@@ -25,6 +25,8 @@ node-txpool = { path = "../txpool" }
 node-api-rt = { path = "rt" }
 node-coordinator = { path = "../coordinator" }
 primitives = { path = "../../primitives" }
+node-consensus = { path = "../consensus" }
+node-consensus-base = { path = "../consensus/base" }
 
 [dev-dependencies]
 tempfile = "3.1.0"
@@ -34,6 +36,4 @@ utils-test = { path = "../../../utils/test" }
 futures-timer = "3.0.2"
 env_logger = "0.7.1"
 
-node-consensus = { path = "../consensus" }
 node-consensus-poa = { path = "../consensus/poa" }
-node-consensus-base = { path = "../consensus/base" }

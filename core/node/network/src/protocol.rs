@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use rand::Rng;
 use std::borrow::Cow;
 use std::collections::VecDeque;
 use std::error;
@@ -36,7 +37,8 @@ use node_peer_manager::{IncomingId, OutMessage, PeerManager};
 
 use crate::peer_report::{PEER_REPORT_DIAL_FAILURE, PEER_REPORT_PROTOCOL_ERROR};
 use crate::protocol::handler::{HandlerIn, HandlerOut, HandlerProto};
-use crate::PMInMessage;
+use crate::{HandshakeBuilder, PMInMessage};
+use rand::thread_rng;
 
 mod handler;
 mod upgrade;
@@ -48,6 +50,7 @@ pub enum ProtocolOut {
 	ProtocolOpen {
 		peer_id: PeerId,
 		connected_point: ConnectedPoint,
+		nonce: u64,
 		handshake: Vec<u8>,
 	},
 	ProtocolClose {
@@ -75,22 +78,24 @@ pub enum PeerState {
 		/// otherwise, if the outgoing connection comes before the incoming connection
 		/// we cannot reach ProtocolOpened
 		connected_list: FnvHashMap<ConnectionId, Connection>,
+		nonce: u64,
 	},
 	ProtocolOpened {
 		connected_list: FnvHashMap<ConnectionId, Connection>,
 		opened_list: FnvHashMap<ConnectionId, Connection>,
+		nonce: u64,
 	},
 	Locked,
 }
 
 pub struct ProtocolConfig {
 	pub local_peer_id: PeerId,
-	pub handshake: Vec<u8>,
+	pub handshake_builder: Arc<dyn HandshakeBuilder>,
 }
 
 pub struct Protocol {
 	local_peer_id: PeerId,
-	handshake: Arc<Vec<u8>>,
+	handshake_builder: Arc<dyn HandshakeBuilder>,
 	peers: FnvHashMap<PeerId, PeerState>,
 	incoming_peers: FnvHashMap<IncomingId, PeerId>,
 	delay_peers: FnvHashMap<PeerId, Instant>,
@@ -103,7 +108,7 @@ impl Protocol {
 	pub fn new(config: ProtocolConfig, peer_manager: PeerManager) -> Self {
 		Self {
 			local_peer_id: config.local_peer_id,
-			handshake: Arc::new(config.handshake),
+			handshake_builder: config.handshake_builder,
 			peers: FnvHashMap::default(),
 			incoming_peers: FnvHashMap::default(),
 			delay_peers: FnvHashMap::default(),
@@ -155,7 +160,10 @@ impl Protocol {
 				*entry = PeerState::Init { pending_dial };
 			}
 			// Connected => Connected
-			PeerState::Connected { connected_list } => {
+			PeerState::Connected {
+				connected_list,
+				nonce,
+			} => {
 				debug!("External => Drop({})", peer_id);
 				debug!("Handler({}, All) <= Close", peer_id);
 				self.events
@@ -164,12 +172,16 @@ impl Protocol {
 						handler: NotifyHandler::All,
 						event: HandlerIn::Close,
 					});
-				*entry = PeerState::Connected { connected_list };
+				*entry = PeerState::Connected {
+					connected_list,
+					nonce,
+				};
 			}
 			// ProtocolOpened => ProtocolOpened
 			PeerState::ProtocolOpened {
 				connected_list,
 				opened_list,
+				nonce,
 			} => {
 				debug!("External => Drop({})", peer_id);
 				debug!("Handler({}, All) <= Close", peer_id);
@@ -182,6 +194,7 @@ impl Protocol {
 				*entry = PeerState::ProtocolOpened {
 					connected_list,
 					opened_list,
+					nonce,
 				};
 			}
 			PeerState::Locked => unreachable!(),
@@ -237,17 +250,25 @@ impl Protocol {
 				}
 			}
 			// Connected => Connected
-			PeerState::Connected { connected_list } => {
-				*entry = PeerState::Connected { connected_list };
+			PeerState::Connected {
+				connected_list,
+				nonce,
+			} => {
+				*entry = PeerState::Connected {
+					connected_list,
+					nonce,
+				};
 			}
 			// ProtocolOpened => ProtocolOpened
 			PeerState::ProtocolOpened {
 				connected_list,
 				opened_list,
+				nonce,
 			} => {
 				*entry = PeerState::ProtocolOpened {
 					connected_list,
 					opened_list,
+					nonce,
 				};
 			}
 			PeerState::Locked => unreachable!(),
@@ -265,7 +286,10 @@ impl Protocol {
 				*entry = PeerState::Init { pending_dial };
 			}
 			// Connected => Connected
-			PeerState::Connected { connected_list } => {
+			PeerState::Connected {
+				connected_list,
+				nonce,
+			} => {
 				debug!("PeerManager => Drop({})", peer_id);
 				debug!("Handler({}, All) <= Close", peer_id);
 				self.events
@@ -274,12 +298,16 @@ impl Protocol {
 						handler: NotifyHandler::All,
 						event: HandlerIn::Close,
 					});
-				*entry = PeerState::Connected { connected_list };
+				*entry = PeerState::Connected {
+					connected_list,
+					nonce,
+				};
 			}
 			// ProtocolOpened => ProtocolOpened
 			PeerState::ProtocolOpened {
 				connected_list,
 				opened_list,
+				nonce,
 			} => {
 				debug!("PeerManager => Drop({})", peer_id);
 				debug!("Handler({}, All) <= Close", peer_id);
@@ -292,6 +320,7 @@ impl Protocol {
 				*entry = PeerState::ProtocolOpened {
 					connected_list,
 					opened_list,
+					nonce,
 				};
 			}
 			PeerState::Locked => unreachable!(),
@@ -318,30 +347,9 @@ impl Protocol {
 				*entry = PeerState::Init { pending_dial };
 			}
 			// Connected => Connected
-			PeerState::Connected { connected_list } => {
-				let connection_id = connected_list.iter().find_map(|(k, v)| {
-					if v.incoming_id.as_ref() == Some(&incoming_id) {
-						Some(k)
-					} else {
-						None
-					}
-				});
-				if let Some(connection_id) = connection_id {
-					debug!("PeerManager => Accept({})", peer_id);
-					debug!("Handler({}, {:?}) <= Open", peer_id, connection_id);
-					self.events
-						.push_back(NetworkBehaviourAction::NotifyHandler {
-							peer_id,
-							handler: NotifyHandler::One(*connection_id),
-							event: HandlerIn::Open,
-						});
-				}
-				*entry = PeerState::Connected { connected_list };
-			}
-			// ProtocolOpened => ProtocolOpened
-			PeerState::ProtocolOpened {
+			PeerState::Connected {
 				connected_list,
-				opened_list,
+				nonce,
 			} => {
 				let connection_id = connected_list.iter().find_map(|(k, v)| {
 					if v.incoming_id.as_ref() == Some(&incoming_id) {
@@ -353,16 +361,47 @@ impl Protocol {
 				if let Some(connection_id) = connection_id {
 					debug!("PeerManager => Accept({})", peer_id);
 					debug!("Handler({}, {:?}) <= Open", peer_id, connection_id);
+					let handshake = self.handshake_builder.build(nonce);
 					self.events
 						.push_back(NetworkBehaviourAction::NotifyHandler {
 							peer_id,
 							handler: NotifyHandler::One(*connection_id),
-							event: HandlerIn::Open,
+							event: HandlerIn::Open { handshake },
+						});
+				}
+				*entry = PeerState::Connected {
+					connected_list,
+					nonce,
+				};
+			}
+			// ProtocolOpened => ProtocolOpened
+			PeerState::ProtocolOpened {
+				connected_list,
+				opened_list,
+				nonce,
+			} => {
+				let connection_id = connected_list.iter().find_map(|(k, v)| {
+					if v.incoming_id.as_ref() == Some(&incoming_id) {
+						Some(k)
+					} else {
+						None
+					}
+				});
+				if let Some(connection_id) = connection_id {
+					debug!("PeerManager => Accept({})", peer_id);
+					debug!("Handler({}, {:?}) <= Open", peer_id, connection_id);
+					let handshake = self.handshake_builder.build(nonce);
+					self.events
+						.push_back(NetworkBehaviourAction::NotifyHandler {
+							peer_id,
+							handler: NotifyHandler::One(*connection_id),
+							event: HandlerIn::Open { handshake },
 						});
 				}
 				*entry = PeerState::ProtocolOpened {
 					connected_list,
 					opened_list,
+					nonce,
 				};
 			}
 			PeerState::Locked => unreachable!(),
@@ -386,7 +425,10 @@ impl Protocol {
 				*entry = PeerState::Init { pending_dial };
 			}
 			// Connected => Connected
-			PeerState::Connected { connected_list } => {
+			PeerState::Connected {
+				connected_list,
+				nonce,
+			} => {
 				debug!("PeerManager => Reject({})", peer_id);
 				debug!("Handler({}, All) <= Close", peer_id);
 				self.events
@@ -395,12 +437,16 @@ impl Protocol {
 						handler: NotifyHandler::All,
 						event: HandlerIn::Close,
 					});
-				*entry = PeerState::Connected { connected_list };
+				*entry = PeerState::Connected {
+					connected_list,
+					nonce,
+				};
 			}
 			// ProtocolOpened => ProtocolOpened
 			PeerState::ProtocolOpened {
 				connected_list,
 				opened_list,
+				nonce,
 			} => {
 				debug!("PeerManager => Reject({})", peer_id);
 				debug!("Handler({}, All) <= Close", peer_id);
@@ -413,6 +459,7 @@ impl Protocol {
 				*entry = PeerState::ProtocolOpened {
 					connected_list,
 					opened_list,
+					nonce,
 				};
 			}
 			PeerState::Locked => unreachable!(),
@@ -425,11 +472,7 @@ impl NetworkBehaviour for Protocol {
 	type OutEvent = ProtocolOut;
 
 	fn new_handler(&mut self) -> Self::ProtocolsHandler {
-		HandlerProto::new(
-			self.local_peer_id.clone(),
-			Cow::Borrowed(PROTOCOL_NAME),
-			self.handshake.clone(),
-		)
+		HandlerProto::new(self.local_peer_id.clone(), Cow::Borrowed(PROTOCOL_NAME))
 	}
 
 	fn addresses_of_peer(&mut self, _: &PeerId) -> Vec<Multiaddr> {
@@ -457,16 +500,19 @@ impl NetworkBehaviour for Protocol {
 					connected_point: endpoint.clone(),
 					incoming_id: None,
 				};
+				let mut rng = thread_rng();
+				let nonce = rng.gen();
 				match endpoint {
 					ConnectedPoint::Dialer { .. } => {
 						// open in handler
 						debug!("Libp2p => Connected({}): Through: {:?}", peer_id, endpoint);
 						debug!("Handler({}, {:?}) <= Open", peer_id, conn);
+						let handshake = self.handshake_builder.build(nonce);
 						self.events
 							.push_back(NetworkBehaviourAction::NotifyHandler {
 								peer_id: peer_id.clone(),
 								handler: NotifyHandler::One(*conn),
-								event: HandlerIn::Open,
+								event: HandlerIn::Open { handshake },
 							});
 					}
 					ConnectedPoint::Listener { .. } => {
@@ -507,10 +553,14 @@ impl NetworkBehaviour for Protocol {
 				);
 				*entry = PeerState::Connected {
 					connected_list: std::iter::once((*conn, connection)).collect(),
+					nonce,
 				}
 			}
 			// Connected => Connected
-			PeerState::Connected { mut connected_list } => {
+			PeerState::Connected {
+				mut connected_list,
+				nonce,
+			} => {
 				let should_open = match endpoint {
 					ConnectedPoint::Dialer { .. } => true,
 					ConnectedPoint::Listener { .. } => {
@@ -525,11 +575,12 @@ impl NetworkBehaviour for Protocol {
 					// open in handler
 					debug!("Libp2p => Connected({}): Through: {:?}", peer_id, endpoint);
 					debug!("Handler({}, {:?}) <= Open", peer_id, conn);
+					let handshake = self.handshake_builder.build(nonce);
 					self.events
 						.push_back(NetworkBehaviourAction::NotifyHandler {
 							peer_id: peer_id.clone(),
 							handler: NotifyHandler::One(*conn),
-							event: HandlerIn::Open,
+							event: HandlerIn::Open { handshake },
 						});
 					connected_list.insert(
 						*conn,
@@ -552,12 +603,16 @@ impl NetworkBehaviour for Protocol {
 							event: HandlerIn::Close,
 						});
 				}
-				*entry = PeerState::Connected { connected_list };
+				*entry = PeerState::Connected {
+					connected_list,
+					nonce,
+				};
 			}
 			// ProtocolOpened => ProtocolOpened
 			PeerState::ProtocolOpened {
 				mut connected_list,
 				opened_list,
+				nonce,
 			} => {
 				let should_open = match endpoint {
 					ConnectedPoint::Dialer { .. } => true,
@@ -573,11 +628,12 @@ impl NetworkBehaviour for Protocol {
 					// open in handler
 					debug!("Libp2p => Connected({}): Through: {:?}", peer_id, endpoint);
 					debug!("Handler({}, {:?}) <= Open", peer_id, conn);
+					let handshake = self.handshake_builder.build(nonce);
 					self.events
 						.push_back(NetworkBehaviourAction::NotifyHandler {
 							peer_id: peer_id.clone(),
 							handler: NotifyHandler::One(*conn),
-							event: HandlerIn::Open,
+							event: HandlerIn::Open { handshake },
 						});
 					connected_list.insert(
 						*conn,
@@ -597,6 +653,7 @@ impl NetworkBehaviour for Protocol {
 				*entry = PeerState::ProtocolOpened {
 					connected_list,
 					opened_list,
+					nonce,
 				};
 			}
 			PeerState::Locked => unreachable!(),
@@ -620,7 +677,10 @@ impl NetworkBehaviour for Protocol {
 				*entry = PeerState::Init { pending_dial };
 			}
 			// Connected => Init
-			PeerState::Connected { mut connected_list } => {
+			PeerState::Connected {
+				mut connected_list,
+				nonce,
+			} => {
 				connected_list.remove(conn);
 				if connected_list.is_empty() {
 					debug!("Libp2p => Disconnected({})", peer_id);
@@ -632,13 +692,17 @@ impl NetworkBehaviour for Protocol {
 					);
 					*entry = PeerState::Init { pending_dial: None };
 				} else {
-					*entry = PeerState::Connected { connected_list };
+					*entry = PeerState::Connected {
+						connected_list,
+						nonce,
+					};
 				}
 			}
 			// ProtocolOpened => Init
 			PeerState::ProtocolOpened {
 				mut connected_list,
 				mut opened_list,
+				nonce,
 			} => {
 				let mut closed_connection = None;
 				if let Some(connection) = connected_list.remove(conn) {
@@ -676,12 +740,16 @@ impl NetworkBehaviour for Protocol {
 							"StateChange: ProtocolOpened -> Connected: local: {}, remote: {}",
 							self.local_peer_id, peer_id
 						);
-						*entry = PeerState::Connected { connected_list };
+						*entry = PeerState::Connected {
+							connected_list,
+							nonce,
+						};
 					}
 				} else {
 					*entry = PeerState::ProtocolOpened {
 						connected_list,
 						opened_list,
+						nonce,
 					};
 				}
 			}
@@ -703,7 +771,10 @@ impl NetworkBehaviour for Protocol {
 						*entry = PeerState::Init { pending_dial };
 					}
 					// Connected => ProtocolOpened
-					PeerState::Connected { mut connected_list } => {
+					PeerState::Connected {
+						mut connected_list,
+						nonce,
+					} => {
 						if let Some(connection) = connected_list.remove(&conn) {
 							debug!("Handler({}, {:?}) => ProtocolOpen", source, conn);
 							debug!(
@@ -718,21 +789,27 @@ impl NetworkBehaviour for Protocol {
 								ProtocolOut::ProtocolOpen {
 									peer_id: source,
 									connected_point: connection.connected_point.clone(),
+									nonce,
 									handshake,
 								},
 							));
 							*entry = PeerState::ProtocolOpened {
 								connected_list,
 								opened_list: std::iter::once((conn, connection)).collect(),
+								nonce,
 							};
 						} else {
-							*entry = PeerState::Connected { connected_list };
+							*entry = PeerState::Connected {
+								connected_list,
+								nonce,
+							};
 						}
 					}
 					// ProtocolOpened => ProtocolOpened
 					PeerState::ProtocolOpened {
 						mut connected_list,
 						mut opened_list,
+						nonce,
 					} => {
 						if let Some(connection) = connected_list.remove(&conn) {
 							debug!("Handler({}, {:?}) => ProtocolOpen", source, conn);
@@ -746,6 +823,7 @@ impl NetworkBehaviour for Protocol {
 						*entry = PeerState::ProtocolOpened {
 							connected_list,
 							opened_list,
+							nonce,
 						};
 					}
 					PeerState::Locked => unreachable!(),
@@ -762,13 +840,20 @@ impl NetworkBehaviour for Protocol {
 						*entry = PeerState::Init { pending_dial };
 					}
 					// Connected => Connected
-					PeerState::Connected { connected_list } => {
-						*entry = PeerState::Connected { connected_list };
+					PeerState::Connected {
+						connected_list,
+						nonce,
+					} => {
+						*entry = PeerState::Connected {
+							connected_list,
+							nonce,
+						};
 					}
 					// ProtocolOpened => Connected
 					PeerState::ProtocolOpened {
 						mut connected_list,
 						mut opened_list,
+						nonce,
 					} => {
 						// move from opened to connected
 						let mut closed_connection = None;
@@ -794,11 +879,15 @@ impl NetworkBehaviour for Protocol {
 								},
 							));
 							connected_list.insert(conn, closed_connection);
-							*entry = PeerState::Connected { connected_list };
+							*entry = PeerState::Connected {
+								connected_list,
+								nonce,
+							};
 						} else {
 							*entry = PeerState::ProtocolOpened {
 								connected_list,
 								opened_list,
+								nonce,
 							};
 						}
 					}
@@ -819,7 +908,10 @@ impl NetworkBehaviour for Protocol {
 						*entry = PeerState::Init { pending_dial };
 					}
 					// Connected => Connected
-					PeerState::Connected { connected_list } => {
+					PeerState::Connected {
+						connected_list,
+						nonce,
+					} => {
 						if let Some(_connection) = connected_list.get(&conn) {
 							debug!(
 								"Handler({}, {:?}) => ProtocolError({}, {})",
@@ -844,12 +936,16 @@ impl NetworkBehaviour for Protocol {
 										));
 							}
 						}
-						*entry = PeerState::Connected { connected_list };
+						*entry = PeerState::Connected {
+							connected_list,
+							nonce,
+						};
 					}
 					// ProtocolOpened => ProtocolOpened
 					PeerState::ProtocolOpened {
 						connected_list,
 						opened_list,
+						nonce,
 					} => {
 						if connected_list.contains_key(&conn) || opened_list.contains_key(&conn) {
 							debug!(
@@ -878,6 +974,7 @@ impl NetworkBehaviour for Protocol {
 						*entry = PeerState::ProtocolOpened {
 							connected_list,
 							opened_list,
+							nonce,
 						};
 					}
 					PeerState::Locked => unreachable!(),
@@ -931,17 +1028,25 @@ impl NetworkBehaviour for Protocol {
 				*entry = PeerState::Init { pending_dial: None };
 			}
 			// Connected => Connected
-			PeerState::Connected { connected_list } => {
-				*entry = PeerState::Connected { connected_list };
+			PeerState::Connected {
+				connected_list,
+				nonce,
+			} => {
+				*entry = PeerState::Connected {
+					connected_list,
+					nonce,
+				};
 			}
 			// ProtocolOpened => ProtocolOpened
 			PeerState::ProtocolOpened {
 				connected_list,
 				opened_list,
+				nonce,
 			} => {
 				*entry = PeerState::ProtocolOpened {
 					connected_list,
 					opened_list,
+					nonce,
 				};
 			}
 			PeerState::Locked => unreachable!(),

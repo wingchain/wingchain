@@ -39,60 +39,44 @@ pub fn get_dylib(package_name: &str) -> PathBuf {
 	PathBuf::from(path)
 }
 
+#[derive(Clone)]
 pub struct TestAccount {
 	pub secret_key: SecretKey,
 	pub public_key: PublicKey,
-	pub key_pair: KeyPairImpl,
+	pub key_pair: Arc<KeyPairImpl>,
 	pub address: Address,
 }
 
-pub fn test_accounts(dsa: Arc<DsaImpl>, address: Arc<AddressImpl>) -> (TestAccount, TestAccount) {
+pub fn test_accounts(dsa: Arc<DsaImpl>, address: Arc<AddressImpl>) -> Vec<TestAccount> {
 	let (secret_key_len, public_key_len, _) = dsa.length().into();
 	let address_len = address.length().into();
 
-	let account1 = {
-		let secret_key = SecretKey(vec![1u8; secret_key_len]);
+	let mut list = vec![];
 
-		let key_pair = dsa.key_pair_from_secret_key(&secret_key.0).unwrap();
-		let public_key = PublicKey({
-			let mut out = vec![0u8; public_key_len];
-			key_pair.public_key(&mut out);
-			out
-		});
-		let address = Address({
-			let mut out = vec![0u8; address_len];
-			address.address(&mut out, &public_key.0);
-			out
-		});
-		TestAccount {
-			secret_key,
-			public_key,
-			key_pair,
-			address,
-		}
-	};
+	for i in 1..=8 {
+		let account = {
+			let secret_key = SecretKey(vec![i; secret_key_len]);
 
-	let account2 = {
-		let secret_key = SecretKey(vec![2u8; secret_key_len]);
+			let key_pair = dsa.key_pair_from_secret_key(&secret_key.0).unwrap();
+			let public_key = PublicKey({
+				let mut out = vec![0u8; public_key_len];
+				key_pair.public_key(&mut out);
+				out
+			});
+			let address = Address({
+				let mut out = vec![0u8; address_len];
+				address.address(&mut out, &public_key.0);
+				out
+			});
+			TestAccount {
+				secret_key,
+				public_key,
+				key_pair: Arc::new(key_pair),
+				address,
+			}
+		};
+		list.push(account);
+	}
 
-		let key_pair = dsa.key_pair_from_secret_key(&secret_key.0).unwrap();
-		let public_key = PublicKey({
-			let mut out = vec![0u8; public_key_len];
-			key_pair.public_key(&mut out);
-			out
-		});
-		let address = Address({
-			let mut out = vec![0u8; address_len];
-			address.address(&mut out, &public_key.0);
-			out
-		});
-		TestAccount {
-			secret_key,
-			public_key,
-			key_pair,
-			address,
-		}
-	};
-
-	(account1, account2)
+	list
 }

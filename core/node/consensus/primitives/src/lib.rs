@@ -13,4 +13,5 @@
 // limitations under the License.
 
 pub const CONSENSUS_POA: &str = "poa";
-pub const CONSENSUS_LIST: [&str; 1] = [CONSENSUS_POA];
+pub const CONSENSUS_RAFT: &str = "raft";
+pub const CONSENSUS_LIST: [&str; 2] = [CONSENSUS_POA, CONSENSUS_RAFT];

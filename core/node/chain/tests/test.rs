@@ -31,7 +31,6 @@ use primitives::{
 	codec, Address, Balance, Block, Body, DBKey, Execution, FullTransaction, Hash, Header, Receipt,
 	TransactionForHash,
 };
-use std::time::Duration;
 use utils_test::test_accounts;
 
 #[tokio::test]
@@ -46,7 +45,8 @@ async fn test_chain_normal() {
 	let dsa = Arc::new(DsaImpl::Ed25519);
 	let address = Arc::new(AddressImpl::Blake2b160);
 
-	let (account1, _account2) = test_accounts(dsa, address);
+	let test_accounts = test_accounts(dsa, address);
+	let (account1, _account2) = (&test_accounts[0], &test_accounts[1]);
 
 	init(&home, &account1.address);
 
@@ -143,8 +143,6 @@ async fn test_chain_normal() {
 		vec![Arc::new(payload_tx_receipt)],
 		expected_payload_receipts
 	);
-
-	safe_close(chain).await;
 }
 
 #[tokio::test]
@@ -157,7 +155,8 @@ async fn test_chain_execute_call() {
 	let dsa = Arc::new(DsaImpl::Ed25519);
 	let address = Arc::new(AddressImpl::Blake2b160);
 
-	let (account1, _account2) = test_accounts(dsa, address);
+	let test_accounts = test_accounts(dsa, address);
+	let (account1, _account2) = (&test_accounts[0], &test_accounts[1]);
 
 	init(&home, &account1.address);
 
@@ -172,7 +171,7 @@ async fn test_chain_execute_call() {
 
 	let block_hash = chain.get_block_hash(&0).unwrap().unwrap();
 
-	let sender = account1.address;
+	let sender = account1.address.clone();
 	let params = node_executor_primitives::EmptyParams;
 	let call = chain
 		.build_transaction(
@@ -187,10 +186,8 @@ async fn test_chain_execute_call() {
 		.execute_call(&block_hash, Some(&sender), &call)
 		.unwrap()
 		.unwrap();
-	let result: Balance = codec::decode(&result).unwrap();
+	let result: Balance = codec::decode(&mut &result[..]).unwrap();
 	assert_eq!(10, result);
-
-	safe_close(chain).await
 }
 
 #[tokio::test]
@@ -335,13 +332,6 @@ fn expected_data(
 	)
 }
 
-/// safe close,
-/// to avoid rocksdb `libc++abi.dylib: Pure virtual function called!`
-async fn safe_close(chain: Chain) {
-	drop(chain);
-	tokio::time::sleep(Duration::from_millis(50)).await;
-}
-
 fn hash<E: Encode>(data: E) -> Hash {
 	let hasher = HashImpl::Blake2b256;
 	let mut hash = vec![0u8; hasher.length().into()];
@@ -384,7 +374,7 @@ fn expected_block_0_receipts_root(
 
 fn expected_block_0_meta_state_root(txs: &Vec<Arc<FullTransaction>>) -> Hash {
 	let tx = &txs[0].tx; // use the last tx
-	let params: module::system::InitParams = codec::decode(&tx.call.params.0[..]).unwrap();
+	let params: module::system::InitParams = codec::decode(&mut &tx.call.params.0[..]).unwrap();
 
 	let data = vec![
 		(
@@ -436,7 +426,7 @@ fn expected_block_0_meta_state_root(txs: &Vec<Arc<FullTransaction>>) -> Hash {
 
 fn expected_block_0_payload_state_root(txs: &Vec<Arc<FullTransaction>>) -> Hash {
 	let tx = &txs[0].tx; // use the last tx
-	let params: module::balance::InitParams = codec::decode(&tx.call.params.0[..]).unwrap();
+	let params: module::balance::InitParams = codec::decode(&mut &tx.call.params.0[..]).unwrap();
 
 	let (account, balance) = &params.endow[0];
 

@@ -32,7 +32,8 @@ async fn test_txpool() {
 	let dsa = Arc::new(DsaImpl::Ed25519);
 	let address = Arc::new(AddressImpl::Blake2b160);
 
-	let (account1, _account2) = test_accounts(dsa, address);
+	let test_accounts = test_accounts(dsa, address);
+	let (account1, account2) = (&test_accounts[0], &test_accounts[1]);
 
 	let chain = get_chain(&account1.address);
 	let config = TxPoolConfig {
@@ -41,14 +42,9 @@ async fn test_txpool() {
 	let txpool_support = Arc::new(DefaultTxPoolSupport::new(chain.clone()));
 	let txpool = TxPool::new(config, txpool_support).unwrap();
 
-	let (account1, account2) = test_accounts(
-		chain.get_basic().dsa.clone(),
-		chain.get_basic().address.clone(),
-	);
-
 	let tx = chain
 		.build_transaction(
-			Some((account1.secret_key, 0, 1)),
+			Some((account1.secret_key.clone(), 0, 1)),
 			chain
 				.build_call(
 					"balance".to_string(),
@@ -79,8 +75,6 @@ async fn test_txpool() {
 		}
 		tokio::time::sleep(Duration::from_millis(10)).await;
 	}
-
-	safe_close(chain, txpool).await;
 }
 
 #[tokio::test]
@@ -88,7 +82,8 @@ async fn test_txpool_dup() {
 	let dsa = Arc::new(DsaImpl::Ed25519);
 	let address = Arc::new(AddressImpl::Blake2b160);
 
-	let (account1, _account2) = test_accounts(dsa, address);
+	let test_accounts = test_accounts(dsa, address);
+	let (account1, account2) = (&test_accounts[0], &test_accounts[1]);
 
 	let chain = get_chain(&account1.address);
 	let config = TxPoolConfig {
@@ -97,14 +92,9 @@ async fn test_txpool_dup() {
 	let txpool_support = Arc::new(DefaultTxPoolSupport::new(chain.clone()));
 	let txpool = TxPool::new(config, txpool_support).unwrap();
 
-	let (account1, account2) = test_accounts(
-		chain.get_basic().dsa.clone(),
-		chain.get_basic().address.clone(),
-	);
-
 	let tx = chain
 		.build_transaction(
-			Some((account1.secret_key, 0, 1)),
+			Some((account1.secret_key.clone(), 0, 1)),
 			chain
 				.build_call(
 					"balance".to_string(),
@@ -122,8 +112,6 @@ async fn test_txpool_dup() {
 
 	let result = txpool.insert(tx);
 	assert!(format!("{}", result.unwrap_err()).contains("Duplicated tx"));
-
-	safe_close(chain, txpool).await;
 }
 
 #[tokio::test]
@@ -131,7 +119,8 @@ async fn test_txpool_validate() {
 	let dsa = Arc::new(DsaImpl::Ed25519);
 	let address = Arc::new(AddressImpl::Blake2b160);
 
-	let (account1, _account2) = test_accounts(dsa, address);
+	let test_accounts = test_accounts(dsa, address);
+	let (account1, account2) = (&test_accounts[0], &test_accounts[1]);
 
 	let chain = get_chain(&account1.address);
 	let config = TxPoolConfig {
@@ -139,11 +128,6 @@ async fn test_txpool_validate() {
 	};
 	let txpool_support = Arc::new(DefaultTxPoolSupport::new(chain.clone()));
 	let txpool = TxPool::new(config, txpool_support).unwrap();
-
-	let (account1, account2) = test_accounts(
-		chain.get_basic().dsa.clone(),
-		chain.get_basic().address.clone(),
-	);
 
 	let mut tx = chain
 		.build_transaction(
@@ -191,13 +175,13 @@ async fn test_txpool_validate() {
 
 	let tx = chain
 		.build_transaction(
-			Some((account1.secret_key, 0, 0)),
+			Some((account1.secret_key.clone(), 0, 0)),
 			chain
 				.build_call(
 					"balance".to_string(),
 					"transfer".to_string(),
 					module::balance::TransferParams {
-						recipient: account2.address,
+						recipient: account2.address.clone(),
 						value: 2,
 					},
 				)
@@ -209,8 +193,6 @@ async fn test_txpool_validate() {
 		format!("{}", result.unwrap_err()),
 		"TxPool Error: Insert error: Invalid tx: Invalid tx until: Exceed min until: 0"
 	);
-
-	safe_close(chain, txpool).await;
 }
 
 #[tokio::test]
@@ -218,17 +200,13 @@ async fn test_txpool_capacity() {
 	let dsa = Arc::new(DsaImpl::Ed25519);
 	let address = Arc::new(AddressImpl::Blake2b160);
 
-	let (account1, _account2) = test_accounts(dsa, address);
+	let test_accounts = test_accounts(dsa, address);
+	let (account1, account2) = (&test_accounts[0], &test_accounts[1]);
 
 	let chain = get_chain(&account1.address);
 	let config = TxPoolConfig { pool_capacity: 2 };
 	let txpool_support = Arc::new(DefaultTxPoolSupport::new(chain.clone()));
 	let txpool = TxPool::new(config, txpool_support).unwrap();
-
-	let (account1, account2) = test_accounts(
-		chain.get_basic().dsa.clone(),
-		chain.get_basic().address.clone(),
-	);
 
 	let tx = chain
 		.build_transaction(
@@ -282,16 +260,6 @@ async fn test_txpool_capacity() {
 	txpool.insert(tx2).unwrap();
 	let result = txpool.insert(tx3);
 	assert!(format!("{}", result.unwrap_err()).contains("Exceed capacity"));
-
-	safe_close(chain, txpool).await;
-}
-
-/// safe close,
-/// to avoid rocksdb `libc++abi.dylib: Pure virtual function called!`
-async fn safe_close(chain: Arc<Chain>, txpool: TxPool<DefaultTxPoolSupport>) {
-	drop(chain);
-	drop(txpool);
-	tokio::time::sleep(Duration::from_millis(50)).await;
 }
 
 fn get_chain(address: &Address) -> Arc<Chain> {

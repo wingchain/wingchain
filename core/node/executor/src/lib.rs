@@ -485,9 +485,9 @@ impl Executor {
 		Ok(())
 	}
 
-	/// Determine if a transaction is meta transaction
-	pub fn is_meta_tx(&self, tx: &Transaction) -> CommonResult<bool> {
-		let module = &tx.call.module;
+	/// Determine if a call is meta call
+	pub fn is_meta_call(&self, call: &Call) -> CommonResult<bool> {
+		let module = &call.module;
 		Dispatcher::is_meta::<Context, Util>(module)
 	}
 
@@ -668,6 +668,7 @@ enum Dispatcher {
 	system,
 	balance,
 	poa,
+	raft,
 	contract,
 }
 
@@ -676,5 +677,6 @@ pub mod module {
 	pub use module_balance as balance;
 	pub use module_contract as contract;
 	pub use module_poa as poa;
+	pub use module_raft as raft;
 	pub use module_system as system;
 }

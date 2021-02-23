@@ -130,7 +130,7 @@ impl<C: Context, U: Util> Module<C, U> {
 	}
 }
 
-#[derive(Encode, Decode, Debug, PartialEq)]
+#[derive(Encode, Decode, Debug, PartialEq, Deserialize)]
 pub struct InitParams {
 	pub endow: Vec<(Address, Balance)>,
 }

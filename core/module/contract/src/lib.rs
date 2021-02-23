@@ -808,7 +808,7 @@ pub struct ExecuteParams {
 	pub pay_value: Balance,
 }
 
-#[derive(Encode, Decode, Debug, PartialEq)]
+#[derive(Encode, Decode, Debug, PartialEq, Deserialize)]
 pub struct InitParams {
 	pub max_stack_height: Option<u32>,
 	pub initial_memory_pages: Option<u32>,

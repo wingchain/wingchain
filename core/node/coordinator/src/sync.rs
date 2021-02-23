@@ -30,7 +30,7 @@ use crate::peer_report::{
 	PEER_REPORT_BLOCK_REQUEST_TIMEOUT, PEER_REPORT_INVALID_BLOCK, PEER_REPORT_INVALID_TX,
 };
 use crate::protocol::{
-	BlockAnnounce, BlockData, BlockId, BlockRequest, BlockResponse, BodyData, Direction,
+	BlockAnnounce, BlockData, BlockId, BlockRequest, BlockResponse, BodyData, Direction, Handshake,
 	ProtocolMessage, RequestId, TxPropagate, FIELDS_BODY, FIELDS_HEADER, FIELDS_PROOF,
 };
 use crate::stream::StreamSupport;
@@ -40,6 +40,7 @@ use futures::future::BoxFuture;
 use futures::stream::FuturesUnordered;
 use futures::FutureExt;
 use futures_timer::Delay;
+use node_consensus_base::ConsensusInMessage;
 use tokio::time::Duration;
 
 const PEER_KNOWN_BLOCKS_SIZE: u32 = 1024;
@@ -51,7 +52,7 @@ const BLOCK_REQUEST_TIMEOUT_S: u64 = 30;
 
 pub struct ChainSync<S>
 where
-	S: CoordinatorSupport + Send + Sync + 'static,
+	S: CoordinatorSupport,
 {
 	peers: HashMap<PeerId, PeerInfo>,
 	pending_blocks: BTreeMap<BlockNumber, PendingBlockInfo>,
@@ -64,7 +65,7 @@ where
 /// Handle peers open/close
 impl<S> ChainSync<S>
 where
-	S: CoordinatorSupport + Send + Sync + 'static,
+	S: CoordinatorSupport,
 {
 	pub fn new(support: Arc<StreamSupport<S>>) -> CommonResult<Self> {
 		let verifier = Verifier::new(support.clone())?;
@@ -79,23 +80,25 @@ where
 		})
 	}
 
-	pub fn on_protocol_open(&mut self, peer_id: PeerId) -> CommonResult<()> {
+	pub fn on_protocol_open(
+		&mut self,
+		peer_id: PeerId,
+		nonce: u64,
+		handshake: Handshake,
+	) -> CommonResult<()> {
 		self.peers.insert(
 			peer_id.clone(),
 			PeerInfo {
 				known_blocks: LruCache::new(PEER_KNOWN_BLOCKS_SIZE as usize),
 				known_txs: LruCache::new(PEER_KNOWN_TXS_SIZE as usize),
-				confirmed_number: 0,
-				confirmed_hash: self.support.get_genesis_hash().clone(),
+				confirmed_number: handshake.confirmed_number,
+				confirmed_hash: handshake.confirmed_hash,
+				nonce,
 				state: PeerState::Vacant,
 			},
 		);
-
-		// announce block
-		let (block_hash, header) = self
-			.support
-			.get_header_by_number(&self.support.get_confirmed_number()?)?;
-		self.announce_block(block_hash, header, MessageTarget::One(peer_id))?;
+		self.sync()?;
+		self.initial_propagate_txs(peer_id)?;
 
 		Ok(())
 	}
@@ -121,7 +124,7 @@ where
 /// Handle blocks syncing
 impl<S> ChainSync<S>
 where
-	S: CoordinatorSupport + Send + Sync + 'static,
+	S: CoordinatorSupport,
 {
 	pub fn on_block_announce(
 		&mut self,
@@ -129,17 +132,12 @@ where
 		block_announce: BlockAnnounce,
 	) -> CommonResult<()> {
 		let BlockAnnounce { block_hash, header } = block_announce;
-		let mut first_announce = false;
 		if let Some(peer) = self.peers.get_mut(&peer_id) {
-			first_announce = peer.confirmed_number == 0;
 			peer.known_blocks.put(block_hash.clone(), ());
 			peer.confirmed_number = header.number;
 			peer.confirmed_hash = block_hash;
 		}
 		self.sync()?;
-		if first_announce {
-			self.on_block_announce_first(peer_id)?;
-		}
 		Ok(())
 	}
 
@@ -151,7 +149,11 @@ where
 		let mut blocks = vec![];
 		let mut block_id = block_request.block_id;
 		let fields = block_request.fields;
-		let confirmed_number = self.support.get_confirmed_number()?;
+		let confirmed_number = self
+			.support
+			.ori_support()
+			.get_current_state()
+			.confirmed_number;
 		loop {
 			let block_hash = match &block_id {
 				BlockId::Number(number) => {
@@ -299,13 +301,14 @@ where
 					let from = Arc::new(peer_id);
 					for block_data in block_response.blocks {
 						let number = block_data.number;
-						let pending_block_info = PendingBlockInfo {
-							state: PendingBlockState::Downloaded {
-								from: from.clone(),
-								block_data: Some(block_data),
-							},
-						};
-						self.pending_blocks.insert(number, pending_block_info);
+						if let Some(pending_block) = self.pending_blocks.get_mut(&number) {
+							if matches!(pending_block.state, PendingBlockState::Downloading {..}) {
+								pending_block.state = PendingBlockState::Downloaded {
+									from: from.clone(),
+									block_data: Some(block_data),
+								}
+							}
+						}
 					}
 					peer_info.state = PeerState::Vacant;
 				}
@@ -317,14 +320,32 @@ where
 		Ok(())
 	}
 
-	pub fn on_block_committed(&mut self, _number: BlockNumber, hash: Hash) -> CommonResult<()> {
+	pub fn on_block_committed(
+		&mut self,
+		number: BlockNumber,
+		block_hash: Hash,
+	) -> CommonResult<()> {
+		// update handshake builder
+		(*self.support.get_handshake_builder().confirmed.write()) = (number, block_hash.clone());
+
+		// update pending_blocks
+		let old_latency = self.latency();
+		self.pending_blocks.remove(&number);
+		let new_latency = self.latency();
+		if new_latency != old_latency {
+			self.support
+				.consensus_send_message(ConsensusInMessage::SyncLatencyUpdated {
+					latency: new_latency,
+				});
+		}
+
 		// announce to all connected peers
-		let (block_hash, header) = {
-			let header = self.support.get_header_by_block_hash(&hash)?;
-			let block_hash = hash;
-			(block_hash, header)
-		};
-		self.announce_block(block_hash, header, MessageTarget::All)?;
+		let header = self.support.get_header_by_block_hash(&block_hash)?;
+		self.announce_block(block_hash.clone(), header, MessageTarget::All)?;
+
+		self.support
+			.consensus_send_message(ConsensusInMessage::BlockCommitted { number, block_hash });
+
 		Ok(())
 	}
 
@@ -343,6 +364,19 @@ where
 		Ok(())
 	}
 
+	pub fn latency(&self) -> BlockNumber {
+		let confirmed_number = self
+			.support
+			.ori_support()
+			.get_current_state()
+			.confirmed_number;
+		let max_pending_number = match self.pending_blocks.iter().last() {
+			Some((k, _v)) => *k,
+			None => confirmed_number,
+		};
+		max_pending_number - confirmed_number
+	}
+
 	fn maintain_new(&mut self) -> CommonResult<()> {
 		let max_peer_number = match self.peers.values().map(|x| x.confirmed_number).max() {
 			Some(v) => v,
@@ -350,13 +384,20 @@ where
 		};
 		let max_pending_number = match self.pending_blocks.iter().last() {
 			Some((k, _v)) => *k,
-			None => self.support.get_confirmed_number()?,
+			None => {
+				self.support
+					.ori_support()
+					.get_current_state()
+					.confirmed_number
+			}
 		};
 		let max_to_append = u64::min(
 			max_peer_number,
 			max_pending_number + PENDING_BLOCKS_SIZE as u64 - self.pending_blocks.len() as u64,
 		);
 		let min_to_append = max_pending_number + 1;
+
+		let old_latency = self.latency();
 		if max_to_append >= min_to_append {
 			for number in min_to_append..=max_to_append {
 				self.pending_blocks.insert(
@@ -371,7 +412,20 @@ where
 				min_to_append,
 				max_to_append
 			);
+		} else {
+			for number in (max_to_append + 1)..=max_pending_number {
+				self.pending_blocks.remove(&number);
+			}
 		}
+
+		let new_latency = self.latency();
+		if new_latency != old_latency {
+			self.support
+				.consensus_send_message(ConsensusInMessage::SyncLatencyUpdated {
+					latency: new_latency,
+				});
+		}
+
 		Ok(())
 	}
 
@@ -444,6 +498,7 @@ where
 	}
 
 	fn maintain_downloaded(&mut self) -> CommonResult<()> {
+		let old_latency = self.latency();
 		loop {
 			let first_downloaded_number = {
 				let (number, pending_block) = match self.pending_blocks.iter().next() {
@@ -522,23 +577,14 @@ where
 				}
 			}
 		}
-		self.sync()?;
-
-		Ok(())
-	}
-
-	fn on_block_announce_first(&mut self, peer_id: PeerId) -> CommonResult<()> {
-		if let Some(peer) = self.peers.get_mut(&peer_id) {
-			let current_number = self
-				.support
-				.ori_support()
-				.get_current_state()
-				.confirmed_number;
-			if Self::should_tx_propagate(peer.confirmed_number, current_number) {
-				let txs = self.support.ori_support().txpool_get_transactions()?;
-				self.propagate_txs(txs, MessageTarget::One(peer_id))?;
-			}
+		let new_latency = self.latency();
+		if new_latency != old_latency {
+			self.support
+				.consensus_send_message(ConsensusInMessage::SyncLatencyUpdated {
+					latency: new_latency,
+				});
 		}
+		self.sync()?;
 
 		Ok(())
 	}
@@ -669,7 +715,7 @@ where
 /// Handle tx propagation
 impl<S> ChainSync<S>
 where
-	S: CoordinatorSupport + Send + Sync + 'static,
+	S: CoordinatorSupport,
 {
 	pub fn on_tx_inserted(&mut self, tx_hash: Hash) -> CommonResult<()> {
 		if let Some(tx) = self
@@ -732,6 +778,22 @@ where
 		Ok(())
 	}
 
+	fn initial_propagate_txs(&mut self, peer_id: PeerId) -> CommonResult<()> {
+		if let Some(peer) = self.peers.get_mut(&peer_id) {
+			let current_number = self
+				.support
+				.ori_support()
+				.get_current_state()
+				.confirmed_number;
+			if Self::should_tx_propagate(peer.confirmed_number, current_number) {
+				let txs = self.support.ori_support().txpool_get_transactions()?;
+				self.propagate_txs(txs, MessageTarget::One(peer_id))?;
+			}
+		}
+
+		Ok(())
+	}
+
 	fn propagate_txs(
 		&mut self,
 		txs: Vec<Arc<FullTransaction>>,
@@ -787,6 +849,7 @@ pub struct PeerInfo {
 	known_txs: LruCache<Hash, ()>,
 	confirmed_number: BlockNumber,
 	confirmed_hash: Hash,
+	nonce: u64,
 	state: PeerState,
 }
 

@@ -21,7 +21,6 @@ use crypto::dsa::{Dsa, DsaImpl, KeyPair};
 use main_base::config::Config as FileConfig;
 use node_api::ApiConfig;
 use node_chain::{Basic, ChainConfig};
-use node_consensus_base::ConsensusConfig;
 use node_coordinator::{
 	ed25519, CoordinatorConfig, Keypair, LinkedHashMap, Multiaddr, PeerId, Protocol,
 };
@@ -32,6 +31,7 @@ use primitives::SecretKey;
 
 use crate::errors::ErrorKind;
 use crate::{errors, ServiceConfig};
+use node_consensus::{ConsensusConfig, PoaConfig, RaftConfig};
 
 pub struct OtherConfig {
 	pub txpool: TxPoolConfig,
@@ -132,19 +132,34 @@ fn get_consensus_config(
 	home: &Path,
 	basic: Arc<Basic>,
 ) -> CommonResult<ConsensusConfig> {
-	let secret_key = if let Some(secret_key_file) = &file_config.validator.secret_key_file {
-		let file = get_abs_path(secret_key_file, home);
-		let secret_key = read_secret_key_file(&file)?;
-		let _key_pair = basic
-			.dsa
-			.key_pair_from_secret_key(&secret_key)
-			.map_err(|_| errors::ErrorKind::Config(format!("Invalid secret key in: {:?}", file)))?;
-		Some(SecretKey(secret_key))
-	} else {
-		None
+	let poa = match &file_config.consensus.poa {
+		Some(poa) => {
+			let secret_key = match &poa.secret_key_file {
+				Some(file) => Some(get_secret_key(file, home, &basic)?),
+				None => None,
+			};
+			Some(PoaConfig { secret_key })
+		}
+		None => None,
 	};
 
-	let consensus = ConsensusConfig { secret_key };
+	let raft = match &file_config.consensus.raft {
+		Some(raft) => {
+			let secret_key = match &raft.secret_key_file {
+				Some(file) => Some(get_secret_key(file, home, &basic)?),
+				None => None,
+			};
+			Some(RaftConfig {
+				secret_key,
+				init_extra_election_timeout: raft.init_extra_election_timeout,
+				extra_election_timeout_per_kb: raft.extra_election_timeout_per_kb,
+				request_proposal_min_interval: raft.request_proposal_min_interval,
+			})
+		}
+		None => None,
+	};
+
+	let consensus = ConsensusConfig { poa, raft };
 	Ok(consensus)
 }
 
@@ -183,7 +198,7 @@ fn get_coordinator_config(
 		reserved_only: file_config.network.reserved_only,
 		agent_version: agent_version.to_string(),
 		local_key_pair,
-		handshake: vec![],
+		handshake_builder: None,
 	};
 
 	let config = CoordinatorConfig { network_config };
@@ -230,6 +245,16 @@ fn parse_from_multi_addresses(
 		result.insert(address?, ());
 	}
 	Ok(result)
+}
+
+fn get_secret_key(file: &Path, home: &Path, basic: &Arc<Basic>) -> CommonResult<SecretKey> {
+	let file = get_abs_path(file, home);
+	let secret_key = read_secret_key_file(&file)?;
+	let _key_pair = basic
+		.dsa
+		.key_pair_from_secret_key(&secret_key)
+		.map_err(|_| errors::ErrorKind::Config(format!("Invalid secret key in: {:?}", file)))?;
+	Ok(SecretKey(secret_key))
 }
 
 fn read_secret_key_file(file: &Path) -> CommonResult<Vec<u8>> {

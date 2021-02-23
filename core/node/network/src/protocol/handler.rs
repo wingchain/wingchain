@@ -31,7 +31,6 @@ use libp2p::swarm::{
 	ProtocolsHandlerUpgrErr, SubstreamProtocol,
 };
 use libp2p::PeerId;
-use std::sync::Arc;
 
 use crate::protocol::upgrade::{InProtocol, InSubstream, OutProtocol, OutSubstream};
 use std::fmt::Formatter;
@@ -41,19 +40,13 @@ const OPEN_TIMEOUT: Duration = Duration::from_secs(20);
 pub struct HandlerProto {
 	local_peer_id: PeerId,
 	protocol_name: Cow<'static, [u8]>,
-	handshake: Arc<Vec<u8>>,
 }
 
 impl HandlerProto {
-	pub fn new(
-		local_peer_id: PeerId,
-		protocol_name: Cow<'static, [u8]>,
-		handshake: Arc<Vec<u8>>,
-	) -> Self {
+	pub fn new(local_peer_id: PeerId, protocol_name: Cow<'static, [u8]>) -> Self {
 		Self {
 			local_peer_id,
 			protocol_name,
-			handshake,
 		}
 	}
 }
@@ -71,7 +64,6 @@ impl IntoProtocolsHandler for HandlerProto {
 			remote_peer_id: remote_peer_id.clone(),
 			connected_point: connected_point.clone(),
 			protocol_name: self.protocol_name,
-			handshake: self.handshake,
 			state: State::Init,
 			events_queue: VecDeque::with_capacity(16),
 		}
@@ -84,7 +76,7 @@ impl IntoProtocolsHandler for HandlerProto {
 
 #[derive(Clone)]
 pub enum HandlerIn {
-	Open,
+	Open { handshake: Vec<u8> },
 	Close,
 	SendMessage { message: Vec<u8> },
 }
@@ -129,16 +121,15 @@ pub struct Handler {
 	remote_peer_id: PeerId,
 	connected_point: ConnectedPoint,
 	protocol_name: Cow<'static, [u8]>,
-	handshake: Arc<Vec<u8>>,
 	state: State,
 	events_queue: VecDeque<ProtocolsHandlerEvent<OutProtocol, (), HandlerOut, HandlerError>>,
 }
 
 impl Handler {
-	fn open(&mut self) {
+	fn open(&mut self, handshake: Vec<u8>) {
 		self.state = match std::mem::replace(&mut self.state, State::Locked) {
 			State::Init => {
-				let upgrade = OutProtocol::new(self.protocol_name.clone(), self.handshake.clone());
+				let upgrade = OutProtocol::new(self.protocol_name.clone(), handshake);
 				self.events_queue
 					.push_back(ProtocolsHandlerEvent::OutboundSubstreamRequest {
 						protocol: SubstreamProtocol::new(upgrade, ()),
@@ -154,7 +145,7 @@ impl Handler {
 				out_substream,
 				..
 			} => {
-				let upgrade = OutProtocol::new(self.protocol_name.clone(), self.handshake.clone());
+				let upgrade = OutProtocol::new(self.protocol_name.clone(), handshake);
 				self.events_queue
 					.push_back(ProtocolsHandlerEvent::OutboundSubstreamRequest {
 						protocol: SubstreamProtocol::new(upgrade, ()),
@@ -337,7 +328,7 @@ impl ProtocolsHandler for Handler {
 
 	fn inject_event(&mut self, event: HandlerIn) {
 		match event {
-			HandlerIn::Open => self.open(),
+			HandlerIn::Open { handshake } => self.open(handshake),
 			HandlerIn::Close => self.close(),
 			HandlerIn::SendMessage { message } => self.send_message(message),
 		}

@@ -22,7 +22,10 @@ use futures::channel::oneshot;
 use futures::future::{join, join3, select, Either};
 use futures::StreamExt;
 use log::info;
-use node_network::{Network, NetworkConfig, NetworkInMessage, NetworkOutMessage, NetworkState};
+use node_network::{
+	HandshakeBuilder, Network, NetworkConfig, NetworkInMessage, NetworkOutMessage, NetworkState,
+};
+use std::sync::Arc;
 use std::time::Duration;
 
 #[tokio::test]
@@ -32,17 +35,17 @@ async fn test_network_connect() {
 	let specs = vec![
 		(
 			Keypair::generate_ed25519(),
-			3209,
+			1401,
 			"wingchain/1.0.0".to_string(),
 		),
 		(
 			Keypair::generate_ed25519(),
-			3210,
+			1402,
 			"wingchain/1.0.0".to_string(),
 		),
 		(
 			Keypair::generate_ed25519(),
-			3211,
+			1403,
 			"wingchain/1.0.0".to_string(),
 		),
 	];
@@ -126,12 +129,12 @@ async fn test_network_message() {
 	let specs = vec![
 		(
 			Keypair::generate_ed25519(),
-			3309,
+			1404,
 			"wingchain/1.0.0".to_string(),
 		),
 		(
 			Keypair::generate_ed25519(),
-			3310,
+			1405,
 			"wingchain/1.0.0".to_string(),
 		),
 	];
@@ -210,7 +213,7 @@ fn start_network(
 		reserved_only: false,
 		agent_version,
 		local_key_pair,
-		handshake: b"wingchain".to_vec(),
+		handshake_builder: Some(Arc::new(DummyHandshakeBuilder)),
 	};
 
 	let network = Network::new(network_config).unwrap();
@@ -257,4 +260,11 @@ async fn get_network_state(network: &Network) -> NetworkState {
 		.unwrap();
 	let network_state = rx.await.unwrap();
 	network_state
+}
+
+struct DummyHandshakeBuilder;
+impl HandshakeBuilder for DummyHandshakeBuilder {
+	fn build(&self, _nonce: u64) -> Vec<u8> {
+		vec![]
+	}
 }

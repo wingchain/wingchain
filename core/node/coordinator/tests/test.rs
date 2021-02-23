@@ -15,7 +15,7 @@
 use crypto::address::AddressImpl;
 use crypto::dsa::DsaImpl;
 use log::info;
-use node_consensus_base::Consensus;
+use node_consensus_base::ConsensusInMessage;
 use node_executor::module;
 use node_network::{Keypair, LinkedHashMap, Multiaddr, PeerId, Protocol};
 use std::sync::Arc;
@@ -31,23 +31,23 @@ async fn test_coordinator_block_sync() {
 	let dsa = Arc::new(DsaImpl::Ed25519);
 	let address = Arc::new(AddressImpl::Blake2b160);
 
-	let (account1, account2) = test_accounts(dsa, address);
+	let test_accounts = test_accounts(dsa, address);
+	let (account1, account2) = (&test_accounts[0], &test_accounts[1]);
 
-	let account1 = (account1.secret_key, account1.public_key, account1.address);
-	let account2 = (account2.secret_key, account2.public_key, account2.address);
+	let authority_accounts = [account1];
 
 	let specs = vec![
 		(
-			account1.clone(),
+			authority_accounts,
 			account1.clone(),
 			Keypair::generate_ed25519(),
-			3409,
+			1101,
 		),
 		(
-			account1.clone(),
+			authority_accounts,
 			account2.clone(),
 			Keypair::generate_ed25519(),
-			3410,
+			1102,
 		),
 	];
 
@@ -78,8 +78,11 @@ async fn test_coordinator_block_sync() {
 	let consensus0 = &services[0].2;
 
 	// generate block 1
-	consensus0.generate().unwrap();
-	base::wait_block_execution(&chain0).await;
+	consensus0
+		.in_message_tx()
+		.unbounded_send(ConsensusInMessage::Generate)
+		.unwrap();
+	base::wait_block_execution(&chain0, 1).await;
 
 	// generate block 2
 	let _tx1_hash = base::insert_tx(
@@ -87,13 +90,13 @@ async fn test_coordinator_block_sync() {
 		&txpool0,
 		chain0
 			.build_transaction(
-				Some((account1.0.clone(), 0, 10)),
+				Some((account1.secret_key.clone(), 0, 10)),
 				chain0
 					.build_call(
 						"balance".to_string(),
 						"transfer".to_string(),
 						module::balance::TransferParams {
-							recipient: account2.2.clone(),
+							recipient: account2.address.clone(),
 							value: 1,
 						},
 					)
@@ -104,12 +107,18 @@ async fn test_coordinator_block_sync() {
 	.await;
 	base::wait_txpool(&txpool0, 1).await;
 
-	consensus0.generate().unwrap();
-	base::wait_block_execution(&chain0).await;
+	consensus0
+		.in_message_tx()
+		.unbounded_send(ConsensusInMessage::Generate)
+		.unwrap();
+	base::wait_block_execution(&chain0, 2).await;
 
 	// generate block 3
-	consensus0.generate().unwrap();
-	base::wait_block_execution(&chain0).await;
+	consensus0
+		.in_message_tx()
+		.unbounded_send(ConsensusInMessage::Generate)
+		.unwrap();
+	base::wait_block_execution(&chain0, 3).await;
 
 	// wait chain1 to sync
 	let chain1 = &services[1].0;
@@ -127,10 +136,6 @@ async fn test_coordinator_block_sync() {
 	let chain1_block_3_hash = chain0.get_block_hash(&3).unwrap().unwrap();
 
 	assert_eq!(chain0_block_3_hash, chain1_block_3_hash);
-
-	for service in services {
-		base::safe_close(service.0, service.1, service.2, service.3).await;
-	}
 }
 
 #[tokio::test]
@@ -140,23 +145,23 @@ async fn test_coordinator_txpool_sync() {
 	let dsa = Arc::new(DsaImpl::Ed25519);
 	let address = Arc::new(AddressImpl::Blake2b160);
 
-	let (account1, account2) = test_accounts(dsa, address);
+	let test_accounts = test_accounts(dsa, address);
+	let (account1, account2) = (&test_accounts[0], &test_accounts[1]);
 
-	let account1 = (account1.secret_key, account1.public_key, account1.address);
-	let account2 = (account2.secret_key, account2.public_key, account2.address);
+	let authority_accounts = [account1];
 
 	let specs = vec![
 		(
-			account1.clone(),
+			authority_accounts,
 			account1.clone(),
 			Keypair::generate_ed25519(),
-			3509,
+			1103,
 		),
 		(
-			account1.clone(),
+			authority_accounts,
 			account2.clone(),
 			Keypair::generate_ed25519(),
-			3510,
+			1104,
 		),
 	];
 
@@ -194,13 +199,13 @@ async fn test_coordinator_txpool_sync() {
 		&txpool1,
 		chain1
 			.build_transaction(
-				Some((account1.0.clone(), 0, 10)),
+				Some((account1.secret_key.clone(), 0, 10)),
 				chain0
 					.build_call(
 						"balance".to_string(),
 						"transfer".to_string(),
 						module::balance::TransferParams {
-							recipient: account2.2.clone(),
+							recipient: account2.address.clone(),
 							value: 1,
 						},
 					)
@@ -220,9 +225,5 @@ async fn test_coordinator_txpool_sync() {
 			}
 		}
 		futures_timer::Delay::new(Duration::from_millis(10)).await;
-	}
-
-	for service in services {
-		base::safe_close(service.0, service.1, service.2, service.3).await;
 	}
 }

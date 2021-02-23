@@ -13,13 +13,23 @@ rpc_maxconn = 10240
 path = "data/db"
 memory_budget = 134_217_728
 
-# DB partition list
+## DB partition list
 # [[db.partitions]]
 # path = "data/db/db0"
 # target_size = 10_737_418_240
 
-[validator]
+[consensus]
+
+# Poa consensus config
+[consensus.poa]
 secret_key_file = "config/secret_key.dat"
+
+## Raft consensus config
+# [consensus.raft]
+# secret_key_file = "config/secret_key.dat"
+# init_extra_election_timeout = 10000
+# extra_election_timeout_per_kb = 5
+# request_proposal_min_interval = 1000
 
 [network]
 max_in_peers = 32
