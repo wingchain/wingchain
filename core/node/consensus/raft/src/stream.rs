@@ -735,7 +735,9 @@ where
 		);
 
 		let proposal = self.storage.get_proposal().ok_or_else(|| {
-			node_consensus_base::errors::ErrorKind::Data("Missing proposal on req request proposal".to_string())
+			node_consensus_base::errors::ErrorKind::Data(
+				"Missing proposal on req request proposal".to_string(),
+			)
 		})?;
 
 		let proposal_size = codec::encode(&proposal)?.len() as u64;

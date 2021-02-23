@@ -17,7 +17,7 @@ use std::sync::Arc;
 
 use futures::channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
 use futures::prelude::*;
-use log::{debug, warn, info, trace};
+use log::{debug, info, trace, warn};
 use tokio::time::{interval, sleep_until, Duration, Interval};
 
 use node_consensus_base::support::ConsensusSupport;
