@@ -600,6 +600,8 @@ where
 		Self { stream }
 	}
 	pub async fn start(mut self) -> CommonResult<()> {
+		self.stream.update_current_leader(None);
+
 		loop {
 			if self.stream.state != State::Observer {
 				return Ok(());
