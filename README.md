@@ -73,10 +73,16 @@ Wingchain is an out-of-the-box product.
 - Configurable consensus
 
     - POA
+      
+      for trial case.
     
     - Raft
+      
+      for crash fault tolerance case. 
     
     - Hotstuff (WIP)
+      
+      for byzantine fault tolerance case.
     
 ## Ready to scale
 
