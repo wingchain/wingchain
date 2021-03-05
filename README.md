@@ -15,6 +15,13 @@ respective area.
 
 <table>
 <tr>
+    <td><b>Who</b></td>
+    <td><b>How</b></td>
+    <td><b>Why</b></td>
+    <td><b>Where</b></td>
+    <td><b>What</b></td>
+</tr>
+<tr>
     <td>Redis</td>
     <td>KV hight-speed storage</td>
     <td>Data access efficiency</td>
