@@ -2,14 +2,16 @@
 
 [![Build Status](https://api.travis-ci.org/wingchain/wingchain.svg?branch=master)](https://travis-ci.org/wingchain/wingchain)
 [![crates.io](https://img.shields.io/crates/v/wingchain?label=latest)](https://crates.io/crates/wingchain)
-[![Version](https://img.shields.io/badge/rustc-1.50.0--nightly-brightgreen)](https://blog.rust-lang.org/2021/02/11/Rust-1.50.0.html)
+![Version](https://img.shields.io/badge/rustc-1.50.0--nightly-brightgreen)
+![Apache 2.0 licensed](https://img.shields.io/crates/l/wingchain.svg)
 
-Wingchain is an open source, easy to start and easy to scale block chain.
+Wingchain is an open source, easy to start and ready to scale block chain.
 
 # Motivation
 
-Wingchain is committed to becoming the first choice for `trustless` storage products, and obtaining the achievements
-MySQL and Redis have got in their respective area.
+Wingchain is committed to becoming the first choice for `trustless` storage 
+products, and obtaining the achievements MySQL and Redis have got in their 
+respective area.
 
 <table>
 <tr>
@@ -34,3 +36,63 @@ MySQL and Redis have got in their respective area.
     <td><b>Verified immutable data</b></td>
 </tr>
 </table>
+
+# Positioning
+
+Wingchain is not
+ - framework (like Substrate, Tendermint)
+ - platform (like Polkadot, Cosmos)
+
+Wingchain is an out-of-the-box product.
+
+# Features
+
+## Easy to start
+  
+- Familiar paradigm
+  
+  Block, Address based identity, Account model, MPT based world state, VM, 
+  Smart contract, Event, Bootnodes.
+    
+- Configurable and customizable cryptography
+
+    - Digest algorithm: Blake2b / SM3 / Custom with dynamic link library 
+
+    - Signature algorithm: Ed25519 / SM2 / Custom with dynamic link library
+
+    - Address algorithm: Public key / Public key hash / Custom with dynamic 
+      link library
+
+- Configurable consensus
+
+    - POA
+    
+    - Raft
+    
+    - Hotstuff (WIP)
+    
+## Ready to scale
+
+- Smart contract
+
+    - Webassembly based 
+    
+    - Nestable
+    
+    - Upgradable
+    
+- Storage scale out
+
+    - Multi partitions with different paths
+    
+    - Work together with distributed block storage
+    
+- High performance
+    
+    5000+ TPS
+
+# License
+
+Wingchain is under the Apache 2.0 license. See the [LICENSE](./LICENSE) 
+file for details.
+
