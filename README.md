@@ -74,15 +74,15 @@ Wingchain is an out-of-the-box product.
 
     - POA
       
-      for trial case.
+      for trial cases.
     
     - Raft
       
-      for crash fault tolerance case. 
+      for crash fault tolerance cases. 
     
     - Hotstuff (WIP)
       
-      for byzantine fault tolerance case.
+      for byzantine fault tolerance cases.
     
 ## Ready to scale
 
