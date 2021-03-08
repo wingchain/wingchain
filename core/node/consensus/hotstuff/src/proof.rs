@@ -12,22 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::protocol::QC;
 use crypto::dsa::{Dsa, DsaImpl, KeyPair};
-use node_consensus_primitives::{CONSENSUS_RAFT, CONSENSUS_HOTSTUFF};
+use node_consensus_primitives::{CONSENSUS_HOTSTUFF, CONSENSUS_RAFT};
 use primitives::codec::{self, Decode, Encode};
 use primitives::errors::{CommonError, CommonResult};
-use primitives::{Hash, PublicKey, SecretKey, Signature};
+use primitives::{Address, Hash, PublicKey, SecretKey, Signature};
 use std::convert::TryFrom;
 use std::sync::Arc;
 
 #[derive(Encode, Decode, Debug)]
 pub struct Proof {
+	pub commit_qc: QC,
 }
 
 impl Proof {
-	pub fn new(
-	) -> CommonResult<Self> {
-		unimplemented!()
+	pub fn new(commit_qc: QC) -> CommonResult<Self> {
+		Ok(Self { commit_qc })
 	}
 }
 

@@ -27,7 +27,7 @@ use parking_lot::RwLock;
 
 use node_consensus_base::support::ConsensusSupport;
 use node_consensus_base::{Consensus as ConsensusT, ConsensusInMessage, ConsensusOutMessage};
-use node_consensus_primitives::{CONSENSUS_HOTSTUFF};
+use node_consensus_primitives::CONSENSUS_HOTSTUFF;
 use node_executor::module;
 use node_executor_primitives::EmptyParams;
 use primitives::codec;
@@ -50,8 +50,8 @@ mod stream;
 mod verifier;
 
 pub struct HotStuff<S>
-	where
-		S: ConsensusSupport,
+where
+	S: ConsensusSupport,
 {
 	#[allow(dead_code)]
 	support: Arc<S>,
@@ -60,8 +60,8 @@ pub struct HotStuff<S>
 }
 
 impl<S> ConsensusT for HotStuff<S>
-	where
-		S: ConsensusSupport,
+where
+	S: ConsensusSupport,
 {
 	type Config = HotStuffConfig;
 	type Support = S;
@@ -93,7 +93,7 @@ impl<S> ConsensusT for HotStuff<S>
 					"Unexpected consensus: {}",
 					name
 				))
-					.into(),
+				.into(),
 			);
 		}
 		let data = &proof.data;

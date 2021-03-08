@@ -14,6 +14,9 @@
 
 use primitives::SecretKey;
 
+pub const DEFAULT_INIT_EXTRA_ELECTION_TIMEOUT: u64 = 10000;
+
 pub struct HotStuffConfig {
 	pub secret_key: Option<SecretKey>,
+	pub init_extra_election_timeout: Option<u64>,
 }

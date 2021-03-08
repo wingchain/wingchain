@@ -62,9 +62,4 @@ where
 	}
 }
 
-impl<S> Verifier<S>
-where
-	S: ConsensusSupport,
-{
-
-}
+impl<S> Verifier<S> where S: ConsensusSupport {}

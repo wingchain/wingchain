@@ -12,33 +12,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use node_consensus_base::support::ConsensusSupport;
-use std::sync::Arc;
-use node_executor::module::hotstuff::Meta;
 use crate::HotStuffConfig;
-use futures::channel::mpsc::{UnboundedSender, UnboundedReceiver};
-use node_consensus_base::{ConsensusOutMessage, ConsensusInMessage};
+use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
+use node_consensus_base::support::ConsensusSupport;
+use node_consensus_base::{ConsensusInMessage, ConsensusOutMessage};
+use node_executor::module::hotstuff::Meta;
 use primitives::errors::CommonResult;
+use std::sync::Arc;
 
 pub struct HotStuffStream<S>
-    where
-        S: ConsensusSupport,
+where
+	S: ConsensusSupport,
 {
-    /// External support
-    support: Arc<S>,
+	/// External support
+	support: Arc<S>,
 }
 
 impl<S> HotStuffStream<S>
-    where
-        S: ConsensusSupport,
+where
+	S: ConsensusSupport,
 {
-    pub fn spawn(
-        support: Arc<S>,
-        hotstuff_meta: Meta,
-        hotstuff_config: HotStuffConfig,
-        out_tx: UnboundedSender<ConsensusOutMessage>,
-        in_rx: UnboundedReceiver<ConsensusInMessage>,
-    ) -> CommonResult<()> {
-        unimplemented!()
-    }
+	pub fn spawn(
+		support: Arc<S>,
+		hotstuff_meta: Meta,
+		hotstuff_config: HotStuffConfig,
+		out_tx: UnboundedSender<ConsensusOutMessage>,
+		in_rx: UnboundedReceiver<ConsensusInMessage>,
+	) -> CommonResult<()> {
+		unimplemented!()
+	}
 }

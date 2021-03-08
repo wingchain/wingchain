@@ -14,12 +14,34 @@
 
 use derive_more::{Display, From, TryInto};
 use primitives::codec::{Decode, Encode};
-use primitives::{BlockNumber, Hash, PublicKey, Signature, Transaction};
+use primitives::{Address, BlockNumber, Hash, PublicKey, Signature, Transaction};
 use utils_enum_codec::enum_codec;
 
 // #[enum_codec]
 #[derive(From, TryInto)]
-pub enum HotStuffMessage {
+pub enum HotStuffMessage {}
+
+#[derive(Encode, Decode, Debug, Clone)]
+pub enum MessageType {
+	Prepare,
+	PreCommit,
+	Commit,
+	Decide,
+}
+
+#[derive(Encode, Decode, Debug, Clone)]
+pub struct QC {
+	pub message_type: MessageType,
+	pub view: u64,
+	pub node: Node,
+	pub leader_address: Address,
+	pub sig: Vec<(PublicKey, Signature)>,
+}
+
+#[derive(Encode, Decode, Debug, Clone)]
+pub struct Node {
+	pub parent: Hash,
+	pub block_hash: Hash,
 }
 
 #[derive(Encode, Decode, Debug, PartialEq, Clone, Display, Hash, Eq)]
