@@ -2867,6 +2867,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "module-hotstuff"
+version = "0.1.0"
+dependencies = [
+ "node-executor-macro",
+ "node-executor-primitives",
+ "parity-scale-codec",
+ "primitives",
+ "serde",
+]
+
+[[package]]
 name = "module-poa"
 version = "0.1.0"
 dependencies = [
@@ -3085,6 +3096,38 @@ dependencies = [
 ]
 
 [[package]]
+name = "node-consensus-hotstuff"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "crypto",
+ "derive_more",
+ "env_logger",
+ "futures",
+ "futures-timer",
+ "hex",
+ "log",
+ "node-chain",
+ "node-consensus",
+ "node-consensus-base",
+ "node-consensus-primitives",
+ "node-coordinator",
+ "node-executor",
+ "node-executor-primitives",
+ "node-txpool",
+ "parity-scale-codec",
+ "parking_lot 0.10.2",
+ "primitives",
+ "rand 0.7.3",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio 1.0.0",
+ "utils-enum-codec",
+ "utils-test",
+]
+
+[[package]]
 name = "node-consensus-poa"
 version = "0.1.0"
 dependencies = [
@@ -3196,6 +3239,7 @@ dependencies = [
  "crypto",
  "module-balance",
  "module-contract",
+ "module-hotstuff",
  "module-poa",
  "module-raft",
  "module-system",

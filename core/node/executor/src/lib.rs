@@ -669,6 +669,7 @@ enum Dispatcher {
 	balance,
 	poa,
 	raft,
+	hotstuff,
 	contract,
 }
 
@@ -678,5 +679,6 @@ pub mod module {
 	pub use module_contract as contract;
 	pub use module_poa as poa;
 	pub use module_raft as raft;
+	pub use module_hotstuff as hotstuff;
 	pub use module_system as system;
 }

@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub const CONSENSUS_POA: &str = "poa";
-pub const CONSENSUS_RAFT: &str = "raft";
-pub const CONSENSUS_HOTSTUFF: &str = "hotstuff";
-pub const CONSENSUS_LIST: [&str; 3] = [CONSENSUS_POA, CONSENSUS_RAFT, CONSENSUS_HOTSTUFF];
+use primitives::SecretKey;
+
+pub struct HotStuffConfig {
+	pub secret_key: Option<SecretKey>,
+}

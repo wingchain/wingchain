@@ -12,7 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub const CONSENSUS_POA: &str = "poa";
-pub const CONSENSUS_RAFT: &str = "raft";
-pub const CONSENSUS_HOTSTUFF: &str = "hotstuff";
-pub const CONSENSUS_LIST: [&str; 3] = [CONSENSUS_POA, CONSENSUS_RAFT, CONSENSUS_HOTSTUFF];
+use std::error::Error;
+use std::fmt::Debug;
+
+use crate::verifier::VerifyError;
+use primitives::errors::{CommonError, CommonErrorKind, Display};
+
+#[derive(Debug, Display)]
+pub enum ErrorKind {
+}
+
+impl Error for ErrorKind {}
+
+impl From<ErrorKind> for CommonError {
+	fn from(error: ErrorKind) -> Self {
+		CommonError::new(CommonErrorKind::Consensus, Box::new(error))
+	}
+}
